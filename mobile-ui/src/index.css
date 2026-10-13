@@ -1,0 +1,448 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  min-height: 100svh;
+}
+
+html {
+  scrollbar-color: rgb(6 95 70 / 0.55) rgb(6 78 59 / 0.06);
+  scrollbar-width: thin;
+  overscroll-behavior-y: contain;
+}
+
+html::-webkit-scrollbar {
+  width: 0.65rem;
+}
+
+html::-webkit-scrollbar-track {
+  background: rgb(6 78 59 / 0.06);
+}
+
+html::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 9999px;
+  background: linear-gradient(180deg, #10b981, #047857);
+  background-clip: padding-box;
+}
+
+html::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #d6a92c, #10b981);
+  background-clip: padding-box;
+}
+
+body {
+  margin: 0;
+  position: relative;
+  isolation: isolate;
+  overflow-x: clip;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background-color: #ecfdf5;
+  color: #064e3b;
+}
+
+body::before {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  background-image: linear-gradient(rgb(236 253 245 / 42%), rgb(236 253 245 / 42%)), url('./bgphoto.jpg');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%, cover;
+  content: "";
+  pointer-events: none;
+}
+
+button,
+input:not([type='radio']):not([type='checkbox']),
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  border: none;
+}
+
+input,
+select,
+textarea {
+  min-height: 3rem;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+.welcome-status-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-header-logo {
+  width: clamp(2.5rem, 8vw, 3.25rem);
+  height: clamp(2.5rem, 8vw, 3.25rem);
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.welcome-logo {
+  width: clamp(3.5rem, 10vw, 4.5rem);
+  height: clamp(3.5rem, 10vw, 4.5rem);
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.mobile-app-header {
+  border-color: rgb(16 115 79 / 0.2);
+  background: rgb(255 255 255 / 0.96);
+  box-shadow: 0 8px 24px rgb(6 78 59 / 0.06);
+  backdrop-filter: blur(12px);
+}
+
+.pull-refresh-enabled {
+  overscroll-behavior-y: contain;
+}
+
+.pull-refresh-indicator {
+  position: fixed;
+  z-index: 50;
+  top: max(0.5rem, env(safe-area-inset-top));
+  left: 50%;
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid rgb(16 115 79 / 0.18);
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 0.97);
+  box-shadow: 0 8px 22px rgb(6 78 59 / 0.12);
+  color: #065f46;
+  font-size: 0.75rem;
+  font-weight: 650;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: transform 140ms ease-out;
+  will-change: transform;
+}
+
+.pull-refresh-circle {
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: 0 0 auto;
+  border: 2px solid #a7f3d0;
+  border-top-color: #047857;
+  border-radius: 50%;
+}
+
+.pull-refresh-circle.is-refreshing {
+  animation: loading-spinner-rotate 700ms linear infinite;
+}
+
+.welcome-status-panel {
+  border-color: rgb(16 115 79 / 0.2);
+  background: rgb(255 255 255 / 0.96);
+  box-shadow: 0 10px 28px rgb(6 78 59 / 0.07);
+}
+
+.welcome-status-heading {
+  color: #064e3b;
+}
+
+.welcome-status-heading::after {
+  display: block;
+  width: 2.5rem;
+  height: 2px;
+  margin: 0.4rem auto 0;
+  border-radius: 9999px;
+  background: #d6a92c;
+  content: "";
+}
+
+.welcome-card {
+  border-color: rgb(16 115 79 / 0.2);
+  background: rgb(255 255 255 / 0.97);
+  box-shadow: 0 18px 44px rgb(6 78 59 / 0.1);
+}
+
+.welcome-hero {
+  background: linear-gradient(145deg, #ecfdf5 0%, #f0fdf4 54%, #fffbeb 100%);
+}
+
+.welcome-guide {
+  border-color: rgb(16 115 79 / 0.2);
+  background: linear-gradient(180deg, #ffffff 0%, #fbfefc 100%);
+}
+
+.quick-guide-heading {
+  border-color: rgb(214 169 44 / 0.45);
+}
+
+.quick-guide-list {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.quick-guide-item {
+  min-height: 4.25rem;
+}
+
+.quick-guide-icon {
+  border: 1px solid rgb(16 115 79 / 0.12);
+  box-shadow: 0 2px 5px rgb(6 78 59 / 0.05);
+}
+
+@media (min-width: 48rem) {
+  .welcome-status-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .welcome-card.welcome-card {
+    grid-template-columns: minmax(0, 1.1fr) minmax(18rem, 0.9fr);
+    min-height: clamp(20rem, calc(100svh - 23rem), 44rem);
+    align-items: stretch;
+    gap: clamp(1rem, 1.5vw, 1.5rem);
+    padding: clamp(1rem, 1.375vw, 1.375rem);
+    position: relative;
+    isolation: isolate;
+  }
+
+  .mobile-app-header.mobile-app-header {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .welcome-status-panel.welcome-status-panel {
+    padding: 0.75rem;
+  }
+
+  .welcome-status-heading.welcome-status-heading {
+    margin-bottom: 0.5rem;
+  }
+
+  .welcome-status-grid > div {
+    min-height: 3rem;
+  }
+
+  .welcome-hero.welcome-hero {
+    padding: 1.125rem;
+  }
+
+  .welcome-hero .welcome-logo {
+    width: 3.5rem;
+    height: 3.5rem;
+  }
+
+  .welcome-hero > p:first-of-type {
+    margin-top: 0.5rem;
+  }
+
+  .welcome-hero h1 {
+    margin-top: 0.5rem;
+  }
+
+  .welcome-hero > p:nth-of-type(2) {
+    margin-top: 0.5rem;
+  }
+
+  .welcome-hero > button {
+    min-height: 2.75rem;
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .welcome-hero > p:last-child {
+    margin-top: 0.5rem;
+  }
+
+  .welcome-guide.welcome-guide {
+    display: flex;
+    flex-direction: column;
+    padding: 1.125rem;
+  }
+
+  .quick-guide-list {
+    flex: 1;
+    align-content: space-evenly;
+  }
+
+  .quick-guide-heading.quick-guide-heading {
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .quick-guide-item.quick-guide-item {
+    min-height: 3.5rem;
+    padding-top: 0.4rem;
+    padding-bottom: 0.4rem;
+  }
+
+  .welcome-card::before {
+    position: absolute;
+    z-index: 2;
+    inset: 0;
+    padding: 1.5px;
+    border-radius: inherit;
+    background: linear-gradient(115deg, #a7f3d0, #10b981, #f5d779, #059669, #a7f3d0);
+    background-size: 250% 250%;
+    animation: welcome-border-shimmer 8s ease-in-out infinite;
+    content: "";
+    pointer-events: none;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+  }
+
+  .welcome-card > * {
+    position: relative;
+    z-index: 1;
+  }
+}
+
+@media (max-width: 47.999rem) {
+  .welcome-hero h1 {
+    font-size: clamp(1.75rem, 7vw, 2.25rem);
+    overflow-wrap: anywhere;
+  }
+}
+
+.mobile-modal-backdrop-enter {
+  animation: mobile-modal-fade-in 180ms ease-out both;
+}
+
+.mobile-modal-panel-enter {
+  animation: mobile-modal-rise-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.mobile-modal-backdrop-enter.mobile-modal-backdrop-exit {
+  animation: mobile-modal-fade-out 180ms ease-in both;
+}
+
+.mobile-modal-panel-enter.mobile-modal-panel-exit {
+  animation: mobile-modal-settle-out 180ms cubic-bezier(0.4, 0, 1, 1) both;
+  pointer-events: none;
+}
+
+.mobile-modal-backdrop-exit {
+  pointer-events: auto;
+}
+
+.mobile-modal-scroll {
+  overscroll-behavior: contain;
+  scrollbar-color: rgb(5 150 105 / 0.45) transparent;
+  scrollbar-width: thin;
+}
+
+.mobile-modal-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.mobile-modal-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.mobile-modal-scroll::-webkit-scrollbar-thumb {
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: rgb(5 150 105 / 0.45);
+  background-clip: padding-box;
+}
+
+.mobile-modal-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(4 120 87 / 0.7);
+}
+
+.loading-spinner {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  margin-right: 0.5rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  vertical-align: -0.15em;
+  animation: loading-spinner-rotate 700ms linear infinite;
+}
+
+.loading-skeleton {
+  background: linear-gradient(100deg, #e7f3ec 25%, #f7fbf8 40%, #e7f3ec 65%);
+  background-size: 220% 100%;
+  animation: loading-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes mobile-modal-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes mobile-modal-rise-in {
+  from { opacity: 0; transform: translateY(1rem) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes mobile-modal-fade-out {
+  to { opacity: 0; }
+}
+
+@keyframes mobile-modal-settle-out {
+  to { opacity: 0; transform: translateY(0.65rem) scale(0.985); }
+}
+
+@keyframes welcome-border-shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes loading-spinner-rotate {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes loading-skeleton-shimmer {
+  to { background-position-x: -220%; }
+}
+
+@media (orientation: landscape) and (min-width: 600px) and (max-height: 760px) {
+  .welcome-card {
+    min-height: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-modal-backdrop-enter,
+  .mobile-modal-backdrop-enter.mobile-modal-backdrop-exit,
+  .mobile-modal-panel-enter,
+  .mobile-modal-panel-enter.mobile-modal-panel-exit,
+  .welcome-card::before,
+  .loading-skeleton,
+  .loading-spinner {
+    animation: none;
+  }
+  .pull-refresh-indicator {
+    transition: none;
+  }
+  .pull-refresh-circle.is-refreshing {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

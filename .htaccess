@@ -1,0 +1,12 @@
+Options -MultiViews
+RewriteEngine On
+RewriteBase /DIT-LOGBOOK_RETRY/
+
+# Redirect browser page requests to extension-free URLs; leave POST submissions unchanged.
+RewriteCond %{THE_REQUEST} \s/+[^\s?]*/?(dashboard|quick_document|incoming|outgoing|batch_papers|batch_tracker|borrowed|item_categories|sms|notification_settings|reports|records|login|logout)\.php(?:[?\s]) [NC]
+RewriteCond %{REQUEST_METHOD} ^(?:GET|HEAD)$
+RewriteRule ^(dashboard|quick_document|incoming|outgoing|batch_papers|batch_tracker|borrowed|item_categories|sms|notification_settings|reports|records|login|logout)\.php$ $1 [R=302,L]
+
+# Serve clean page URLs from their existing PHP files without changing the browser URL.
+RewriteRule ^$ dashboard [R=302,L]
+RewriteRule ^(dashboard|quick_document|incoming|outgoing|batch_papers|batch_tracker|borrowed|item_categories|sms|notification_settings|reports|records|login|logout)/?$ $1.php [END]

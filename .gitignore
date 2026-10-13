@@ -1,0 +1,33 @@
+# Local secrets and database exports
+.env
+.env.*
+!.env.example
+db2.sql
+*.sql.gz
+*.dump
+
+# Nested local repositories and Expo-generated data
+**/.git/
+**/.expo/
+
+# Installed dependencies
+node_modules/
+**/node_modules/
+
+# Generated web and Android outputs
+mobile-ui/dist/
+mobile-ui/android/.gradle/
+mobile-ui/android/.idea/
+mobile-ui/android/local.properties
+mobile-ui/android/**/build/
+mobile-ui/android/.cxx/
+mobile-ui/android/app/src/main/assets/public/
+mobile-ui/expo-wrapper/.expo/
+mobile-ui/expo-wrapper/web-build/
+*.apk
+*.aab
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
