@@ -69,6 +69,8 @@ commit.
 
 ## V1.07 — Movable assistant and safe form help
 
+**Git commit:** [`8fbda35`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/8fbda35)
+
 - Moved the Admin Assistant launcher to a draggable side position, with
   position saved locally and keyboard arrow-key movement supported.
 - Added a smooth on-demand assistant panel that stays out of the workspace
