@@ -147,7 +147,7 @@ commit.
 
 ## V1.13 — Certificate download in Admin Settings
 
-**Local XAMPP setup; certificate file is excluded from Git.**
+**Git commit:** [`28d774d`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/28d774d). The certificate file is excluded from Git.
 
 - Added a **Download certificate** button to Admin Settings for downloading
   the public local development CA certificate.
