@@ -1,94 +1,124 @@
 <div align="center">
+<img src="CVSU.jpeg" alt="Cavite State University seal" width="112">
 
-# DIT Logbook
+<h1>CEIT Dean's Office Digital Logbook</h1>
 
-### CEIT Dean's Office Digital Logbook
+<p><strong>A document and inventory tracking system for the CVSU College of Engineering and Information Technology Dean's Office.</strong></p>
 
-An office document and inventory tracking system with a PHP and MySQL admin
-portal, plus a React mobile client for everyday logbook tasks.
+<p>Manage office records through a PHP and MySQL admin portal, with a React mobile app for on-the-go logbook tasks.</p>
 
-[![PHP](https://img.shields.io/badge/PHP-MySQL-777BB4?logo=php&logoColor=white)](https://www.php.net/)
-[![React](https://img.shields.io/badge/Mobile-React-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![Vite](https://img.shields.io/badge/Build-Vite-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
-[![Capacitor](https://img.shields.io/badge/Android-Capacitor-119EFF?logo=capacitor&logoColor=white)](https://capacitorjs.com/)
-
+<p>
+<a href="https://www.php.net/"><img src="https://img.shields.io/badge/PHP-8%2B-777BB4?logo=php&logoColor=white" alt="PHP 8 or later"></a>
+<a href="https://www.mysql.com/"><img src="https://img.shields.io/badge/Database-MySQL%20%7C%20MariaDB-4479A1?logo=mysql&logoColor=white" alt="MySQL or MariaDB"></a>
+<a href="https://react.dev/"><img src="https://img.shields.io/badge/Mobile-React-61DAFB?logo=react&logoColor=black" alt="React"></a>
+<a href="https://vite.dev/"><img src="https://img.shields.io/badge/Build-Vite-646CFF?logo=vite&logoColor=white" alt="Vite"></a>
+<a href="https://capacitorjs.com/"><img src="https://img.shields.io/badge/Android-Capacitor-119EFF?logo=capacitor&logoColor=white" alt="Capacitor"></a>
+</p>
 </div>
 
 ---
 
+## Contents
+
+- [Overview](#overview)
+- [What you can do](#what-you-can-do)
+- [Technology](#technology)
+- [Get started](#get-started)
+- [Mobile app](#mobile-app)
+- [Project layout](#project-layout)
+- [Security before deployment](#security-before-deployment)
+- [Troubleshooting](#troubleshooting)
+
 ## Overview
 
-DIT Logbook helps the CEIT Dean's Office register and follow documents,
-bulk paper submissions, and borrowed items. The browser-based admin portal
-provides record management and reporting, while the mobile app connects to the
-same PHP API.
+DIT Logbook provides one place to record office document activity, follow
+incoming and outgoing submissions, organize bulk papers, and keep track of
+borrowed items. The browser-based admin portal and mobile client use the same
+PHP API and MySQL database.
 
-## Features
+## What you can do
 
-- **Dashboard** — at-a-glance document status counts and pending-item notice.
-- **Document workflows** — register, search, review, and track incoming and
-  outgoing documents through release.
-- **Bulk papers** — register batches and track their paper-level records and
-  status.
-- **Borrowed items** — manage item categories, borrower details, and return
-  status.
-- **Reports and activity** — review document activity, search records, and
-  generate date-filtered reports.
-- **SMS and notifications** — configure notifications, send client updates,
-  and view message logs.
-- **Mobile client** — submit and manage documents, batches, and borrowed items;
-  check client status and view reports.
-- **Responsive admin workspace** — adaptive navigation, a compact footer, and a
-  live browser network indicator.
+| Area | Capabilities |
+| --- | --- |
+| **Dashboard** | Review document status summaries and see pending incoming documents. |
+| **Incoming documents** | Register submissions, search records, review details, and prepare documents for release. |
+| **Outgoing documents** | Track released documents and send client notifications. |
+| **Bulk papers** | Register batches, associate paper-level records, and follow batch status. |
+| **Borrowed items** | Manage item categories, borrowers, due dates, and return status. |
+| **Records and reports** | Search logbook records, inspect document activity, and generate date-filtered reports. |
+| **SMS and notifications** | Configure notification settings, send client updates, and review SMS logs. |
+| **Mobile app** | Submit and manage documents, batches, and borrowed items; look up client status and view reports. |
+
+The admin interface also includes responsive navigation and a compact footer
+with a live browser network indicator.
 
 ## Technology
 
-| Area | Tools |
+| Component | Technology |
 | --- | --- |
 | Admin portal and API | PHP, MySQLi |
 | Database | MySQL / MariaDB |
 | Mobile web app | React, Vite |
-| Android wrapper | Capacitor |
-| Web server (local setup) | Apache with `mod_rewrite` |
+| Android app | Capacitor |
+| Local web server | Apache with `mod_rewrite` |
 
-## Getting started
+## Get started
 
 ### Requirements
 
-- XAMPP (Apache, MySQL, and PHP with MySQLi enabled)
-- Apache `mod_rewrite` enabled for clean page routes
-- Node.js and npm (only needed to develop or build the mobile app)
-- PHP cURL enabled for SMS provider requests
+- Windows with [XAMPP](https://www.apachefriends.org/) (Apache, MySQL, PHP)
+- PHP 8+ with the **MySQLi** and **cURL** extensions enabled
+- Apache `mod_rewrite` enabled
+- [Node.js and npm](https://nodejs.org/) for mobile development
+- Android Studio, Android SDK, and a configured device/emulator to run the
+  Android app
 
-### 1. Install the web application
+### 1. Set up the web app
 
-1. Copy or clone the project into your XAMPP web root:
+1. Put the project folder in the XAMPP web root:
    `C:\xampp\htdocs\DIT-LOGBOOK_RETRY`.
 2. Start **Apache** and **MySQL** in the XAMPP Control Panel.
-3. Import [`database.sql`](database.sql) into MySQL using phpMyAdmin or the
-   MySQL command line. The script creates the `dit_logbook` database and its
-   tables.
-4. Check the database connection settings in [`db.php`](db.php). The defaults
-   are `localhost`, user `root`, an empty password, and database `dit_logbook`.
+3. In phpMyAdmin, import [`database.sql`](database.sql). It creates the
+   `dit_logbook` database and the tables used by the application.
+4. Review the connection values in [`db.php`](db.php). The local defaults are:
+
+   | Setting | Default |
+   | --- | --- |
+   | Host | `localhost` |
+   | Database | `dit_logbook` |
+   | Username | `root` |
+   | Password | *(empty)* |
+
 5. Open [http://localhost/DIT-LOGBOOK_RETRY/](http://localhost/DIT-LOGBOOK_RETRY/)
    in your browser.
 
-Apache URL rewriting must be enabled so the extension-free routes work.
+The extension-free routes depend on Apache URL rewriting. If you see a 404
+when opening a page, confirm that `mod_rewrite` is enabled and that Apache
+allows the project’s `.htaccess` rules.
 
-### 2. Sign in
+### 2. Sign in for the first time
 
-The schema inserts an initial account:
+The schema seeds an initial admin account for local setup:
 
-| Username | Password |
+| Username | Initial password |
 | --- | --- |
 | `admin` | `admin` |
 
-Change the default credentials immediately after the first sign-in. The
-application hashes the seeded plaintext password when it is first used.
+The application upgrades the seeded plaintext password to a password hash
+when it is first used. Change the default password immediately after signing
+in, and never reuse it on a deployed system.
 
-### 3. Run the mobile client
+### 3. Configure notifications (optional)
 
-From the project directory:
+Open **Notification Settings** in the admin portal to configure SMS or email
+notifications. Provider credentials belong in the application settings or
+server environment—not in Git-tracked files or database exports.
+
+## Mobile app
+
+### Run the web client locally
+
+From the repository root:
 
 ```powershell
 cd mobile-ui
@@ -96,68 +126,88 @@ npm install
 npm run dev
 ```
 
-Open the Vite URL shown in the terminal (normally
-[`http://localhost:5173`](http://localhost:5173)). Keep Apache and MySQL
-running: the Vite development server proxies API calls to the PHP project at
+Open the Vite URL shown in the terminal (usually
+[http://localhost:5173](http://localhost:5173)). Keep Apache and MySQL running:
+the Vite development server proxies `/api` requests to the PHP app under
 `/DIT-LOGBOOK_RETRY`.
 
-To create a production web build:
+### Build the web client
 
 ```powershell
 npm run build
 ```
 
-The generated files are written to `mobile-ui/dist`, the web directory used by
-Capacitor. To build and run the Android app on a configured Android device or
-emulator:
+The generated web app is written to `mobile-ui/dist`. This output is ignored by
+Git and is used as the Capacitor web asset directory.
+
+### Run on Android
+
+With Android Studio, the Android SDK, and a device or emulator configured:
 
 ```powershell
 npm run android
 ```
 
-### Mobile API configuration
+This script builds the web client and runs the Android app through Capacitor.
 
-The Android emulator default points to
-`http://10.0.2.2/DIT-LOGBOOK_RETRY/mobile-api.php` (`10.0.2.2` maps to the
-development host from the emulator). For a different server, provide
-`VITE_API_ENDPOINT` when building the mobile app, with the full URL to
-`mobile-api.php`.
+### Mobile API endpoint
 
-## Project structure
+The bundled Android default is
+`http://10.0.2.2/DIT-LOGBOOK_RETRY/mobile-api.php`. Android emulators use
+`10.0.2.2` to reach the development host machine. For another host, provide
+`VITE_API_ENDPOINT` at build time as the complete URL to `mobile-api.php`.
+
+## Project layout
 
 ```text
 .
-├── mobile-api.php             # API used by the mobile client
-├── database.sql               # Database creation and schema
-├── db.php                     # MySQL connection and query helpers
-├── dashboard.php              # Admin dashboard
-├── incoming.php               # Incoming document workflow
-├── outgoing.php               # Outgoing document workflow
-├── batch_papers.php            # Bulk paper registration
-├── batch_tracker.php           # Batch tracking
-├── borrowed.php                # Borrowed item management
-├── reports.php                # Reports
-├── sms.php                     # SMS logs and operations
-└── mobile-ui/                  # React, Vite, and Capacitor app
+├── database.sql                     # Application schema and initial admin seed
+├── db.php                           # Database connection and query helpers
+├── header.php / footer.php          # Shared admin layout
+├── dashboard.php                    # Admin dashboard
+├── incoming.php / outgoing.php      # Document workflows
+├── batch_papers.php                 # Bulk paper registration
+├── batch_tracker.php                # Batch tracking
+├── borrowed.php                     # Borrowed item management
+├── records.php                      # Document search
+├── reports.php                      # Reports
+├── sms.php                          # SMS logs and operations
+├── mobile-api.php                   # API for the mobile client
+├── tools/                           # Mobile submission console utilities
+├── tone/                            # Admin notification audio
+└── mobile-ui/
+    ├── src/                         # React/Vite mobile client
+    ├── android/                     # Capacitor Android project
+    └── expo-wrapper/                # Expo wrapper project
 ```
 
-Other admin pages cover records, item categories, notification settings, and
-document activity.
+Other root-level PHP pages provide authentication, quick submission, item
+categories, notification settings, and document activity.
 
-## Security and deployment notes
+## Security before deployment
 
-- Do not deploy with the default `admin` / `admin` credentials.
-- Update [`db.php`](db.php) with a dedicated database account and a strong
-  password in production.
-- Do not commit database exports or production data. Use `database.sql` for
-  schema setup; local database dumps are excluded from version control.
-- Use HTTPS when the app is reachable outside a local development machine.
-- Keep API keys and provider credentials out of source control.
-- Configure the mobile API endpoint for the deployed server before creating a
+- Replace the seeded admin password immediately.
+- Use a dedicated MySQL account with a strong password; do not deploy with the
+  default XAMPP `root` account.
+- Serve the application over HTTPS outside a local development environment.
+- Keep SMS/email credentials and private configuration out of source control.
+- Do not commit database exports or production data. `db2.sql` and generated
+  dependency/build folders are intentionally excluded from Git.
+- Configure `VITE_API_ENDPOINT` for the deployed server before producing a
   production mobile build.
 
-## Project notes
+## Troubleshooting
 
-The project folder does not include Git patch history. This README documents
-the features and setup visible in the current source rather than attributing
-them to a specific sequence of historical patches.
+| Problem | Things to check |
+| --- | --- |
+| Database connection error | Start MySQL and confirm the host, username, password, and database in `db.php`. |
+| Clean page routes return 404 | Enable Apache `mod_rewrite` and allow `.htaccess` overrides for the project directory. |
+| Mobile app cannot reach the API | Keep Apache/MySQL running and verify the Vite proxy or `VITE_API_ENDPOINT`. On Android emulators, use `10.0.2.2` rather than `localhost`. |
+| SMS sending fails | Check cURL, notification settings, provider credentials, and provider account status. |
+| Android build cannot find a device | Open the Android project in Android Studio, install the required SDK components, and start an emulator or connect a device. |
+
+---
+
+<div align="center">
+Built for the CVSU CEIT Dean's Office.
+</div>
