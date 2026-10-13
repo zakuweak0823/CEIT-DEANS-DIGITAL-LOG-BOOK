@@ -110,6 +110,8 @@ commit.
 
 ## V1.10 — Compact Mode quick actions and QR scanner
 
+**Git commit:** [`5c1a9bc`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/5c1a9bc)
+
 - Constrained Compact Mode quick actions to a balanced two-column grid with
   less stretched action cards.
 - Kept the incoming-document form and dashboard quick-action dialogs within
