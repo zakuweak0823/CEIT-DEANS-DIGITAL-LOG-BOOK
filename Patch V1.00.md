@@ -122,6 +122,8 @@ commit.
 
 ## V1.11 — Clear mobile camera security guidance
 
+**Git commit:** [`a65ca54`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/a65ca54)
+
 - Check for an insecure context before attempting camera access and show
   guidance tailored to phones using an HTTP LAN address.
 - Explain that `localhost` on a phone points to the phone itself, and that
