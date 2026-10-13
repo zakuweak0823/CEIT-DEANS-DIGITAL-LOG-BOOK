@@ -10,6 +10,7 @@ $adminPages = [
     'item_categories',
     'sms',
     'notification_settings',
+    'settings',
     'reports',
     'records',
     'login',
@@ -22,7 +23,7 @@ $requestMethod = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 
 // Canonicalize browser navigation, but never redirect POSTs that carry form submissions.
 if (in_array($requestMethod, ['GET', 'HEAD'], true)
-    && preg_match('~/(dashboard|quick_document|incoming|outgoing|batch_papers|batch_tracker|borrowed|item_categories|sms|notification_settings|reports|records|login|logout)\.php$~i', $requestPath, $matches)
+    && preg_match('~/(dashboard|quick_document|incoming|outgoing|batch_papers|batch_tracker|borrowed|item_categories|sms|notification_settings|settings|reports|records|login|logout)\.php$~i', $requestPath, $matches)
 ) {
     $query = (string)($_SERVER['QUERY_STRING'] ?? '');
     header('Location: ' . substr($requestPath, 0, -4) . ($query !== '' ? '?' . $query : ''), true, 302);

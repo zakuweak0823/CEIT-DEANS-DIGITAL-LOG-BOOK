@@ -562,7 +562,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                         <button class="btn btn-outline-primary" type="submit" aria-label="Search"><i class="bi bi-search"></i></button>
                     </form>
                 </div>
-                <div class="table-responsive d-none d-md-block">
+                <div class="table-responsive d-none d-md-block batch-history-table">
                     <table class="table table-hover align-middle mb-0">
                         <thead class="table-light">
                             <tr><th>Date</th><th>Batch</th><th>Type</th><th>Status</th><th>From / Recipient</th><th>Papers</th><th>Actions</th></tr>

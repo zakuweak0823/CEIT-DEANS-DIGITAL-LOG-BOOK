@@ -52,6 +52,48 @@ if (document.body.classList.contains('admin-body')) {
     window.addEventListener('online', updateAdminNetworkStatus);
     window.addEventListener('offline', updateAdminNetworkStatus);
 
+    const compactModeStorageKey = 'ceit-admin-preferences-v1';
+    const compactModeToggle = document.getElementById('adminCompactModeToggle');
+    const applyCompactMode = function (enabled) {
+        document.body.classList.toggle('admin-compact', enabled);
+        if (compactModeToggle) {
+            compactModeToggle.checked = enabled;
+            compactModeToggle.setAttribute('aria-checked', String(enabled));
+        }
+    };
+    const readCompactMode = function () {
+        try {
+            const preferences = JSON.parse(window.localStorage.getItem(compactModeStorageKey) || '{}');
+            return preferences.compactMode === true;
+        } catch (error) {
+            console.warn('Compact mode preference could not be read.', error);
+            return false;
+        }
+    };
+    applyCompactMode(readCompactMode());
+    if (compactModeToggle) {
+        compactModeToggle.addEventListener('change', function () {
+            try {
+                const preferences = JSON.parse(window.localStorage.getItem(compactModeStorageKey) || '{}');
+                preferences.compactMode = compactModeToggle.checked;
+                window.localStorage.setItem(compactModeStorageKey, JSON.stringify(preferences));
+                applyCompactMode(preferences.compactMode);
+                window.dispatchEvent(new CustomEvent('adminpreferenceschange', { detail: preferences }));
+            } catch (error) {
+                console.error('Compact mode preference could not be saved.', error);
+                compactModeToggle.checked = document.body.classList.contains('admin-compact');
+            }
+        });
+    }
+    window.addEventListener('storage', function (event) {
+        if (event.key === compactModeStorageKey) applyCompactMode(readCompactMode());
+    });
+    window.addEventListener('adminpreferenceschange', function (event) {
+        if (event.detail && typeof event.detail.compactMode === 'boolean') {
+            applyCompactMode(event.detail.compactMode);
+        }
+    });
+
     const submissionLogToggle = document.getElementById('mobileSubmissionLogToggle');
     if (submissionLogToggle) {
         const csrfToken = submissionLogToggle.dataset.csrfToken;
@@ -105,12 +147,32 @@ if (document.body.classList.contains('admin-body')) {
     const latestDocumentAttribute = Number(document.body.dataset.latestDocumentId);
     let latestObservedDocumentId = Number.isSafeInteger(latestDocumentAttribute) ? latestDocumentAttribute : 0;
     let hasDocumentActivityBaseline = document.body.dataset.documentActivityReady === 'true';
+    const adminPreferenceStorageKey = 'ceit-admin-preferences-v1';
+    const defaultAdminPreferences = { activityInterval: 15, soundAlerts: true, desktopAlerts: false, pendingBubble: true, compactMode: false };
+    const readAdminPreferences = function () {
+        try {
+            const saved = JSON.parse(window.localStorage.getItem(adminPreferenceStorageKey) || '{}');
+            return {
+                activityInterval: [15, 30, 60].includes(Number(saved.activityInterval)) ? Number(saved.activityInterval) : defaultAdminPreferences.activityInterval,
+                soundAlerts: typeof saved.soundAlerts === 'boolean' ? saved.soundAlerts : defaultAdminPreferences.soundAlerts,
+                desktopAlerts: saved.desktopAlerts === true,
+                pendingBubble: saved.pendingBubble !== false,
+                compactMode: saved.compactMode === true
+            };
+        } catch (error) {
+            console.warn('Admin preferences could not be read; using default monitoring settings.', error);
+            return Object.assign({}, defaultAdminPreferences);
+        }
+    };
+    let adminPreferences = readAdminPreferences();
     let pendingNotificationTone = false;
     let notificationCheckInProgress = false;
+    let documentActivityIntervalId = 0;
     const notificationTone = new Audio(new URL('tone/notif_tone.mp3', window.location.href).href);
     notificationTone.preload = 'auto';
 
     const playAdminNotificationTone = function () {
+        if (!adminPreferences.soundAlerts) return;
         notificationTone.currentTime = 0;
         notificationTone.play().then(function () {
             pendingNotificationTone = false;
@@ -118,6 +180,25 @@ if (document.body.classList.contains('admin-body')) {
             pendingNotificationTone = true;
             console.warn('New-document notification tone is waiting for browser audio permission.', error);
         });
+    };
+
+    const notifyAdminOfNewDocument = function () {
+        if (adminPreferences.soundAlerts) playAdminNotificationTone();
+        if (!adminPreferences.desktopAlerts || !document.hidden || !('Notification' in window) || Notification.permission !== 'granted') return;
+        try {
+            const notification = new Notification('New logbook activity', {
+                body: 'A new record was added. Open the admin portal to review it.',
+                icon: new URL('CVSU.jpeg', window.location.href).href,
+                tag: 'ceit-new-logbook-record'
+            });
+            notification.addEventListener('click', function () {
+                window.focus();
+                window.location.assign(new URL('records', window.location.href));
+                notification.close();
+            }, { once: true });
+        } catch (error) {
+            console.warn('The browser could not display a desktop document alert.', error);
+        }
     };
 
     const checkForNewDocuments = async function () {
@@ -147,7 +228,7 @@ if (document.body.classList.contains('admin-body')) {
             }
             if (latestDocumentId > latestObservedDocumentId) {
                 latestObservedDocumentId = latestDocumentId;
-                playAdminNotificationTone();
+                notifyAdminOfNewDocument();
             }
         } catch (error) {
             console.warn('New-document activity check failed; it will retry automatically.', error);
@@ -159,8 +240,39 @@ if (document.body.classList.contains('admin-body')) {
         }
     };
 
+    const scheduleDocumentActivityChecks = function () {
+        window.clearInterval(documentActivityIntervalId);
+        documentActivityIntervalId = window.setInterval(checkForNewDocuments, adminPreferences.activityInterval * 1000);
+    };
+    const applyAdminPreferences = function (preferences) {
+        if (preferences && typeof preferences === 'object') {
+            adminPreferences = {
+                activityInterval: [15, 30, 60].includes(Number(preferences.activityInterval)) ? Number(preferences.activityInterval) : defaultAdminPreferences.activityInterval,
+                soundAlerts: typeof preferences.soundAlerts === 'boolean' ? preferences.soundAlerts : defaultAdminPreferences.soundAlerts,
+                desktopAlerts: preferences.desktopAlerts === true,
+                pendingBubble: preferences.pendingBubble !== false,
+                compactMode: preferences.compactMode === true
+            };
+        } else {
+            adminPreferences = readAdminPreferences();
+        }
+        if (!adminPreferences.soundAlerts) pendingNotificationTone = false;
+        const pendingShortcut = document.querySelector('.pending-documents-float');
+        if (pendingShortcut) {
+            pendingShortcut.hidden = !adminPreferences.pendingBubble;
+            pendingShortcut.setAttribute('aria-hidden', String(!adminPreferences.pendingBubble));
+        }
+        scheduleDocumentActivityChecks();
+    };
+
     adminDocumentActivityCheck = checkForNewDocuments;
-    window.setInterval(checkForNewDocuments, 15000);
+    scheduleDocumentActivityChecks();
+    window.addEventListener('adminpreferenceschange', function (event) {
+        applyAdminPreferences(event.detail);
+    });
+    window.addEventListener('storage', function (event) {
+        if (event.key === adminPreferenceStorageKey) applyAdminPreferences();
+    });
     window.setTimeout(checkForNewDocuments, 1000);
     document.addEventListener('visibilitychange', function () {
         if (!document.hidden) checkForNewDocuments();
@@ -173,6 +285,7 @@ if (document.body.classList.contains('admin-body')) {
         if (pendingNotificationTone) playAdminNotificationTone();
     }, { capture: true });
 
+    applyAdminPreferences();
     const pendingShortcut = document.querySelector('.pending-documents-float');
     if (pendingShortcut) {
         const dragHandle = pendingShortcut.querySelector('[data-pending-drag-handle]');
@@ -291,7 +404,8 @@ if (document.body.classList.contains('admin-body')) {
 
     // Add accessible mobile labels from the table headers without changing desktop markup.
     document.querySelectorAll('.admin-content .table-responsive table').forEach(function (table) {
-        if (table.closest('.d-none, .d-md-block')) return;
+        if (document.body.classList.contains('admin-compact') && table.closest('.batch-history-table')) return;
+        if (!document.body.classList.contains('admin-compact') && table.closest('.d-none, .d-md-block')) return;
         const headerRow = table.tHead && table.tHead.rows.length ? table.tHead.rows[0] : null;
         if (!headerRow) return;
 

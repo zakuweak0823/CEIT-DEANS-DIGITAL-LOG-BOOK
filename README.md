@@ -46,12 +46,13 @@ PHP API and MySQL database.
 | **Bulk papers** | Register batches, associate paper-level records, and follow batch status. |
 | **Borrowed items** | Manage item categories, borrowers, due dates, and return status. |
 | **Records and reports** | Search logbook records, inspect document activity, and generate date-filtered reports. |
-| **SMS and notifications** | Configure notification settings, send client updates, and review SMS logs. |
+| **SMS and notifications** | Configure SMS and email, tune per-browser activity alerts, send client updates, and review SMS logs. |
 | **Mobile app** | Submit and manage documents, batches, and borrowed items; look up client status and view reports. |
 
 The admin interface also includes responsive navigation, a compact footer
 with live server/network status, and a recovery screen when the office server
-or database disconnects.
+or database disconnects. Admins can personalize live activity polling, sound
+alerts, and optional privacy-conscious desktop notifications per browser.
 
 ## Technology
 
@@ -111,9 +112,17 @@ in, and never reuse it on a deployed system.
 
 ### 3. Configure notifications (optional)
 
-Open **Notification Settings** in the admin portal to configure SMS or email
-notifications. Provider credentials belong in the application settings or
-server environment—not in Git-tracked files or database exports.
+Open **Settings** from the administrator dropdown to personalize live activity
+monitoring, alerts, and the floating pending-documents shortcut for the current
+browser, or turn on **Compact Mode** from the administrator dropdown.
+Compact Mode switches the entire admin portal to a mobile-style layout with
+four primary shortcuts and a bottom **More** menu for the remaining admin
+sections, stacked content, card-based record lists, and a full-width
+workspace—even on a desktop. Open **Notification Settings** to
+configure system-wide SMS, email, or mobile office access. Activity
+preferences are saved in the current browser; desktop alerts are optional
+and require browser permission. Provider credentials belong in the application
+settings or server environment—not in Git-tracked files or database exports.
 
 ## Mobile app
 
