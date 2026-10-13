@@ -67,6 +67,19 @@ commit.
   Compact Mode is enabled.
 - Updated the README to explain the settings and mobile-style Compact Mode.
 
+## V1.07 — Movable assistant and safe form help
+
+- Moved the Admin Assistant launcher to a draggable side position, with
+  position saved locally and keyboard arrow-key movement supported.
+- Added a smooth on-demand assistant panel that stays out of the workspace
+  until opened.
+- Added opt-in field preparation: the assistant previews proposed values and
+  waits for admin approval before filling supported visible fields. It never
+  submits a form.
+- Hid the CMD log control while Compact Mode is active and automatically
+  stopped an active CMD log when switching into that mode.
+- Updated the README and this patch history.
+
 ## Earlier chat requests included in the project snapshot
 
 These requests were part of the same project conversation. They do not all
@@ -81,6 +94,17 @@ map to separate commits or a distinct versioned release:
 - Iterated on Compact Mode based on feedback: from tighter spacing, to quick
   access, to a whole-workspace mobile-style layout, and finally to a compact
   five-item dock with a **More** sheet.
+- Added the in-browser Admin Assistant guide with suggested questions, common
+  workflow directions, and direct links. It does not use an external AI
+  service, access document contents, or persist chat history.
+- Moved the assistant into a draggable side launcher. Its panel opens on
+  demand with a smooth transition, and the launcher position is saved in the
+  browser.
+- Added opt-in form assistance: the admin reviews proposed values and approves
+  before supported visible fields are filled. The assistant does not submit
+  forms.
+- Hid the CMD log control in Compact Mode; an active CMD log is also stopped
+  when Compact Mode is enabled.
 - Committed and pushed the server-recovery patch and the admin-settings/mobile
   Compact Mode patch to `main`.
 

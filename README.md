@@ -48,6 +48,7 @@ PHP API and MySQL database.
 | **Borrowed items** | Manage item categories, borrowers, due dates, and return status. |
 | **Records and reports** | Search logbook records, inspect document activity, and generate date-filtered reports. |
 | **SMS and notifications** | Configure SMS and email, tune per-browser activity alerts, send client updates, and review SMS logs. |
+| **Admin Assistant** | Get privacy-friendly workflow guidance, direct links to admin tools, and approval-based help to fill visible form fields without submitting them. |
 | **Mobile app** | Submit and manage documents, batches, and borrowed items; look up client status and view reports. |
 
 The admin interface also includes responsive navigation, a compact footer
@@ -209,6 +210,8 @@ identifies the Git commit that contains the recorded changes.
 | **V1.03 — Admin settings and mobile Compact Mode** | [`707b78e`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/707b78e) | Added a dedicated Settings page and route; browser preferences for activity polling, sound and desktop alerts, and the pending-documents bubble; and a persistent Compact Mode preference. Reworked Compact Mode as a phone-style workspace with card layouts, touch controls, and bottom-sheet dialogs. |
 | **V1.04 — Compact navigation refinement** | Included in [`707b78e`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/707b78e) | Hid the sidebar in Compact Mode, lightened its theme, reduced the bottom dock to Dashboard, Pending inbox, New record, Records, and More, and moved other destinations into the More sheet. |
 | **V1.05 — Patch history documentation** | [`cde0f54`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/cde0f54) | Added the versioned `Patch V1.00.md` history and linked it from the README. |
+| **V1.06 — Admin Assistant** | Included in V1.07 below | Added a built-in, browser-side admin guide with suggested questions and links to common workflows. It does not call an external AI service, access record contents, or save chat history. |
+| **V1.07 — Movable assistant and safe form help** | Current patch | Moved the assistant to a draggable side launcher with a smooth, on-demand panel and saved position. Added field-value previews that require approval before filling visible form fields; the assistant never submits forms. Compact Mode hides the CMD log control and stops an active log. |
 
 Earlier chat iterations included repeated README and footer refinements,
 pending-document bubble improvements and its hide/show setting, admin

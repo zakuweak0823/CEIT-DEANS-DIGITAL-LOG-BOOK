@@ -1567,6 +1567,133 @@ footer {
     }
 }
 
+.admin-assistant-launcher {
+    top: 46%;
+    right: 0.65rem;
+    bottom: auto;
+    left: auto;
+    width: 3.2rem;
+    min-width: 3.2rem;
+    height: 3.7rem;
+    min-height: 3.7rem;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.35rem;
+    border-radius: 1rem 0 0 1rem;
+    cursor: grab;
+    touch-action: none;
+    transition: left 180ms ease, right 180ms ease, top 180ms ease, transform 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.admin-assistant-launcher > span {
+    font-size: 0.65rem;
+    line-height: 1;
+}
+
+.admin-assistant-launcher.is-dragging {
+    z-index: 1035;
+    cursor: grabbing;
+    transition: none;
+    transform: scale(1.04);
+}
+
+.admin-assistant-panel:not([hidden]) {
+    visibility: hidden;
+    opacity: 0;
+    transform: translateX(0.75rem) scale(0.985);
+    transition: opacity 190ms ease, transform 190ms cubic-bezier(0.2, 0.8, 0.2, 1), visibility 190ms;
+}
+
+.admin-assistant-panel.is-open {
+    visibility: visible;
+    opacity: 1;
+    transform: translateX(0) scale(1);
+}
+
+.admin-assistant-panel.is-repositioning {
+    transition: none;
+}
+
+.admin-assistant-header {
+    cursor: default;
+}
+
+.admin-assistant-proposal-list {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0.65rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.admin-assistant-proposal-list li {
+    display: grid;
+    grid-template-columns: minmax(5rem, 34%) minmax(0, 1fr);
+    gap: 0.4rem;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid #e7eee8;
+    border-radius: 0.55rem;
+    background: #fff;
+    overflow-wrap: anywhere;
+}
+
+.admin-assistant-proposal-list strong {
+    color: #526257;
+    font-size: 0.72rem;
+}
+
+.admin-assistant-proposal-list span {
+    color: #35463a;
+    font-size: 0.76rem;
+}
+
+.admin-assistant-proposal-note {
+    margin-top: 0.5rem !important;
+    color: #7b6540;
+    font-size: 0.72rem;
+}
+
+.admin-assistant-proposal-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.65rem;
+}
+
+.admin-assistant-proposal-controls button {
+    min-height: 2.1rem;
+    padding: 0.4rem 0.7rem;
+    border: 1px solid #c8dfce;
+    border-radius: 999px;
+    background: #176b45;
+    color: #fff;
+    font-size: 0.73rem;
+    font-weight: 700;
+}
+
+.admin-assistant-proposal-controls .admin-assistant-cancel {
+    border-color: #dfe6e0;
+    background: #fff;
+    color: #526257;
+}
+
+.admin-assistant-proposal-controls button:hover,
+.admin-assistant-proposal-controls button:focus-visible {
+    filter: brightness(0.95);
+}
+
+.admin-body.admin-compact .admin-cmd-log-menu-item,
+.admin-body.admin-compact .admin-cmd-log-menu-divider {
+    display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .admin-assistant-launcher,
+    .admin-assistant-panel:not([hidden]) {
+        transition: none;
+    }
+}
+
 .admin-body.admin-compact {
     --sidebar-width: clamp(13rem, 16vw, 15rem);
 }
@@ -4016,5 +4143,311 @@ body.admin-body.admin-compact {
 
     .admin-body.admin-compact .admin-quick-access-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.admin-embedded-body .admin-assistant {
+    display: none;
+}
+
+.admin-assistant-launcher {
+    position: fixed;
+    z-index: 1034;
+    bottom: max(1rem, env(safe-area-inset-bottom));
+    left: max(1rem, env(safe-area-inset-left));
+    display: inline-flex;
+    min-width: 3.4rem;
+    min-height: 3.4rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0 0.9rem;
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    border-radius: 999px;
+    background: #176b45;
+    box-shadow: 0 0.35rem 1.1rem rgba(20, 74, 47, 0.26);
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 700;
+    transition: transform 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.admin-assistant-launcher:hover,
+.admin-assistant-launcher:focus-visible {
+    background: #105737;
+    box-shadow: 0 0.5rem 1.3rem rgba(20, 74, 47, 0.32);
+    color: #fff;
+    transform: translateY(-2px);
+}
+
+.admin-assistant-launcher > .bi {
+    font-size: 1.15rem;
+}
+
+.admin-assistant-panel {
+    position: fixed;
+    z-index: 1033;
+    bottom: calc(5.25rem + env(safe-area-inset-bottom));
+    left: max(1rem, env(safe-area-inset-left));
+    display: flex;
+    width: min(24rem, calc(100vw - 2rem));
+    max-height: min(36rem, calc(100dvh - 7rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #e0e9e2;
+    border-radius: 1.05rem;
+    background: #fff;
+    box-shadow: 0 1rem 3rem rgba(22, 50, 34, 0.2);
+    color: #35463a;
+}
+
+.admin-assistant-panel[hidden] {
+    display: none !important;
+}
+
+.admin-assistant-header {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.85rem 0.95rem;
+    border-bottom: 1px solid #edf1ed;
+    background: #fbfdfb;
+}
+
+.admin-assistant-heading {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.admin-assistant-mark {
+    display: grid;
+    width: 2.4rem;
+    height: 2.4rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 0.8rem;
+    background: #eaf5ed;
+    color: #176b45;
+    font-size: 1.1rem;
+}
+
+.admin-assistant-heading h2 {
+    margin: 0;
+    color: #263a2e;
+    font-size: 0.95rem;
+    font-weight: 750;
+}
+
+.admin-assistant-heading p {
+    margin: 0.1rem 0 0;
+    color: #758078;
+    font-size: 0.7rem;
+}
+
+.admin-assistant-close {
+    display: grid;
+    width: 2.3rem;
+    height: 2.3rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 0;
+    border-radius: 0.65rem;
+    background: transparent;
+    color: #6a756d;
+}
+
+.admin-assistant-close:hover,
+.admin-assistant-close:focus-visible {
+    background: #eef4ef;
+    color: #176b45;
+}
+
+.admin-assistant-messages {
+    display: flex;
+    min-height: 8rem;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 0.65rem;
+    overflow-y: auto;
+    padding: 0.9rem;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+}
+
+.admin-assistant-messages::-webkit-scrollbar {
+    display: none;
+}
+
+.admin-assistant-message {
+    width: fit-content;
+    max-width: 92%;
+    padding: 0.65rem 0.75rem;
+    border-radius: 0.85rem;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.admin-assistant-message p {
+    margin: 0;
+    white-space: pre-line;
+}
+
+.admin-assistant-message.is-assistant {
+    align-self: flex-start;
+    border: 1px solid #e9efea;
+    border-bottom-left-radius: 0.25rem;
+    background: #f5f8f5;
+    color: #3f4d43;
+}
+
+.admin-assistant-message.is-user {
+    align-self: flex-end;
+    border-bottom-right-radius: 0.25rem;
+    background: #176b45;
+    color: #fff;
+}
+
+.admin-assistant-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.65rem;
+}
+
+.admin-assistant-actions a {
+    display: inline-flex;
+    min-height: 2rem;
+    align-items: center;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid #c8dfce;
+    border-radius: 999px;
+    background: #fff;
+    color: #176b45;
+    font-size: 0.73rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.admin-assistant-actions a:hover,
+.admin-assistant-actions a:focus-visible {
+    border-color: #176b45;
+    background: #eaf5ed;
+}
+
+.admin-assistant-suggestions {
+    display: flex;
+    min-width: 0;
+    flex: 0 0 auto;
+    gap: 0.4rem;
+    overflow-x: auto;
+    padding: 0 0.85rem 0.75rem;
+    scrollbar-width: none;
+}
+
+.admin-assistant-suggestions::-webkit-scrollbar {
+    display: none;
+}
+
+.admin-assistant-suggestions button {
+    min-height: 2rem;
+    flex: 0 0 auto;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid #e1e9e2;
+    border-radius: 999px;
+    background: #fff;
+    color: #526257;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.admin-assistant-suggestions button:hover,
+.admin-assistant-suggestions button:focus-visible {
+    border-color: #b8d8c2;
+    background: #eef7f0;
+    color: #145c3b;
+}
+
+.admin-assistant-form {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0 0.8rem;
+    padding: 0.35rem 0.4rem 0.35rem 0.75rem;
+    border: 1px solid #dce6de;
+    border-radius: 999px;
+    background: #fff;
+}
+
+.admin-assistant-form:focus-within {
+    border-color: #8cb99a;
+    box-shadow: 0 0 0 0.18rem rgba(23, 107, 69, 0.1);
+}
+
+.admin-assistant-form input {
+    width: 100%;
+    min-width: 0;
+    min-height: 2.3rem;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: #35463a;
+    font: inherit;
+    font-size: 0.8rem;
+}
+
+.admin-assistant-form button {
+    display: grid;
+    width: 2.35rem;
+    height: 2.35rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: #176b45;
+    color: #fff;
+    font-size: 1.05rem;
+}
+
+.admin-assistant-form button:hover,
+.admin-assistant-form button:focus-visible {
+    background: #105737;
+}
+
+.admin-assistant-privacy {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 0.55rem 0.85rem 0.7rem;
+    color: #7a847d;
+    font-size: 0.65rem;
+    line-height: 1.35;
+    text-align: center;
+}
+
+.admin-body.admin-compact .admin-assistant-launcher {
+    bottom: calc(4.9rem + env(safe-area-inset-bottom));
+}
+
+.admin-body.admin-compact .admin-assistant-panel {
+    bottom: calc(5rem + env(safe-area-inset-bottom));
+    max-height: min(34rem, calc(100dvh - 6rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
+}
+
+@media (max-width: 575.98px) {
+    .admin-assistant-panel {
+        right: max(0.65rem, env(safe-area-inset-right));
+        left: max(0.65rem, env(safe-area-inset-left));
+        width: auto;
+        max-height: min(34rem, calc(100dvh - 6.5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
+    }
+
+    .admin-body.admin-compact .admin-assistant-panel {
+        max-height: min(34rem, calc(100dvh - 6rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)));
     }
 }

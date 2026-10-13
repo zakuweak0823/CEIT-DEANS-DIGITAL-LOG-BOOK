@@ -99,6 +99,7 @@ if (document.body.classList.contains('admin-body')) {
         const csrfToken = submissionLogToggle.dataset.csrfToken;
         let submissionLogEnabled = false;
         let submissionLogRequestInProgress = false;
+        submissionLogToggle.disabled = document.body.classList.contains('admin-compact');
         const renderSubmissionLogButton = function () {
             submissionLogToggle.setAttribute('aria-pressed', String(submissionLogEnabled));
             submissionLogToggle.innerHTML = submissionLogEnabled
@@ -107,7 +108,9 @@ if (document.body.classList.contains('admin-body')) {
         };
         const requestSubmissionLogState = async function (enabled) {
             if (submissionLogRequestInProgress) return;
+            if (enabled === true && document.body.classList.contains('admin-compact')) return;
             submissionLogRequestInProgress = true;
+            let stopAfterStatusCheck = false;
             submissionLogToggle.disabled = true;
             try {
                 const options = {
@@ -128,16 +131,31 @@ if (document.body.classList.contains('admin-body')) {
                 }
                 submissionLogEnabled = data.enabled;
                 renderSubmissionLogButton();
+                stopAfterStatusCheck = typeof enabled !== 'boolean'
+                    && data.enabled
+                    && document.body.classList.contains('admin-compact');
             } catch (error) {
                 window.alert(error.message);
             } finally {
-                submissionLogToggle.disabled = false;
+                submissionLogToggle.disabled = document.body.classList.contains('admin-compact');
                 submissionLogRequestInProgress = false;
+            }
+            if (stopAfterStatusCheck || (document.body.classList.contains('admin-compact') && submissionLogEnabled)) {
+                requestSubmissionLogState(false);
             }
         };
 
         submissionLogToggle.addEventListener('click', function () {
             requestSubmissionLogState(!submissionLogEnabled);
+        });
+        const stopCommandLogInCompactMode = function () {
+            const compact = document.body.classList.contains('admin-compact');
+            submissionLogToggle.disabled = compact || submissionLogRequestInProgress;
+            if (compact && submissionLogEnabled) requestSubmissionLogState(false);
+        };
+        window.addEventListener('adminpreferenceschange', stopCommandLogInCompactMode);
+        window.addEventListener('storage', function (event) {
+            if (event.key === compactModeStorageKey) stopCommandLogInCompactMode();
         });
         requestSubmissionLogState();
     }
@@ -427,6 +445,485 @@ if (document.body.classList.contains('admin-body')) {
             });
         });
     });
+
+    const assistant = document.querySelector('.admin-assistant');
+    if (assistant) {
+        const launcher = assistant.querySelector('.admin-assistant-launcher');
+        const panel = assistant.querySelector('.admin-assistant-panel');
+        const closeButton = assistant.querySelector('.admin-assistant-close');
+        const messages = assistant.querySelector('.admin-assistant-messages');
+        const form = assistant.querySelector('.admin-assistant-form');
+        const input = assistant.querySelector('#adminAssistantInput');
+        const sendButton = assistant.querySelector('[data-assistant-send]');
+
+        if (launcher && panel && closeButton && messages && form && input && sendButton) {
+            const panelTransitionDuration = 190;
+            const answers = [
+                {
+                    match: /\b(pending|awaiting|inbox)\b/i,
+                    text: 'Open Pending Inbox to review incoming documents that still need attention. Select a record to view its details and available actions.',
+                    links: [{ label: 'Open Pending Inbox', href: 'incoming?status=Pending' }]
+                },
+                {
+                    match: /\b(register|new document|add document|submit document|quick submit)\b/i,
+                    text: 'Use Quick Submit Records for the guided submission flow. If you already know it is an incoming document, use Add incoming on the dashboard.',
+                    links: [
+                        { label: 'Quick Submit Records', href: 'quick_document' },
+                        { label: 'Incoming Documents', href: 'incoming' }
+                    ]
+                },
+                {
+                    match: /\b(outgoing|release|released|recipient)\b/i,
+                    text: 'Open Outgoing Documents to review outgoing records and their release status. Use the record actions there to continue the workflow.',
+                    links: [{ label: 'Outgoing Documents', href: 'outgoing' }]
+                },
+                {
+                    match: /\b(batch|bulk paper|tracking qr|batch qr)\b/i,
+                    text: 'Batch Papers is for registering and managing groups of papers. Open Batch Tracker when you need to check a tracking link or QR status.',
+                    links: [
+                        { label: 'Batch Papers', href: 'batch_papers' },
+                        { label: 'Batch Tracker', href: 'batch_tracker' }
+                    ]
+                },
+                {
+                    match: /\b(borrow|borrowed|return|overdue|item)\b/i,
+                    text: 'Use Borrowed Items to check current loans, due dates, and return actions. Item Categories lets you manage the inventory categories.',
+                    links: [
+                        { label: 'Borrowed Items', href: 'borrowed' },
+                        { label: 'Item Categories', href: 'item_categories' }
+                    ]
+                },
+                {
+                    match: /\b(report|analytics|statistics|summary)\b/i,
+                    text: 'Open Reports to generate document reports. The More menu also has dedicated Borrowed Items and SMS report shortcuts.',
+                    links: [{ label: 'Open Reports', href: 'reports' }]
+                },
+                {
+                    match: /\b(search|find record|all records|document records)\b/i,
+                    text: 'Use Document Records to search across the logbook. You can also search documents from the search box in the standard workspace.',
+                    links: [{ label: 'Search Document Records', href: 'records' }]
+                },
+                {
+                    match: /\b(notification|sms|email|alert|sound|desktop)\b/i,
+                    text: 'Admin Settings controls this browser’s activity checks and alerts. Notification Settings is for system-wide messaging configuration and SMS logs.',
+                    links: [
+                        { label: 'Admin Settings', href: 'settings' },
+                        { label: 'Notification Settings', href: 'notification_settings' },
+                        { label: 'SMS Logs', href: 'sms' }
+                    ]
+                },
+                {
+                    match: /\b(compact|quick mode|mobile mode|bottom menu)\b/i,
+                    text: 'Compact Mode is available from your administrator menu or Admin Settings. It uses a mobile-style layout, a short bottom dock, and a More sheet for the other sections.',
+                    links: [{ label: 'Admin Settings', href: 'settings' }]
+                },
+                {
+                    match: /\b(phone|mobile access|access.*phone|phone.*access)\b/i,
+                    text: 'For phone access, the phone and server must be on a network that can reach the web server. Ask your network administrator to configure secure access; do not expose the development server directly to the public internet.',
+                    links: [{ label: 'Admin Settings', href: 'settings' }]
+                },
+                {
+                    match: /\b(server|offline|disconnected|database|connection)\b/i,
+                    text: 'If the office server is unavailable, check that Apache and MySQL are running on the host. The recovery screen retries automatically; confirm any unsaved form before retrying.',
+                    links: [{ label: 'Dashboard', href: 'dashboard' }]
+                },
+                {
+                    match: /\b(help|what can you do|how do i use)\b/i,
+                    text: 'I can guide you to logbook pages and explain common admin workflows. Try asking about pending documents, registering a record, batches, borrowed items, reports, settings, or server recovery.',
+                    links: []
+                }
+            ];
+
+            const setOpen = function (open) {
+                if (open) {
+                    window.clearTimeout(panel.hideTimer);
+                    positionPanel();
+                    panel.hidden = false;
+                    window.requestAnimationFrame(function () {
+                        panel.classList.add('is-open');
+                    });
+                } else {
+                    panel.classList.remove('is-open');
+                    panel.hideTimer = window.setTimeout(function () {
+                        panel.hidden = true;
+                    }, panelTransitionDuration);
+                }
+                launcher.setAttribute('aria-expanded', String(open));
+                launcher.setAttribute('aria-label', open ? 'Close Admin Assistant' : 'Open Admin Assistant');
+                if (open) input.focus();
+                else window.setTimeout(function () { launcher.focus(); }, panelTransitionDuration);
+            };
+            const addMessage = function (text, isAssistant, links) {
+                const message = document.createElement('div');
+                message.className = 'admin-assistant-message' + (isAssistant ? ' is-assistant' : ' is-user');
+                const paragraph = document.createElement('p');
+                paragraph.textContent = text;
+                message.appendChild(paragraph);
+                if (links && links.length) {
+                    const actions = document.createElement('div');
+                    actions.className = 'admin-assistant-actions';
+                    links.forEach(function (link) {
+                        const anchor = document.createElement('a');
+                        anchor.href = link.href;
+                        anchor.textContent = link.label;
+                        actions.appendChild(anchor);
+                    });
+                    message.appendChild(actions);
+                }
+                messages.appendChild(message);
+                messages.scrollTop = messages.scrollHeight;
+            };
+            const answerQuestion = function (question) {
+                const normalizedQuestion = question.trim();
+                if (!normalizedQuestion) return;
+                addMessage(normalizedQuestion, false, []);
+                if (/^(?:help me fill this form|what fields can you fill|show form fields)$/i.test(normalizedQuestion)) {
+                    describeCurrentForm();
+                    return;
+                }
+                const fillRequest = normalizedQuestion.match(/^(?:fill|prepare|draft)(?: this form)?\s*:\s*(.+)$/i);
+                if (fillRequest) {
+                    proposeFormFill(fillRequest[1]);
+                    return;
+                }
+                const answer = answers.find(function (entry) {
+                    return entry.match.test(normalizedQuestion);
+                });
+                if (answer) {
+                    addMessage(answer.text, true, answer.links);
+                    return;
+                }
+                addMessage(
+                    'I can help find admin pages and explain common workflows, but I do not read document records or handle account actions. Try asking about pending documents, incoming or outgoing records, batches, borrowed items, reports, settings, or server recovery.',
+                    true,
+                    [
+                        { label: 'Pending Inbox', href: 'incoming?status=Pending' },
+                        { label: 'Quick Submit', href: 'quick_document' },
+                        { label: 'Reports', href: 'reports' }
+                    ]
+                );
+            };
+            const sendQuestion = function () {
+                answerQuestion(input.value);
+                input.value = '';
+                input.focus();
+            };
+
+            const normalizeFieldName = function (value) {
+                return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+            };
+            const fieldAliases = {
+                subject: ['subject', 'title', 'document subject'],
+                sender: ['sender', 'from', 'sender name'],
+                recipient: ['recipient', 'to', 'recipient name'],
+                type: ['type', 'document type', 'direction'],
+                status: ['status', 'current status'],
+                remarks: ['remarks', 'notes', 'description'],
+                date: ['date', 'document date', 'date created'],
+                search: ['search', 'search records', 'query']
+            };
+            const getControlNames = function (control) {
+                const names = [
+                    control.name,
+                    control.id,
+                    control.getAttribute('aria-label'),
+                    control.getAttribute('placeholder')
+                ];
+                if (control.labels) {
+                    Array.from(control.labels).forEach(function (label) {
+                        names.push(label.textContent);
+                    });
+                }
+                const wrappingLabel = control.closest('label');
+                if (wrappingLabel) names.push(wrappingLabel.textContent);
+                return names.filter(Boolean).map(normalizeFieldName);
+            };
+            const isEditableVisibleControl = function (control) {
+                if (!(control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement || control instanceof HTMLSelectElement)) return false;
+                if (control.disabled || control.readOnly || !control.getClientRects().length) return false;
+                if (control instanceof HTMLInputElement && !['text', 'search', 'email', 'tel', 'url', 'number', 'date'].includes(control.type)) return false;
+                return true;
+            };
+            const getVisibleFields = function () {
+                return Array.from(document.querySelectorAll('.admin-content form:not(.admin-assistant-form) input, .admin-content form:not(.admin-assistant-form) textarea, .admin-content form:not(.admin-assistant-form) select, .modal.show form:not(.admin-assistant-form) input, .modal.show form:not(.admin-assistant-form) textarea, .modal.show form:not(.admin-assistant-form) select'))
+                    .filter(isEditableVisibleControl)
+                    .map(function (control) {
+                        const names = getControlNames(control);
+                        return {
+                            control: control,
+                            label: (control.labels && control.labels.length ? control.labels[0].textContent : '') || control.getAttribute('aria-label') || control.getAttribute('placeholder') || control.name || control.id || 'Field',
+                            names: names
+                        };
+                    });
+            };
+            const matchesField = function (field, requestedName) {
+                const normalized = normalizeFieldName(requestedName);
+                const aliases = Object.keys(fieldAliases).reduce(function (all, key) {
+                    const values = fieldAliases[key];
+                    if (values.includes(normalized) || key === normalized) all.push.apply(all, values);
+                    return all;
+                }, [normalized]);
+                return field.names.some(function (name) {
+                    return aliases.includes(name);
+                });
+            };
+            const describeCurrentForm = function () {
+                const fields = getVisibleFields();
+                if (!fields.length) {
+                    addMessage('I don’t see any visible editable fields in the current admin page. Open a form first, then ask me to help fill it.', true, []);
+                    return;
+                }
+                const uniqueFields = Array.from(new Set(fields.map(function (field) { return field.label.trim(); })).values());
+                addMessage('I can prepare values for visible fields on this page. Tell me the values as a colon-separated list, for example: “fill: subject: Meeting records; sender: Dean’s Office”. I’ll show a preview and wait for your approval before filling anything. I will not submit the form.\n\nVisible fields: ' + uniqueFields.join(', '), true, []);
+            };
+            const parseFieldValues = function (valueText) {
+                const pairs = [];
+                valueText.split(/[;\n]+/).forEach(function (part) {
+                    const separator = part.search(/[:=]/);
+                    if (separator < 1) return;
+                    const name = part.slice(0, separator).trim();
+                    const value = part.slice(separator + 1).trim();
+                    if (name && value) pairs.push({ name: name, value: value });
+                });
+                return pairs;
+            };
+            const makeFillProposal = function (pairs, fields) {
+                const matched = [];
+                const unmatched = [];
+                pairs.forEach(function (pair) {
+                    const candidates = fields.filter(function (field) { return matchesField(field, pair.name); });
+                    if (candidates.length !== 1) {
+                        unmatched.push(pair.name + (candidates.length > 1 ? ' (matches more than one field)' : ' (no unique visible field match)'));
+                        return;
+                    }
+                    const field = candidates[0];
+                    if (field.control instanceof HTMLSelectElement) {
+                        const wanted = normalizeFieldName(pair.value);
+                        const option = Array.from(field.control.options).find(function (item) {
+                            return normalizeFieldName(item.textContent) === wanted || normalizeFieldName(item.value) === wanted;
+                        });
+                        if (!option) {
+                            unmatched.push(pair.name + ' (value is not an available option)');
+                            return;
+                        }
+                        matched.push({ label: field.label.trim(), value: option.value, control: field.control, displayValue: option.textContent.trim() });
+                        return;
+                    }
+                    if (field.control instanceof HTMLInputElement && field.control.type === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(pair.value)) {
+                        unmatched.push(pair.name + ' (use a date in YYYY-MM-DD format)');
+                        return;
+                    }
+                    matched.push({ label: field.label.trim(), value: pair.value, control: field.control, displayValue: pair.value });
+                });
+                if (!matched.length) {
+                    addMessage('I could not prepare any fields. ' + (unmatched.length ? 'Check: ' + unmatched.join('; ') + '.' : 'Use “field: value” pairs separated by semicolons.'), true, []);
+                    return;
+                }
+                const message = document.createElement('div');
+                message.className = 'admin-assistant-message is-assistant admin-assistant-proposal';
+                const paragraph = document.createElement('p');
+                paragraph.textContent = 'Review these proposed form values. Nothing will change until you approve:';
+                message.appendChild(paragraph);
+                const list = document.createElement('ul');
+                list.className = 'admin-assistant-proposal-list';
+                matched.forEach(function (entry) {
+                    const item = document.createElement('li');
+                    const name = document.createElement('strong');
+                    name.textContent = entry.label + ': ';
+                    const value = document.createElement('span');
+                    value.textContent = entry.displayValue;
+                    item.append(name, value);
+                    list.appendChild(item);
+                });
+                message.appendChild(list);
+                if (unmatched.length) {
+                    const note = document.createElement('p');
+                    note.className = 'admin-assistant-proposal-note';
+                    note.textContent = 'Not included: ' + unmatched.join('; ') + '.';
+                    message.appendChild(note);
+                }
+                const controls = document.createElement('div');
+                controls.className = 'admin-assistant-proposal-controls';
+                const approve = document.createElement('button');
+                approve.type = 'button';
+                approve.className = 'admin-assistant-approve';
+                approve.textContent = 'Approve and fill';
+                const cancel = document.createElement('button');
+                cancel.type = 'button';
+                cancel.className = 'admin-assistant-cancel';
+                cancel.textContent = 'Cancel';
+                controls.append(approve, cancel);
+                message.appendChild(controls);
+                messages.appendChild(message);
+                messages.scrollTop = messages.scrollHeight;
+                approve.addEventListener('click', function () {
+                    let filledCount = 0;
+                    matched.forEach(function (entry) {
+                        if (!entry.control.isConnected || !isEditableVisibleControl(entry.control)) return;
+                        entry.control.value = entry.value;
+                        filledCount += 1;
+                    });
+                    message.remove();
+                    addMessage(filledCount
+                        ? 'Filled ' + filledCount + ' approved field' + (filledCount === 1 ? '' : 's') + '. Review the form and submit it yourself when ready.'
+                        : 'The form changed before I could fill it. Nothing was updated; please try again.', true, []);
+                });
+                cancel.addEventListener('click', function () {
+                    message.remove();
+                    addMessage('Cancelled. I did not change the form.', true, []);
+                });
+            };
+            const proposeFormFill = function (instruction) {
+                const pairs = parseFieldValues(instruction);
+                if (!pairs.length) {
+                    addMessage('Tell me the values you want prepared as “fill: field: value; field: value”. I’ll match them to visible fields and ask you to approve before filling. I never submit forms.', true, []);
+                    return;
+                }
+                makeFillProposal(pairs, getVisibleFields());
+            };
+            const launcherStorageKey = 'ceit-admin-assistant-position-v1';
+            const getLauncherBounds = function () {
+                return launcher.getBoundingClientRect();
+            };
+            const clampLauncherPosition = function (left, top) {
+                const bounds = getLauncherBounds();
+                const margin = 8;
+                const maxLeft = Math.max(margin, window.innerWidth - bounds.width - margin);
+                const bottomReserve = document.body.classList.contains('admin-compact') ? 84 : 0;
+                const maxTop = Math.max(margin, window.innerHeight - bounds.height - bottomReserve - margin);
+                return {
+                    left: Math.min(Math.max(left, margin), maxLeft),
+                    top: Math.min(Math.max(top, margin), maxTop)
+                };
+            };
+            const positionLauncher = function (left, top, side, save) {
+                const position = clampLauncherPosition(left, top);
+                launcher.style.left = side === 'left' ? position.left + 'px' : 'auto';
+                launcher.style.right = side === 'right' ? (window.innerWidth - position.left - getLauncherBounds().width) + 'px' : 'auto';
+                launcher.style.top = position.top + 'px';
+                launcher.style.bottom = 'auto';
+                launcher.dataset.dockSide = side;
+                if (!save) return;
+                try {
+                    const yRange = Math.max(1, window.innerHeight - getLauncherBounds().height - 16);
+                    window.localStorage.setItem(launcherStorageKey, JSON.stringify({ side: side, y: position.top / yRange }));
+                } catch (error) {
+                    console.warn('Admin Assistant position could not be saved.', error);
+                }
+            };
+            const restoreLauncherPosition = function () {
+                try {
+                    const saved = JSON.parse(window.localStorage.getItem(launcherStorageKey) || 'null');
+                    if (saved && (saved.side === 'left' || saved.side === 'right') && Number.isFinite(saved.y)) {
+                        const range = Math.max(1, window.innerHeight - getLauncherBounds().height - 16);
+                        const top = Math.max(8, Math.min(range * saved.y, range));
+                        const left = saved.side === 'left' ? 8 : window.innerWidth - getLauncherBounds().width - 8;
+                        positionLauncher(left, top, saved.side, false);
+                        return;
+                    }
+                } catch (error) {
+                    console.warn('Admin Assistant position could not be restored.', error);
+                }
+                positionLauncher(window.innerWidth - getLauncherBounds().width - 8, window.innerHeight * 0.46, 'right', false);
+            };
+            const positionPanel = function () {
+                const viewportMargin = 10;
+                const launcherBounds = getLauncherBounds();
+                panel.style.width = Math.min(384, window.innerWidth - viewportMargin * 2) + 'px';
+                panel.style.maxHeight = Math.min(560, window.innerHeight - viewportMargin * 2 - (document.body.classList.contains('admin-compact') ? 78 : 0)) + 'px';
+                panel.style.left = 'auto';
+                panel.style.right = 'auto';
+                panel.style.top = 'auto';
+                panel.style.bottom = 'auto';
+                const width = Math.min(384, window.innerWidth - viewportMargin * 2);
+                const height = Math.min(panel.scrollHeight || 440, window.innerHeight - viewportMargin * 2 - (document.body.classList.contains('admin-compact') ? 78 : 0));
+                const side = launcher.dataset.dockSide || 'right';
+                const proposedLeft = side === 'right'
+                    ? launcherBounds.left - width - 10
+                    : launcherBounds.right + 10;
+                const left = Math.max(viewportMargin, Math.min(proposedLeft, window.innerWidth - width - viewportMargin));
+                const top = Math.max(viewportMargin, Math.min(launcherBounds.top + launcherBounds.height / 2 - height / 2, window.innerHeight - height - viewportMargin - (document.body.classList.contains('admin-compact') ? 78 : 0)));
+                panel.style.left = left + 'px';
+                panel.style.top = top + 'px';
+            };
+            let dragState = null;
+            let suppressLauncherClick = false;
+            launcher.addEventListener('pointerdown', function (event) {
+                if (event.button !== 0) return;
+                const bounds = getLauncherBounds();
+                dragState = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, left: bounds.left, top: bounds.top, moved: false };
+                launcher.setPointerCapture(event.pointerId);
+            });
+            launcher.addEventListener('pointermove', function (event) {
+                if (!dragState || dragState.pointerId !== event.pointerId) return;
+                const deltaX = event.clientX - dragState.startX;
+                const deltaY = event.clientY - dragState.startY;
+                if (!dragState.moved && Math.hypot(deltaX, deltaY) < 6) return;
+                dragState.moved = true;
+                launcher.classList.add('is-dragging');
+                const position = clampLauncherPosition(dragState.left + deltaX, dragState.top + deltaY);
+                launcher.style.left = position.left + 'px';
+                launcher.style.right = 'auto';
+                launcher.style.top = position.top + 'px';
+                launcher.style.bottom = 'auto';
+                panel.classList.add('is-repositioning');
+                if (!panel.hidden) positionPanel();
+            });
+            const finishLauncherDrag = function (event) {
+                if (!dragState || dragState.pointerId !== event.pointerId) return;
+                const bounds = getLauncherBounds();
+                if (dragState.moved) {
+                    suppressLauncherClick = true;
+                    const side = bounds.left + bounds.width / 2 < window.innerWidth / 2 ? 'left' : 'right';
+                    positionLauncher(side === 'left' ? 8 : window.innerWidth - bounds.width - 8, bounds.top, side, true);
+                    if (!panel.hidden) positionPanel();
+                    window.setTimeout(function () { suppressLauncherClick = false; }, 0);
+                }
+                launcher.classList.remove('is-dragging');
+                panel.classList.remove('is-repositioning');
+                dragState = null;
+            };
+            launcher.addEventListener('pointerup', finishLauncherDrag);
+            launcher.addEventListener('pointercancel', finishLauncherDrag);
+            launcher.addEventListener('keydown', function (event) {
+                const moves = { ArrowUp: [0, -12], ArrowDown: [0, 12], ArrowLeft: [-12, 0], ArrowRight: [12, 0] };
+                if (!moves[event.key]) return;
+                event.preventDefault();
+                const bounds = getLauncherBounds();
+                const next = clampLauncherPosition(bounds.left + moves[event.key][0], bounds.top + moves[event.key][1]);
+                const side = next.left + bounds.width / 2 < window.innerWidth / 2 ? 'left' : 'right';
+                positionLauncher(side === 'left' ? 8 : window.innerWidth - bounds.width - 8, next.top, side, true);
+                if (!panel.hidden) positionPanel();
+            });
+
+            launcher.addEventListener('click', function () {
+                if (suppressLauncherClick) return;
+                setOpen(!panel.classList.contains('is-open'));
+            });
+            closeButton.addEventListener('click', function () {
+                setOpen(false);
+            });
+            sendButton.addEventListener('click', sendQuestion);
+            input.addEventListener('keydown', function (event) {
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                sendQuestion();
+            });
+            assistant.querySelectorAll('[data-assistant-question]').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    answerQuestion(button.dataset.assistantQuestion || '');
+                });
+            });
+            restoreLauncherPosition();
+            window.addEventListener('resize', function () {
+                restoreLauncherPosition();
+                if (!panel.hidden) positionPanel();
+            });
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape' && !panel.hidden && panel.classList.contains('is-open')) setOpen(false);
+            });
+        }
+    }
 }
 document.querySelectorAll('.modal').forEach(function (modal) {
     if (modal.parentElement !== document.body) {

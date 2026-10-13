@@ -62,7 +62,7 @@ if ($adminName && isset($conn) && function_exists('safe_query')) {
     <title>CEIT Deans Office Digital Logbook</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="style.css?v=compact-mobile-26">
+    <link rel="stylesheet" href="style.css?v=admin-assistant-32">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body<?php echo $adminName ? ' class="admin-body' . (($_GET['embed'] ?? '') === '1' ? ' admin-embedded-body' : '') . '" data-latest-document-id="' . (int)($latestDocumentId ?? 0) . '" data-document-activity-ready="' . ($latestDocumentId === null ? 'false' : 'true') . '"' : ''; ?>>
@@ -90,6 +90,41 @@ if ($adminName && isset($conn) && function_exists('safe_query')) {
             <i class="bi bi-arrow-up-right pending-documents-arrow" aria-hidden="true"></i>
         </span>
     </a>
+    <section class="admin-assistant" aria-label="Admin Assistant">
+        <button class="admin-assistant-launcher" type="button" aria-label="Open Admin Assistant" aria-expanded="false" aria-controls="adminAssistantPanel" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight" title="Drag to move; use arrow keys when focused.">
+            <i class="bi bi-stars" aria-hidden="true"></i>
+            <span>Help</span>
+        </button>
+        <div class="admin-assistant-panel" id="adminAssistantPanel" aria-labelledby="adminAssistantTitle" hidden>
+            <div class="admin-assistant-header">
+                <div class="admin-assistant-heading">
+                    <span class="admin-assistant-mark" aria-hidden="true"><i class="bi bi-stars"></i></span>
+                    <div>
+                        <h2 id="adminAssistantTitle">Admin Assistant</h2>
+                        <p>Private, built-in admin guide</p>
+                    </div>
+                </div>
+                <button class="admin-assistant-close" type="button" aria-label="Close Admin Assistant"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+            </div>
+            <div class="admin-assistant-messages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Assistant conversation">
+                <div class="admin-assistant-message is-assistant">
+                    <p>Hi! I can guide you around the admin portal and prepare form values for your approval. I never submit forms. What do you need?</p>
+                </div>
+            </div>
+            <div class="admin-assistant-suggestions" aria-label="Suggested questions">
+                <button type="button" data-assistant-question="Where can I review pending documents?">Pending documents</button>
+                <button type="button" data-assistant-question="How do I register a document?">Register a document</button>
+                <button type="button" data-assistant-question="Where are reports?">Find reports</button>
+                <button type="button" data-assistant-question="Help me fill this form">Help with this form</button>
+            </div>
+            <div class="admin-assistant-form">
+                <label class="visually-hidden" for="adminAssistantInput">Ask the Admin Assistant</label>
+                <input id="adminAssistantInput" name="question" type="text" maxlength="240" autocomplete="off" placeholder="Ask about a page or task">
+                <button type="button" aria-label="Send question" data-assistant-send><i class="bi bi-arrow-up" aria-hidden="true"></i></button>
+            </div>
+            <p class="admin-assistant-privacy">This guide runs in your browser. Don’t enter passwords or sensitive details.</p>
+        </div>
+    </section>
 <div class="admin-layout">
     <aside class="sidebar bg-white border-end shadow-sm">
         <div class="sidebar-brand border-bottom">
@@ -165,8 +200,8 @@ if ($adminName && isset($conn) && function_exists('safe_query')) {
                                     </div>
                                 </div>
                             </li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li>
+                            <li class="admin-cmd-log-menu-divider"><hr class="dropdown-divider"></li>
+                            <li class="admin-cmd-log-menu-item">
                                 <button class="dropdown-item" type="button" id="mobileSubmissionLogToggle" aria-pressed="false" data-csrf-token="<?php echo sanitize(csrf_token()); ?>">
                                     <i class="bi bi-terminal me-2" aria-hidden="true"></i><span>Start CMD log</span>
                                 </button>
