@@ -161,9 +161,10 @@ the same Wi-Fi. Replace the IP address if the computer's local IPv4 address
 changes, and reissue/reconfigure the development certificate for that new IP;
 the existing certificate is valid only for `192.168.18.162`.
 
-1. Download `ceit-logbook-local-ca.crt` on the phone from
-   [the local certificate download](http://192.168.18.162/DIT-LOGBOOK_RETRY/ceit-logbook-local-ca.crt).
-   The public CA certificate's SHA-256 fingerprint is
+1. From the computer, open **Admin Settings** and choose **Download
+   certificate** under **Mobile camera certificate**. Transfer the downloaded
+   `ceit-logbook-local-ca.crt` file to the phone. The public CA certificate's
+   SHA-256 fingerprint is
    `BE:2D:49:60:F7:19:03:10:34:80:AB:F4:63:F1:33:90:D2:0A:F2:2E:4D:CE:AC:96:88:D2:4A:20:BD:D5:53:A3`.
 2. Install that file on the phone as a **CA certificate**. On Android, use
    **Settings → Security → Encryption & credentials → Install a certificate
@@ -270,6 +271,7 @@ identifies the Git commit that contains the recorded changes.
 | **V1.10 — Compact Mode quick actions and QR scanner** | [`5c1a9bc`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/5c1a9bc) | Constrained Compact Mode quick actions to a balanced two-column grid and kept dashboard action dialogs within readable widths. Isolated embedded scanner and batch tools from Compact Mode's full-screen shell and bottom dock so QR scanning controls remain visible and usable. |
 | **V1.11 — Clear mobile camera security guidance** | [`a65ca54`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/a65ca54) | Detects insecure HTTP contexts before requesting camera access and explains that phone `localhost` points to the phone itself. Directs admins to use a trusted HTTPS address or the existing local QR-image upload fallback. |
 | **V1.12 — Local HTTPS for phone QR scanning** | [`5453bb9`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/5453bb9) | Configured this XAMPP computer with a private development CA and an IP-matched Apache certificate, and documented how to install the CA on a phone and open the app over trusted HTTPS. The server and CA private keys remain outside the repository. |
+| **V1.13 — Certificate download in Admin Settings** | Local XAMPP setup; certificate file is excluded from Git | Added a download button to Admin Settings for the public local development CA certificate, with a clear unavailable notice if the certificate is not installed on the server. Updated the phone QR-scanning setup instructions to use the button. |
 
 Earlier chat iterations included repeated README and footer refinements,
 pending-document bubble improvements and its hide/show setting, admin

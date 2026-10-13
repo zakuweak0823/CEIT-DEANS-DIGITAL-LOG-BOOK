@@ -2,6 +2,12 @@
 require_once 'auth.php';
 require_once 'db.php';
 ensure_admin();
+
+$localCaCertificateName = 'ceit-logbook-local-ca.crt';
+$localCaCertificatePath = __DIR__ . DIRECTORY_SEPARATOR . $localCaCertificateName;
+$settingsScriptDirectory = trim(str_replace('\\', '/', dirname((string)($_SERVER['SCRIPT_NAME'] ?? '/'))), '/.');
+$localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settingsScriptDirectory)
+    . '/' . rawurlencode($localCaCertificateName);
 ?>
 
 <?php include 'header.php'; ?>
@@ -99,6 +105,30 @@ ensure_admin();
                     <p class="small text-muted mb-0">Configure delivery providers, sender details, and mobile kiosk availability.</p>
                 </div>
                 <a class="btn btn-primary flex-shrink-0" href="notification_settings">Open notification settings <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i></a>
+            </div>
+        </section>
+    </div>
+
+    <div class="col-12">
+        <section class="card shadow-sm" aria-labelledby="mobile-camera-certificate-title">
+            <div class="card-header bg-white px-3 px-md-4 py-3">
+                <h5 class="mb-1 text-primary" id="mobile-camera-certificate-title">Mobile camera certificate</h5>
+                <p class="mb-0 small text-muted">Download the public certificate needed to trust this local development server on a phone.</p>
+            </div>
+            <div class="card-body p-3 p-md-4 d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3">
+                <div>
+                    <strong>Enable secure QR scanning on your phone</strong>
+                    <p class="small text-muted mb-0">Install this certificate on your phone as a trusted CA, then open the logbook using this computer's HTTPS address. The private key is not included.</p>
+                </div>
+                <?php if (is_file($localCaCertificatePath)): ?>
+                    <a class="btn btn-primary flex-shrink-0"
+                        href="<?php echo htmlspecialchars($localCaCertificateUrl, ENT_QUOTES, 'UTF-8'); ?>"
+                        download="<?php echo htmlspecialchars($localCaCertificateName, ENT_QUOTES, 'UTF-8'); ?>">
+                        <i class="bi bi-download me-1" aria-hidden="true"></i>Download certificate
+                    </a>
+                <?php else: ?>
+                    <p class="small text-warning mb-0" role="status">The local development certificate is not installed on this server.</p>
+                <?php endif; ?>
             </div>
         </section>
     </div>

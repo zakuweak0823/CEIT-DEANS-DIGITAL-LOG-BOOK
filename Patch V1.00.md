@@ -145,6 +145,17 @@ commit.
 - Kept the CA private key and Apache server private key outside the repository;
   the public CA download file is ignored by Git.
 
+## V1.13 — Certificate download in Admin Settings
+
+**Local XAMPP setup; certificate file is excluded from Git.**
+
+- Added a **Download certificate** button to Admin Settings for downloading
+  the public local development CA certificate.
+- Show a clear availability message if the development certificate file is
+  not present on the server.
+- Updated the README instructions to download the certificate from Settings
+  before transferring it to a phone.
+
 ## Earlier chat requests included in the project snapshot
 
 These requests were part of the same project conversation. They do not all
