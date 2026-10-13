@@ -48,13 +48,29 @@ PHP API and MySQL database.
 | **Borrowed items** | Manage item categories, borrowers, due dates, and return status. |
 | **Records and reports** | Search logbook records, inspect document activity, and generate date-filtered reports. |
 | **SMS and notifications** | Configure SMS and email, tune per-browser activity alerts, send client updates, and review SMS logs. |
-| **Admin Assistant** | Get privacy-friendly workflow guidance, direct links to admin tools, and approval-based help to fill visible form fields without submitting them. |
+| **Admin Assistant** | Get privacy-friendly workflow guidance from a clickable side-peeking launcher and links to admin tools. Optional form assistance previews changes and requires approval before filling fields; it never submits forms. Toggle it in Settings. |
 | **Mobile app** | Submit and manage documents, batches, and borrowed items; look up client status and view reports. |
 
-The admin interface also includes responsive navigation, a compact footer
-with live server/network status, and a recovery screen when the office server
-or database disconnects. Admins can personalize live activity polling, sound
-alerts, and optional privacy-conscious desktop notifications per browser.
+## Admin workspace options
+
+- **Compact Mode** turns the admin portal into a mobile-style workspace, even
+  on desktop. It hides the sidebar, adds a bottom navigation dock and More
+  sheet, and presents records in touch-friendly cards. Its mint-and-cream
+  palette uses CVSU green for active navigation and primary actions.
+- **Compact Mode controls** are available in both the administrator dropdown
+  and **Settings**. The larger switch shows a clear On/Off state and updates
+  immediately when changed.
+- **Admin Assistant** stays tucked at the screen edge as a clickable handle.
+  Hover or focus to reveal it, then click to open the guide. Disable or restore
+  it from **Settings**. Form assistance only fills values after an approval
+  preview; the assistant never submits a form.
+- **Browser preferences** include activity polling, sound and optional
+  privacy-conscious desktop alerts, the pending-documents bubble, the
+  assistant, and Compact Mode. These preferences are saved in the current
+  browser and synchronized between open admin tabs.
+- **Server recovery** provides a status screen and retry guidance when the
+  office server or database disconnects; the admin interface also shows live
+  server and network status.
 
 ## Technology
 
@@ -212,6 +228,8 @@ identifies the Git commit that contains the recorded changes.
 | **V1.05 — Patch history documentation** | [`cde0f54`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/cde0f54) | Added the versioned `Patch V1.00.md` history and linked it from the README. |
 | **V1.06 — Admin Assistant** | Included in V1.07 below | Added a built-in, browser-side admin guide with suggested questions and links to common workflows. It does not call an external AI service, access record contents, or save chat history. |
 | **V1.07 — Movable assistant and safe form help** | [`8fbda35`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/8fbda35) | Moved the assistant to a draggable side launcher with a smooth, on-demand panel and saved position. Added field-value previews that require approval before filling visible form fields; the assistant never submits forms. Compact Mode hides the CMD log control and stops an active log. |
+| **V1.08 — Side-peeking assistant visibility setting** | Included in V1.09 below | Changed the assistant launcher to peek from the screen edge while keeping a clickable handle visible, revealing the full launcher on hover, focus, or drag. Added a Settings switch to hide or restore the assistant; the preference is saved per browser and synchronized across admin tabs. |
+| **V1.09 — Compact Mode pastel palette and clearer switch** | Current patch | Replaced Compact Mode's gray-heavy surfaces with a soft mint-and-cream palette using CVSU green for emphasis. Improved the Compact Mode switch with a larger control and synchronized On/Off status badges in Settings and the admin dropdown. Also includes the V1.08 assistant visibility setting. |
 
 Earlier chat iterations included repeated README and footer refinements,
 pending-document bubble improvements and its hide/show setting, admin

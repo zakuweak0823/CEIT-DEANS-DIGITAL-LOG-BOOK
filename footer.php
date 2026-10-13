@@ -54,11 +54,16 @@ if (document.body.classList.contains('admin-body')) {
 
     const compactModeStorageKey = 'ceit-admin-preferences-v1';
     const compactModeToggle = document.getElementById('adminCompactModeToggle');
+    const compactModeStatus = document.getElementById('adminCompactModeStatus');
     const applyCompactMode = function (enabled) {
         document.body.classList.toggle('admin-compact', enabled);
         if (compactModeToggle) {
             compactModeToggle.checked = enabled;
             compactModeToggle.setAttribute('aria-checked', String(enabled));
+        }
+        if (compactModeStatus) {
+            compactModeStatus.textContent = enabled ? 'On' : 'Off';
+            compactModeStatus.classList.toggle('is-on', enabled);
         }
     };
     const readCompactMode = function () {
@@ -166,7 +171,7 @@ if (document.body.classList.contains('admin-body')) {
     let latestObservedDocumentId = Number.isSafeInteger(latestDocumentAttribute) ? latestDocumentAttribute : 0;
     let hasDocumentActivityBaseline = document.body.dataset.documentActivityReady === 'true';
     const adminPreferenceStorageKey = 'ceit-admin-preferences-v1';
-    const defaultAdminPreferences = { activityInterval: 15, soundAlerts: true, desktopAlerts: false, pendingBubble: true, compactMode: false };
+    const defaultAdminPreferences = { activityInterval: 15, soundAlerts: true, desktopAlerts: false, pendingBubble: true, assistantEnabled: true, compactMode: false };
     const readAdminPreferences = function () {
         try {
             const saved = JSON.parse(window.localStorage.getItem(adminPreferenceStorageKey) || '{}');
@@ -175,6 +180,7 @@ if (document.body.classList.contains('admin-body')) {
                 soundAlerts: typeof saved.soundAlerts === 'boolean' ? saved.soundAlerts : defaultAdminPreferences.soundAlerts,
                 desktopAlerts: saved.desktopAlerts === true,
                 pendingBubble: saved.pendingBubble !== false,
+                assistantEnabled: saved.assistantEnabled !== false,
                 compactMode: saved.compactMode === true
             };
         } catch (error) {
@@ -269,6 +275,7 @@ if (document.body.classList.contains('admin-body')) {
                 soundAlerts: typeof preferences.soundAlerts === 'boolean' ? preferences.soundAlerts : defaultAdminPreferences.soundAlerts,
                 desktopAlerts: preferences.desktopAlerts === true,
                 pendingBubble: preferences.pendingBubble !== false,
+                assistantEnabled: preferences.assistantEnabled !== false,
                 compactMode: preferences.compactMode === true
             };
         } else {
@@ -457,6 +464,11 @@ if (document.body.classList.contains('admin-body')) {
         const sendButton = assistant.querySelector('[data-assistant-send]');
 
         if (launcher && panel && closeButton && messages && form && input && sendButton) {
+            const applyAssistantPreference = function (enabled) {
+                if (!enabled) setOpen(false);
+                assistant.hidden = !enabled;
+                if (enabled) restoreLauncherPosition();
+            };
             const panelTransitionDuration = 190;
             const answers = [
                 {
@@ -551,8 +563,20 @@ if (document.body.classList.contains('admin-body')) {
                 launcher.setAttribute('aria-expanded', String(open));
                 launcher.setAttribute('aria-label', open ? 'Close Admin Assistant' : 'Open Admin Assistant');
                 if (open) input.focus();
-                else window.setTimeout(function () { launcher.focus(); }, panelTransitionDuration);
+                else window.setTimeout(function () {
+                    if (!assistant.hidden) launcher.focus();
+                }, panelTransitionDuration);
             };
+            window.addEventListener('adminpreferenceschange', function (event) {
+                if (event.detail && typeof event.detail.assistantEnabled === 'boolean') {
+                    applyAssistantPreference(event.detail.assistantEnabled);
+                }
+            });
+            window.addEventListener('storage', function (event) {
+                if (event.key === adminPreferenceStorageKey) {
+                    applyAssistantPreference(readAdminPreferences().assistantEnabled);
+                }
+            });
             const addMessage = function (text, isAssistant, links) {
                 const message = document.createElement('div');
                 message.className = 'admin-assistant-message' + (isAssistant ? ' is-assistant' : ' is-user');
@@ -850,6 +874,7 @@ if (document.body.classList.contains('admin-body')) {
             let suppressLauncherClick = false;
             launcher.addEventListener('pointerdown', function (event) {
                 if (event.button !== 0) return;
+                launcher.classList.add('is-dragging');
                 const bounds = getLauncherBounds();
                 dragState = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, left: bounds.left, top: bounds.top, moved: false };
                 launcher.setPointerCapture(event.pointerId);
@@ -914,9 +939,9 @@ if (document.body.classList.contains('admin-body')) {
                     answerQuestion(button.dataset.assistantQuestion || '');
                 });
             });
-            restoreLauncherPosition();
+            applyAssistantPreference(adminPreferences.assistantEnabled);
             window.addEventListener('resize', function () {
-                restoreLauncherPosition();
+                if (!assistant.hidden) restoreLauncherPosition();
                 if (!panel.hidden) positionPanel();
             });
             document.addEventListener('keydown', function (event) {

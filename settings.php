@@ -60,11 +60,19 @@ ensure_admin();
                             <label class="form-check-label" for="adminPendingBubble">Show the floating pending-documents bubble</label>
                         </div>
                         <div class="form-text">Turn it off to hide the draggable shortcut. Pending documents remain available from the navigation menu.</div>
+                        <div class="form-check form-switch mt-3">
+                            <input class="form-check-input" type="checkbox" role="switch" id="adminAssistantEnabled">
+                            <label class="form-check-label" for="adminAssistantEnabled">Show the side-peeking Admin Assistant</label>
+                        </div>
+                        <div class="form-text">When enabled, a small clickable tab stays at the screen edge. Turn it off to hide the assistant completely.</div>
                     </div>
                     <div class="col-12">
-                        <div class="form-check form-switch">
+                        <div class="d-flex align-items-center justify-content-between gap-3">
+                            <div class="form-check form-switch admin-compact-mode-switch">
                             <input class="form-check-input" type="checkbox" role="switch" id="adminCompactMode">
                             <label class="form-check-label" for="adminCompactMode">Compact Mode (mobile-style workspace)</label>
+                            </div>
+                            <span class="admin-compact-mode-state" id="settingsCompactModeStatus" role="status">Off</span>
                         </div>
                         <div class="form-text">Switches the entire admin portal to a mobile-style layout with bottom navigation, stacked content, and card-based records—even on a desktop.</div>
                     </div>
@@ -99,16 +107,18 @@ ensure_admin();
 <script>
 (function () {
     const storageKey = 'ceit-admin-preferences-v1';
-    const defaults = { activityInterval: 15, soundAlerts: true, desktopAlerts: false, pendingBubble: true, compactMode: false };
+    const defaults = { activityInterval: 15, soundAlerts: true, desktopAlerts: false, pendingBubble: true, assistantEnabled: true, compactMode: false };
     const intervalControl = document.getElementById('adminActivityInterval');
     const soundControl = document.getElementById('adminSoundAlerts');
     const desktopControl = document.getElementById('adminDesktopAlerts');
     const desktopHelp = document.getElementById('adminDesktopAlertHelp');
     const pendingBubbleControl = document.getElementById('adminPendingBubble');
+    const assistantEnabledControl = document.getElementById('adminAssistantEnabled');
     const compactModeControl = document.getElementById('adminCompactMode');
+    const compactModeStatus = document.getElementById('settingsCompactModeStatus');
     const status = document.getElementById('adminPreferencesStatus');
     const resetButton = document.getElementById('resetAdminPreferences');
-    if (!intervalControl || !soundControl || !desktopControl || !desktopHelp || !pendingBubbleControl || !compactModeControl || !status || !resetButton) return;
+    if (!intervalControl || !soundControl || !desktopControl || !desktopHelp || !pendingBubbleControl || !assistantEnabledControl || !compactModeControl || !status || !resetButton) return;
 
     let storageAvailable = true;
     const readPreferences = function () {
@@ -119,6 +129,7 @@ ensure_admin();
                 soundAlerts: typeof saved.soundAlerts === 'boolean' ? saved.soundAlerts : defaults.soundAlerts,
                 desktopAlerts: saved.desktopAlerts === true,
                 pendingBubble: saved.pendingBubble !== false,
+                assistantEnabled: saved.assistantEnabled !== false,
                 compactMode: saved.compactMode === true
             };
         } catch (error) {
@@ -135,7 +146,10 @@ ensure_admin();
         desktopControl.disabled = !notificationsSupported || Notification.permission === 'denied';
         desktopControl.checked = notificationsSupported && Notification.permission === 'granted' && preferences.desktopAlerts;
         pendingBubbleControl.checked = preferences.pendingBubble;
+        assistantEnabledControl.checked = preferences.assistantEnabled;
         compactModeControl.checked = preferences.compactMode;
+        compactModeStatus.textContent = preferences.compactMode ? 'On' : 'Off';
+        compactModeStatus.classList.toggle('is-on', preferences.compactMode);
         if (!notificationsSupported) {
             desktopHelp.textContent = 'This browser does not support desktop notifications.';
         } else if (Notification.permission === 'denied') {
@@ -193,6 +207,12 @@ ensure_admin();
     pendingBubbleControl.addEventListener('change', function () {
         preferences.pendingBubble = pendingBubbleControl.checked;
         savePreferences();
+    });
+    assistantEnabledControl.addEventListener('change', function () {
+        preferences.assistantEnabled = assistantEnabledControl.checked;
+        savePreferences(preferences.assistantEnabled
+            ? 'Admin Assistant enabled. Its side tab is ready to open.'
+            : 'Admin Assistant hidden.');
     });
     compactModeControl.addEventListener('change', function () {
         preferences.compactMode = compactModeControl.checked;

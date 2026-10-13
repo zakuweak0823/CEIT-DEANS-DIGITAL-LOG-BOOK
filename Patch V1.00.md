@@ -82,6 +82,30 @@ commit.
   stopped an active CMD log when switching into that mode.
 - Updated the README and this patch history.
 
+## V1.08 — Side-peeking assistant visibility setting
+
+- Changed the Admin Assistant launcher to tuck behind the screen edge, leaving
+  a clickable handle visible. Hovering, keyboard focus, or dragging reveals
+  the full launcher.
+- Added an Admin Assistant on/off switch to the admin Settings page.
+- Saved the visibility preference in the browser and synchronized changes
+  across open admin tabs. The assistant remains enabled by default.
+- Updated the README patch summary.
+
+## V1.09 — Compact Mode pastel palette and clearer switch
+
+**Includes V1.08 — Side-peeking assistant visibility setting.**
+
+- Replaced the gray-heavy Compact Mode surfaces with a softer mint and cream
+  palette, keeping school green as the accent for actions and active navigation.
+- Improved the Compact Mode switch with a larger, more distinct control and
+  clear On/Off status badges in both Settings and the admin dropdown.
+- Kept the switch state synchronized across the two controls and browser tabs.
+- Added a Settings control to enable or hide the assistant side launcher, with
+  browser-local storage and synchronization across open admin tabs.
+- Improved the README with details about the Compact Mode appearance, controls,
+  and browser-specific workspace options.
+
 ## Earlier chat requests included in the project snapshot
 
 These requests were part of the same project conversation. They do not all

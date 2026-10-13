@@ -62,7 +62,7 @@ if ($adminName && isset($conn) && function_exists('safe_query')) {
     <title>CEIT Deans Office Digital Logbook</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="style.css?v=admin-assistant-32">
+    <link rel="stylesheet" href="style.css?v=compact-pastel-35">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body<?php echo $adminName ? ' class="admin-body' . (($_GET['embed'] ?? '') === '1' ? ' admin-embedded-body' : '') . '" data-latest-document-id="' . (int)($latestDocumentId ?? 0) . '" data-document-activity-ready="' . ($latestDocumentId === null ? 'false' : 'true') . '"' : ''; ?>>
@@ -191,12 +191,14 @@ if ($adminName && isset($conn) && function_exists('safe_query')) {
                                 <div class="d-flex align-items-start gap-2">
                                     <i class="bi bi-lightning-charge-fill text-success mt-1" aria-hidden="true"></i>
                                     <div class="flex-grow-1">
-                                        <label class="small fw-semibold d-block mb-1" for="adminCompactModeToggle">Compact Mode</label>
-                                        <div class="form-check form-switch mb-1">
+                                        <div class="d-flex align-items-center justify-content-between gap-3 mb-1">
+                                            <label class="small fw-semibold mb-0" for="adminCompactModeToggle">Compact Mode</label>
+                                            <span class="admin-compact-mode-state" id="adminCompactModeStatus" role="status">Off</span>
+                                        </div>
+                                        <div class="form-check form-switch admin-compact-mode-switch mb-1">
                                             <input class="form-check-input" type="checkbox" role="switch" id="adminCompactModeToggle" aria-label="Compact Mode">
                                             <label class="form-check-label small" for="adminCompactModeToggle">Use the mobile-style workspace</label>
                                         </div>
-                                        <small class="text-muted d-block">Four shortcuts, a More menu, card lists, and full-width pages.</small>
                                     </div>
                                 </div>
                             </li>

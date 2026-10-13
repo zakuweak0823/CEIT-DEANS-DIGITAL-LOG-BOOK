@@ -1567,6 +1567,60 @@ footer {
     }
 }
 
+.admin-assistant-launcher[data-dock-side="right"] {
+    transform: translateX(calc(100% - 1.25rem + 8px));
+}
+
+.admin-assistant-launcher[data-dock-side="left"] {
+    transform: translateX(calc(-100% + 1.25rem - 8px));
+}
+
+.admin-assistant-launcher[data-dock-side="right"] > .bi {
+    position: absolute;
+    left: 0.35rem;
+}
+
+.admin-assistant-launcher[data-dock-side="left"] > .bi {
+    position: absolute;
+    right: 0.35rem;
+}
+
+.admin-assistant-launcher[data-dock-side="right"] > span,
+.admin-assistant-launcher[data-dock-side="left"] > span {
+    visibility: hidden;
+}
+
+.admin-assistant-launcher[data-dock-side="left"]:hover,
+.admin-assistant-launcher[data-dock-side="left"]:focus-visible {
+    transform: translateX(-8px);
+}
+
+.admin-assistant-launcher[data-dock-side="right"]:hover,
+.admin-assistant-launcher[data-dock-side="right"]:focus-visible {
+    transform: translateX(8px);
+}
+
+.admin-assistant-launcher[data-dock-side="right"]:hover > span,
+.admin-assistant-launcher[data-dock-side="right"]:focus-visible > span,
+.admin-assistant-launcher[data-dock-side="right"].is-dragging > span,
+.admin-assistant-launcher[data-dock-side="left"]:hover > span,
+.admin-assistant-launcher[data-dock-side="left"]:focus-visible > span,
+.admin-assistant-launcher[data-dock-side="left"].is-dragging > span {
+    visibility: visible;
+}
+
+.admin-assistant-launcher[data-dock-side="right"].is-dragging,
+.admin-assistant-launcher[data-dock-side="left"].is-dragging {
+    transform: translateX(0) scale(1.04);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .admin-assistant-launcher[data-dock-side="right"],
+    .admin-assistant-launcher[data-dock-side="left"] {
+        transition: none;
+    }
+}
+
 .admin-assistant-launcher {
     top: 46%;
     right: 0.65rem;
@@ -4127,6 +4181,212 @@ body.admin-body.admin-compact {
     border-color: #b8d8c2;
     background: #eef7f0;
     color: #145c3b;
+}
+
+.admin-compact-mode-switch .form-check-input {
+    width: 2.9rem;
+    height: 1.55rem;
+    margin-top: 0;
+    border: 1px solid #c7d7cb;
+    background-color: #e8eee9;
+    cursor: pointer;
+    transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.admin-compact-mode-switch .form-check-input:checked {
+    border-color: #277a51;
+    background-color: #277a51;
+}
+
+.admin-compact-mode-switch .form-check-input:focus {
+    border-color: #277a51;
+    box-shadow: 0 0 0 0.22rem rgba(39, 122, 81, 0.2);
+}
+
+.admin-compact-mode-switch .form-check-label {
+    margin-left: 0.35rem;
+    color: #345342;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.admin-compact-mode-state {
+    min-width: 2.55rem;
+    padding: 0.24rem 0.55rem;
+    border: 1px solid #d9e2db;
+    border-radius: 999px;
+    background: #f0f3f0;
+    color: #65736a;
+    font-size: 0.68rem;
+    font-weight: 750;
+    line-height: 1.2;
+    text-align: center;
+    text-transform: uppercase;
+    transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.admin-compact-mode-state.is-on {
+    border-color: #b7d8c1;
+    background: #e3f2e7;
+    color: #145c3b;
+}
+
+.admin-mode-menu-item .admin-compact-mode-switch {
+    margin-bottom: 0 !important;
+}
+
+.admin-mode-menu-item .admin-compact-mode-switch .form-check-input {
+    margin-left: -2.5rem;
+}
+
+.admin-mode-menu-item .admin-compact-mode-switch .form-check-label {
+    margin-left: 0.35rem;
+    font-size: 0.78rem;
+    font-weight: 550;
+}
+
+body.admin-body.admin-compact {
+    --brand-bg: #f3f8f4;
+    --brand-text: #30483a;
+    --brand-green: #277a51;
+    --brand-green-dark: #195d3b;
+    --brand-green-light: #e4f1e7;
+    --brand-border: #dce9de;
+    --brand-focus: rgba(39, 122, 81, 0.22);
+    background: #f3f8f4;
+    color: #30483a;
+}
+
+.admin-body.admin-compact .admin-layout,
+.admin-body.admin-compact .main-panel,
+.admin-body.admin-compact .admin-content {
+    background: #f3f8f4;
+}
+
+.admin-body.admin-compact .topbar,
+.admin-body.admin-compact .admin-footer,
+.admin-body.admin-compact .admin-quick-access {
+    border-color: #dce9de !important;
+    background: rgba(255, 255, 255, 0.97) !important;
+}
+
+.admin-body.admin-compact .topbar-title strong,
+.admin-body.admin-compact .admin-content :is(h1, h2, h3, h4, h5, h6) {
+    color: #294b37;
+}
+
+.admin-body.admin-compact .admin-content .text-primary,
+.admin-body.admin-compact .admin-content .text-success {
+    color: #277a51 !important;
+}
+
+.admin-body.admin-compact .admin-content .bg-primary,
+.admin-body.admin-compact .admin-content .bg-success,
+.admin-body.admin-compact .admin-content .bg-csu-blue {
+    background-color: #dcefe2 !important;
+    color: #195d3b !important;
+}
+
+.admin-body.admin-compact .admin-content .card,
+.admin-body.admin-compact .admin-content form.card,
+.admin-body.admin-compact .admin-content .rounded-4 {
+    border-color: #dce9de !important;
+    background: #fffefa;
+}
+
+.admin-body.admin-compact .admin-content .card-header,
+.admin-body.admin-compact .admin-content .card-footer {
+    border-color: #e7eee7 !important;
+    background: #fbfdf9 !important;
+}
+
+.admin-body.admin-compact .admin-content .table {
+    --bs-table-color: #30483a;
+    --bs-table-border-color: #e3ece4;
+    --bs-table-striped-bg: #f5faf5;
+    --bs-table-hover-bg: #edf6ee;
+}
+
+.admin-body.admin-compact .admin-content .table > thead > tr > th {
+    background: #eaf4eb;
+    color: #42634d;
+}
+
+.admin-body.admin-compact .admin-content .form-control,
+.admin-body.admin-compact .admin-content .form-select,
+.admin-body.admin-compact .admin-content .input-group-text {
+    border-color: #d4e2d6;
+    background-color: #fffefa;
+}
+
+.admin-body.admin-compact .admin-content .form-control:focus,
+.admin-body.admin-compact .admin-content .form-select:focus {
+    border-color: #8dbb98;
+    box-shadow: 0 0 0 0.18rem rgba(39, 122, 81, 0.14);
+}
+
+.admin-body.admin-compact .admin-content .btn-primary,
+.admin-body.admin-compact .admin-content .btn-success {
+    --bs-btn-bg: #277a51;
+    --bs-btn-border-color: #277a51;
+    --bs-btn-hover-bg: #195d3b;
+    --bs-btn-hover-border-color: #195d3b;
+    --bs-btn-active-bg: #144a30;
+    --bs-btn-active-border-color: #144a30;
+}
+
+.admin-body.admin-compact .admin-content .btn-outline-primary,
+.admin-body.admin-compact .admin-content .btn-outline-success {
+    --bs-btn-color: #216744;
+    --bs-btn-border-color: #a9cbb1;
+    --bs-btn-hover-bg: #277a51;
+    --bs-btn-hover-border-color: #277a51;
+}
+
+.admin-body.admin-compact .admin-quick-access-links a[aria-current="page"],
+.admin-body.admin-compact .admin-quick-access-more.is-current {
+    background: #e4f1e6;
+    color: #195d3b;
+}
+
+.admin-body.admin-compact .admin-quick-access-links a[aria-current="page"]::before,
+.admin-body.admin-compact .admin-quick-access-more.is-current::before {
+    background: #438b5d;
+}
+
+.admin-body.admin-compact .admin-quick-access-sheet,
+.admin-body.admin-compact .admin-quick-access-grid a {
+    border-color: #dce9de;
+    background: #fffefa;
+}
+
+.admin-body.admin-compact .admin-quick-access-sheet .offcanvas-title {
+    color: #294b37;
+}
+
+.admin-body.admin-compact .admin-quick-access-grid a > .bi {
+    color: #438b5d;
+}
+
+.admin-body.admin-compact .admin-mobile-card-table tbody tr,
+.admin-body.admin-compact .admin-mobile-card-table tbody tr > [data-label="Actions"] {
+    border-color: #dce9de;
+    background: #fbfdf9;
+}
+
+.admin-body.admin-compact .admin-mobile-card-table tbody tr > * {
+    border-bottom-color: #e8efe8;
+}
+
+.admin-body.admin-compact .admin-mobile-card-table tbody tr > *::before {
+    color: #63806b;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .admin-compact-mode-switch .form-check-input,
+    .admin-compact-mode-state {
+        transition: none;
+    }
 }
 
 @media (min-width: 768px) {
