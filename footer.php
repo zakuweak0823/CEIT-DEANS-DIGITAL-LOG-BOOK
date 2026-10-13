@@ -56,7 +56,7 @@ if (document.body.classList.contains('admin-body')) {
     const compactModeToggle = document.getElementById('adminCompactModeToggle');
     const compactModeStatus = document.getElementById('adminCompactModeStatus');
     const applyCompactMode = function (enabled) {
-        document.body.classList.toggle('admin-compact', enabled);
+        document.body.classList.toggle('admin-compact', enabled && !document.body.classList.contains('admin-embedded-body'));
         if (compactModeToggle) {
             compactModeToggle.checked = enabled;
             compactModeToggle.setAttribute('aria-checked', String(enabled));

@@ -4382,6 +4382,129 @@ body.admin-body.admin-compact {
     color: #63806b;
 }
 
+.admin-body.admin-compact .dashboard-quick-actions {
+    width: 100%;
+    max-width: 44rem;
+    margin-inline: auto;
+}
+
+.admin-body.admin-compact .dashboard-quick-actions-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+}
+
+.admin-body.admin-compact .dashboard-quick-action-link {
+    min-height: 3.9rem;
+    gap: 0.55rem;
+    padding: 0.55rem 0.65rem;
+    border-color: #dce9de;
+    border-radius: 0.8rem;
+    background: #fffefa;
+}
+
+.admin-body.admin-compact .dashboard-quick-action-icon {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.65rem;
+    background: #e8f3e9;
+    color: #277a51;
+}
+
+.admin-body.admin-compact .dashboard-quick-action-copy strong {
+    font-size: 0.76rem;
+}
+
+.admin-body.admin-compact .dashboard-quick-action-copy small {
+    font-size: 0.65rem;
+}
+
+.admin-body.admin-compact .modal.show#dashboardIncomingForm,
+.admin-body.admin-compact .modal.show#quickActionModal {
+    align-items: center;
+    overflow-y: auto;
+    padding: 0.6rem;
+}
+
+.admin-body.admin-compact #dashboardIncomingForm .modal-dialog {
+    width: min(100%, 34rem);
+    max-width: 34rem;
+    max-height: calc(100dvh - 1.2rem);
+    margin: auto;
+}
+
+.admin-body.admin-compact #dashboardIncomingForm .modal-content {
+    max-height: calc(100dvh - 1.2rem);
+    overflow: hidden;
+    border: 1px solid #dce9de;
+    border-radius: 1rem;
+    background: #fffefa;
+}
+
+.admin-body.admin-compact #dashboardIncomingForm .modal-header,
+.admin-body.admin-compact #dashboardIncomingForm .modal-footer {
+    flex: 0 0 auto;
+    padding: 0.75rem 0.9rem;
+    border-color: #e7eee7;
+}
+
+.admin-body.admin-compact #dashboardIncomingForm .modal-body {
+    overflow-y: auto;
+    padding: 0.85rem 0.9rem;
+}
+
+.admin-body.admin-compact #dashboardIncomingForm .form-control,
+.admin-body.admin-compact #dashboardIncomingForm .form-select {
+    width: 100%;
+    max-width: 100%;
+}
+
+.admin-body.admin-compact #quickActionModal .quick-action-modal-dialog {
+    width: min(100%, 54rem);
+    max-width: 54rem;
+    max-height: calc(100dvh - 1.2rem);
+    margin: auto;
+}
+
+.admin-body.admin-compact #quickActionModal .quick-action-modal-dialog.quick-action-modal-scanner {
+    width: min(100%, 42rem);
+    max-width: 42rem;
+}
+
+.admin-body.admin-compact #quickActionModal .modal-content {
+    max-height: calc(100dvh - 1.2rem);
+    border: 1px solid #dce9de;
+    border-radius: 1rem;
+    background: #fffefa;
+}
+
+.admin-body.admin-compact #quickActionModal .quick-action-frame {
+    height: min(72dvh, 46rem);
+}
+
+.admin-body.admin-compact.admin-embedded-body {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+}
+
+.admin-body.admin-compact.admin-embedded-body .admin-layout,
+.admin-body.admin-compact.admin-embedded-body .main-panel {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+}
+
+.admin-body.admin-compact.admin-embedded-body .admin-content {
+    padding: 1rem;
+    overflow: visible;
+}
+
+.admin-body.admin-compact.admin-embedded-body .admin-quick-access {
+    display: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .admin-compact-mode-switch .form-check-input,
     .admin-compact-mode-state {

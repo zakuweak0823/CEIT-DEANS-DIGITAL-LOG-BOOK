@@ -108,6 +108,16 @@ commit.
 - Improved the README with details about the Compact Mode appearance, controls,
   and browser-specific workspace options.
 
+## V1.10 — Compact Mode quick actions and QR scanner
+
+- Constrained Compact Mode quick actions to a balanced two-column grid with
+  less stretched action cards.
+- Kept the incoming-document form and dashboard quick-action dialogs within
+  readable widths and usable viewport heights.
+- Prevented embedded batch/scanner tools from inheriting Compact Mode's full
+  workspace shell and bottom navigation dock, keeping QR scan controls visible.
+- Updated the README with quick-action and scanner behavior.
+
 ## Earlier chat requests included in the project snapshot
 
 These requests were part of the same project conversation. They do not all
