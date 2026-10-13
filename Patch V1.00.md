@@ -132,6 +132,19 @@ commit.
   available.
 - Document the mobile camera HTTPS requirement in the README.
 
+## V1.12 — Local HTTPS for phone QR scanning
+
+**Local XAMPP setup; certificate files are excluded from Git.**
+
+- Configured this computer's Apache HTTPS virtual host with a private
+  development CA and a server certificate matching its current LAN IP.
+- Made the public CA certificate downloadable locally so it can be installed
+  as a trusted CA on a phone connected to the same Wi-Fi.
+- Documented Android and iPhone trust steps, the HTTPS app address, and the
+  CA fingerprint in the README.
+- Kept the CA private key and Apache server private key outside the repository;
+  the public CA download file is ignored by Git.
+
 ## Earlier chat requests included in the project snapshot
 
 These requests were part of the same project conversation. They do not all

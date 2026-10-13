@@ -5,6 +5,7 @@
 db2.sql
 *.sql.gz
 *.dump
+ceit-logbook-local-ca.crt
 
 # Nested local repositories and Expo-generated data
 **/.git/

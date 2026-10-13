@@ -152,6 +152,33 @@ preferences are saved in the current browser; desktop alerts are optional
 and require browser permission. Provider credentials belong in the application
 settings or server environment—not in Git-tracked files or database exports.
 
+### Scan QR codes from a phone on local XAMPP
+
+Phone browsers require a trusted HTTPS origin before they will allow camera
+access. This XAMPP computer is configured to serve the project over HTTPS at
+`https://192.168.18.162/DIT-LOGBOOK_RETRY/`. The phone and computer must be on
+the same Wi-Fi. Replace the IP address if the computer's local IPv4 address
+changes, and reissue/reconfigure the development certificate for that new IP;
+the existing certificate is valid only for `192.168.18.162`.
+
+1. Download `ceit-logbook-local-ca.crt` on the phone from
+   [the local certificate download](http://192.168.18.162/DIT-LOGBOOK_RETRY/ceit-logbook-local-ca.crt).
+   The public CA certificate's SHA-256 fingerprint is
+   `BE:2D:49:60:F7:19:03:10:34:80:AB:F4:63:F1:33:90:D2:0A:F2:2E:4D:CE:AC:96:88:D2:4A:20:BD:D5:53:A3`.
+2. Install that file on the phone as a **CA certificate**. On Android, use
+   **Settings → Security → Encryption & credentials → Install a certificate
+   → CA certificate** (menu names vary by device). On iPhone, install the
+   downloaded profile in **Settings**, then enable full trust for it under
+   **Settings → General → About → Certificate Trust Settings**.
+3. Open the HTTPS address above in the phone's browser, sign in, and use the
+   QR scanner. Allow camera access when prompted.
+
+If the browser still reports an untrusted connection, confirm the CA was
+installed and fully trusted, and that the URL uses the computer's current IP.
+The CA file is a public certificate for this local development setup; its
+private key is kept outside the project and must never be shared or committed.
+Do not use this locally trusted CA for a public or production server.
+
 ## Mobile app
 
 ### Run the web client locally
@@ -242,6 +269,7 @@ identifies the Git commit that contains the recorded changes.
 | **V1.09 — Compact Mode pastel palette and clearer switch** | [`f923104`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/f923104) | Replaced Compact Mode's gray-heavy surfaces with a soft mint-and-cream palette using CVSU green for emphasis. Improved the Compact Mode switch with a larger control and synchronized On/Off status badges in Settings and the admin dropdown. Also includes the V1.08 assistant visibility setting. |
 | **V1.10 — Compact Mode quick actions and QR scanner** | [`5c1a9bc`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/5c1a9bc) | Constrained Compact Mode quick actions to a balanced two-column grid and kept dashboard action dialogs within readable widths. Isolated embedded scanner and batch tools from Compact Mode's full-screen shell and bottom dock so QR scanning controls remain visible and usable. |
 | **V1.11 — Clear mobile camera security guidance** | [`a65ca54`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/a65ca54) | Detects insecure HTTP contexts before requesting camera access and explains that phone `localhost` points to the phone itself. Directs admins to use a trusted HTTPS address or the existing local QR-image upload fallback. |
+| **V1.12 — Local HTTPS for phone QR scanning** | Local XAMPP setup; certificate files are excluded from Git | Configured this XAMPP computer with a private development CA and an IP-matched Apache certificate, and documented how to install the CA on a phone and open the app over trusted HTTPS. The server and CA private keys remain outside the repository. |
 
 Earlier chat iterations included repeated README and footer refinements,
 pending-document bubble improvements and its hide/show setting, admin
@@ -256,6 +284,8 @@ expanded notes.
 - Use a dedicated MySQL account with a strong password; do not deploy with the
   default XAMPP `root` account.
 - Serve the application over HTTPS outside a local development environment.
+- The local XAMPP CA described above is development-only; do not deploy it or
+  copy its private key to another machine.
 - Keep SMS/email credentials and private configuration out of source control.
 - Do not commit database exports or production data. `db2.sql` and generated
   dependency/build folders are intentionally excluded from Git.
