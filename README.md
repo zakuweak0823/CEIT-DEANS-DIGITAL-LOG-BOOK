@@ -66,6 +66,10 @@ PHP API and MySQL database.
 - **QR scanning from the dashboard** opens the camera tool in a focused,
   responsive dialog. The embedded scanner no longer inherits the Compact
   Mode navigation dock, leaving the camera preview and scan controls usable.
+  Camera access on a phone requires opening the app through HTTPS with a
+  certificate trusted by that phone. A computer's `localhost` address does
+  not carry over to a phone; if HTTPS is unavailable, upload a QR image in the
+  scanner instead.
 - **Admin Assistant** stays tucked at the screen edge as a clickable handle.
   Hover or focus to reveal it, then click to open the guide. Disable or restore
   it from **Settings**. Form assistance only fills values after an approval
@@ -237,6 +241,7 @@ identifies the Git commit that contains the recorded changes.
 | **V1.08 — Side-peeking assistant visibility setting** | Included in V1.09 below | Changed the assistant launcher to peek from the screen edge while keeping a clickable handle visible, revealing the full launcher on hover, focus, or drag. Added a Settings switch to hide or restore the assistant; the preference is saved per browser and synchronized across admin tabs. |
 | **V1.09 — Compact Mode pastel palette and clearer switch** | [`f923104`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/f923104) | Replaced Compact Mode's gray-heavy surfaces with a soft mint-and-cream palette using CVSU green for emphasis. Improved the Compact Mode switch with a larger control and synchronized On/Off status badges in Settings and the admin dropdown. Also includes the V1.08 assistant visibility setting. |
 | **V1.10 — Compact Mode quick actions and QR scanner** | [`5c1a9bc`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/5c1a9bc) | Constrained Compact Mode quick actions to a balanced two-column grid and kept dashboard action dialogs within readable widths. Isolated embedded scanner and batch tools from Compact Mode's full-screen shell and bottom dock so QR scanning controls remain visible and usable. |
+| **V1.11 — Clear mobile camera security guidance** | Current patch | Detects insecure HTTP contexts before requesting camera access and explains that phone `localhost` points to the phone itself. Directs admins to use a trusted HTTPS address or the existing local QR-image upload fallback. |
 
 Earlier chat iterations included repeated README and footer refinements,
 pending-document bubble improvements and its hide/show setting, admin

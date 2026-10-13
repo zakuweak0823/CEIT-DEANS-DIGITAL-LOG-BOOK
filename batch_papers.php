@@ -1193,8 +1193,12 @@ document.addEventListener('DOMContentLoaded', function () {
         resultPanel.replaceChildren();
         lastRejectedValue = '';
         verifying = false;
+        if (!window.isSecureContext) {
+            showScannerError('Camera access is blocked because this page is not using a secure HTTPS connection. On a phone, “localhost” means the phone itself. Open this site using an HTTPS address with a trusted certificate, or upload a QR image below.');
+            return;
+        }
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            showScannerError('Camera scanning requires a supported browser and a secure HTTPS connection (localhost is supported).');
+            showScannerError('This browser does not support camera scanning. Try a current browser or upload a QR image below.');
             return;
         }
         if (typeof window.jsQR !== 'function') {

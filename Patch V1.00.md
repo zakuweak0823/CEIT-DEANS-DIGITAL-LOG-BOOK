@@ -120,6 +120,16 @@ commit.
   workspace shell and bottom navigation dock, keeping QR scan controls visible.
 - Updated the README with quick-action and scanner behavior.
 
+## V1.11 — Clear mobile camera security guidance
+
+- Check for an insecure context before attempting camera access and show
+  guidance tailored to phones using an HTTP LAN address.
+- Explain that `localhost` on a phone points to the phone itself, and that
+  camera use needs an HTTPS address trusted by the phone.
+- Point admins to the built-in QR-image upload fallback when HTTPS is not
+  available.
+- Document the mobile camera HTTPS requirement in the README.
+
 ## Earlier chat requests included in the project snapshot
 
 These requests were part of the same project conversation. They do not all
