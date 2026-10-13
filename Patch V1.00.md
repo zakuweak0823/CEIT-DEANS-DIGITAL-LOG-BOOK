@@ -134,7 +134,7 @@ commit.
 
 ## V1.12 — Local HTTPS for phone QR scanning
 
-**Local XAMPP setup; certificate files are excluded from Git.**
+**Git commit:** [`5453bb9`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/5453bb9). Certificate files are excluded from Git.
 
 - Configured this computer's Apache HTTPS virtual host with a private
   development CA and a server certificate matching its current LAN IP.
