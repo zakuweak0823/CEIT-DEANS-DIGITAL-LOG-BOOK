@@ -26,6 +26,7 @@
 - [Get started](#get-started)
 - [Mobile app](#mobile-app)
 - [Project layout](#project-layout)
+- [Patch history](#patch-history)
 - [Security before deployment](#security-before-deployment)
 - [Troubleshooting](#troubleshooting)
 
@@ -193,6 +194,11 @@ The bundled Android default is
 
 Other root-level PHP pages provide authentication, quick submission, item
 categories, notification settings, and document activity.
+
+## Patch history
+
+See [Patch V1.00.md](Patch%20V1.00.md) for the feature history discussed in the
+project chat and the Git commit references available for those changes.
 
 ## Security before deployment
 
