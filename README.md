@@ -197,8 +197,25 @@ categories, notification settings, and document activity.
 
 ## Patch history
 
-See [Patch V1.00.md](Patch%20V1.00.md) for the feature history discussed in the
-project chat and the Git commit references available for those changes.
+This log summarizes the project patches discussed and delivered in the
+repository. Related chat iterations are grouped together; the commit hash
+identifies the Git commit that contains the recorded changes.
+
+| Patch | Commit | Summary |
+| --- | --- | --- |
+| **V1.00 — Source publication** | [`b82df29`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/b82df29) | Published the cleaned PHP/MySQL and React mobile/Capacitor source to the private GitHub repository. Added ignore rules for dependencies, generated output, and local data; excluded the database dump from the published snapshot. |
+| **V1.01 — README and admin footer** | [`c8f3f47`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/c8f3f47) | Improved GitHub documentation with setup, features, mobile instructions, security guidance, badges, and troubleshooting. The admin footer was refined into a compact branded status bar showing network availability; footer work predating the clean repository snapshot is included in the published source. |
+| **V1.02 — Server recovery** | [`bcd85eb`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/bcd85eb) | Added a styled database-disconnection page, retry guidance, JSON 503 responses, a health-check endpoint, and an authenticated admin outage/recovery notice. Distinguished an unreachable server from a browser offline state. |
+| **V1.03 — Admin settings and mobile Compact Mode** | [`707b78e`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/707b78e) | Added a dedicated Settings page and route; browser preferences for activity polling, sound and desktop alerts, and the pending-documents bubble; and a persistent Compact Mode preference. Reworked Compact Mode as a phone-style workspace with card layouts, touch controls, and bottom-sheet dialogs. |
+| **V1.04 — Compact navigation refinement** | Included in [`707b78e`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/707b78e) | Hid the sidebar in Compact Mode, lightened its theme, reduced the bottom dock to Dashboard, Pending inbox, New record, Records, and More, and moved other destinations into the More sheet. |
+| **V1.05 — Patch history documentation** | [`cde0f54`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/cde0f54) | Added the versioned `Patch V1.00.md` history and linked it from the README. |
+
+Earlier chat iterations included repeated README and footer refinements,
+pending-document bubble improvements and its hide/show setting, admin
+notification/activity preferences, and several rounds of Compact Mode
+redesign. Some iterations were consolidated into later commits rather than
+saved as separate Git patches. See [Patch V1.00.md](Patch%20V1.00.md) for the
+expanded notes.
 
 ## Security before deployment
 
