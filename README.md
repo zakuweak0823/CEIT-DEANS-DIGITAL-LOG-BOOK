@@ -49,8 +49,9 @@ PHP API and MySQL database.
 | **SMS and notifications** | Configure notification settings, send client updates, and review SMS logs. |
 | **Mobile app** | Submit and manage documents, batches, and borrowed items; look up client status and view reports. |
 
-The admin interface also includes responsive navigation and a compact footer
-with a live browser network indicator.
+The admin interface also includes responsive navigation, a compact footer
+with live server/network status, and a recovery screen when the office server
+or database disconnects.
 
 ## Technology
 

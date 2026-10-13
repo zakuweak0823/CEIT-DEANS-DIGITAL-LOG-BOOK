@@ -23,23 +23,34 @@
 <?php endif; ?>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-if (document.body.classList.contains('admin-body')) {
+let adminServerUnavailable = false;
+let adminServerAvailabilityHandler = null;
+let adminDocumentActivityCheck = null;
+const updateAdminNetworkStatus = function () {
     const networkStatus = document.querySelector('[data-network-status]');
     const networkStatusLabel = networkStatus && networkStatus.querySelector('[data-network-status-label]');
-    if (networkStatus && networkStatusLabel) {
-        const updateNetworkStatus = function () {
-            const isOnline = navigator.onLine;
-            networkStatus.dataset.state = isOnline ? 'online' : 'offline';
-            networkStatusLabel.textContent = isOnline ? 'Online' : 'Offline';
-            networkStatus.title = isOnline
-                ? 'Your browser reports an active network connection.'
-                : 'Your browser reports that it is offline. Some actions may not work.';
-        };
+    if (!networkStatus || !networkStatusLabel) return;
 
-        updateNetworkStatus();
-        window.addEventListener('online', updateNetworkStatus);
-        window.addEventListener('offline', updateNetworkStatus);
-    }
+    const state = !navigator.onLine ? 'offline' : (adminServerUnavailable ? 'server-disconnected' : 'online');
+    const labels = {
+        online: 'Online',
+        offline: 'Offline',
+        'server-disconnected': 'Server unavailable'
+    };
+    const descriptions = {
+        online: 'Your browser and the office server are reachable.',
+        offline: 'Your browser reports that it is offline.',
+        'server-disconnected': 'Your browser is online, but the office server is not responding.'
+    };
+    networkStatus.dataset.state = state;
+    networkStatusLabel.textContent = labels[state];
+    networkStatus.title = descriptions[state];
+};
+
+if (document.body.classList.contains('admin-body')) {
+    updateAdminNetworkStatus();
+    window.addEventListener('online', updateAdminNetworkStatus);
+    window.addEventListener('offline', updateAdminNetworkStatus);
 
     const submissionLogToggle = document.getElementById('mobileSubmissionLogToggle');
     if (submissionLogToggle) {
@@ -119,11 +130,15 @@ if (document.body.classList.contains('admin-body')) {
                 cache: 'no-store',
                 headers: { 'Accept': 'application/json' }
             });
+            if (response.status === 401) {
+                throw new Error('Your admin session has expired. Sign in again to resume monitoring.');
+            }
             if (!response.ok) throw new Error('Document activity check returned HTTP ' + response.status);
             const activity = await response.json();
             if (!activity.success || !Number.isSafeInteger(Number(activity.latestDocumentId))) {
                 throw new Error(activity.message || 'Document activity response was invalid');
             }
+            if (adminServerAvailabilityHandler) adminServerAvailabilityHandler(true);
             const latestDocumentId = Number(activity.latestDocumentId);
             if (!hasDocumentActivityBaseline) {
                 latestObservedDocumentId = latestDocumentId;
@@ -136,12 +151,17 @@ if (document.body.classList.contains('admin-body')) {
             }
         } catch (error) {
             console.warn('New-document activity check failed; it will retry automatically.', error);
+            if (!String(error.message || '').includes('session has expired')) {
+                if (adminServerAvailabilityHandler) adminServerAvailabilityHandler(false);
+            }
         } finally {
             notificationCheckInProgress = false;
         }
     };
 
+    adminDocumentActivityCheck = checkForNewDocuments;
     window.setInterval(checkForNewDocuments, 15000);
+    window.setTimeout(checkForNewDocuments, 1000);
     document.addEventListener('visibilitychange', function () {
         if (!document.hidden) checkForNewDocuments();
     });
@@ -447,6 +467,50 @@ if (document.body.classList.contains('admin-body')) {
     document.body.appendChild(networkNotice);
     let networkNoticeTimer = 0;
     let slowRequestTimer = 0;
+    const serverOutage = document.createElement('div');
+    serverOutage.className = 'admin-server-outage';
+    serverOutage.hidden = true;
+    serverOutage.innerHTML = '<section class="admin-server-outage-card" role="alertdialog" aria-modal="true" aria-labelledby="adminServerOutageTitle" aria-describedby="adminServerOutageDescription" tabindex="-1"><span class="admin-server-outage-icon" aria-hidden="true"><i class="bi bi-cloud-slash"></i></span><p class="admin-server-outage-eyebrow">Connection interrupted</p><h1 id="adminServerOutageTitle">Office server unavailable</h1><p class="admin-server-outage-description" id="adminServerOutageDescription">We can’t reach the office logbook right now. Your current page is still open, but changes cannot be saved until the server connection returns.</p><p class="admin-server-outage-note">If you submitted a change just before the connection dropped, check the records before trying it again.</p><button type="button" class="btn btn-success admin-server-outage-retry"><i class="bi bi-arrow-clockwise me-2" aria-hidden="true"></i>Check connection</button><p class="admin-server-outage-retry-hint">We’ll keep checking automatically.</p></section>';
+    document.body.appendChild(serverOutage);
+    const serverOutageCard = serverOutage.querySelector('.admin-server-outage-card');
+    const serverOutageRetry = serverOutage.querySelector('.admin-server-outage-retry');
+    let outageReturnFocus = null;
+
+    serverOutage.addEventListener('keydown', function (event) {
+        if (event.key !== 'Tab') return;
+        event.preventDefault();
+        serverOutageRetry.focus();
+    });
+
+    adminServerAvailabilityHandler = function (isAvailable) {
+        const isUnavailable = !isAvailable;
+        if (adminServerUnavailable === isUnavailable) return;
+        adminServerUnavailable = isUnavailable;
+        updateAdminNetworkStatus();
+        document.body.classList.toggle('admin-server-disconnected', isUnavailable);
+        serverOutage.hidden = !isUnavailable;
+
+        if (isUnavailable) {
+            window.clearTimeout(networkNoticeTimer);
+            networkNotice.hidden = true;
+            outageReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            serverOutageCard.focus();
+            return;
+        }
+
+        if (outageReturnFocus && document.contains(outageReturnFocus)) outageReturnFocus.focus();
+        outageReturnFocus = null;
+        networkNotice.textContent = 'Office server connection restored. Check records before retrying a change.';
+        networkNotice.hidden = false;
+        window.clearTimeout(networkNoticeTimer);
+        networkNoticeTimer = window.setTimeout(function () {
+            networkNotice.hidden = true;
+        }, 8000);
+    };
+
+    serverOutageRetry.addEventListener('click', function () {
+        if (adminDocumentActivityCheck) adminDocumentActivityCheck();
+    });
 
     const setProgress = function (active, message) {
         window.clearTimeout(slowRequestTimer);
@@ -493,18 +557,11 @@ if (document.body.classList.contains('admin-body')) {
 
     window.addEventListener('offline', function () {
         window.clearTimeout(slowRequestTimer);
-        window.clearTimeout(networkNoticeTimer);
-        networkNotice.textContent = 'Connection lost. Wait for the connection to return before retrying a change.';
-        networkNotice.hidden = false;
+        adminServerAvailabilityHandler(false);
     });
     window.addEventListener('online', function () {
         window.clearTimeout(slowRequestTimer);
-        window.clearTimeout(networkNoticeTimer);
-        networkNotice.textContent = 'Connection restored. Check whether your last change was saved before submitting it again.';
-        networkNotice.hidden = false;
-        networkNoticeTimer = window.setTimeout(function () {
-            networkNotice.hidden = true;
-        }, 6000);
+        if (adminDocumentActivityCheck) adminDocumentActivityCheck();
     });
     window.addEventListener('pageshow', function () {
         setProgress(false, '');
@@ -517,8 +574,7 @@ if (document.body.classList.contains('admin-body')) {
         });
     });
     if (!navigator.onLine) {
-        networkNotice.textContent = 'Connection lost. Wait for the connection to return before retrying a change.';
-        networkNotice.hidden = false;
+        adminServerAvailabilityHandler(false);
     }
 }
 </script>
