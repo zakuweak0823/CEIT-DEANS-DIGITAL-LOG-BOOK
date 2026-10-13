@@ -94,6 +94,8 @@ commit.
 
 ## V1.09 — Compact Mode pastel palette and clearer switch
 
+**Git commit:** [`f923104`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/f923104)
+
 **Includes V1.08 — Side-peeking assistant visibility setting.**
 
 - Replaced the gray-heavy Compact Mode surfaces with a softer mint and cream
