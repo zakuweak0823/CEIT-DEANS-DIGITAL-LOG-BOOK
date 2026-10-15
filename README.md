@@ -24,6 +24,7 @@
 - [What you can do](#what-you-can-do)
 - [Technology](#technology)
 - [Get started](#get-started)
+- [Windows setup and computer-to-computer use](WINDOWS-SETUP.md)
 - [Mobile app](#mobile-app)
 - [Project layout](#project-layout)
 - [Patch history](#patch-history)
@@ -106,11 +107,12 @@ PHP API and MySQL database.
 ### 1. Set up the web app
 
 1. Put the project folder in the XAMPP web root:
-   `C:\xampp\htdocs\DIT-LOGBOOK_RETRY`.
-2. Start **Apache** and **MySQL** in the XAMPP Control Panel.
-3. In phpMyAdmin, import [`database.sql`](database.sql). It creates the
+   `C:\xampp\htdocs\<any-folder-name>`. The folder can be renamed or copied
+   without editing the app's routing configuration.
+2. On first setup, start **Apache** and **MySQL** in the XAMPP Control Panel,
+   open phpMyAdmin, and import [`database.sql`](database.sql). It creates the
    `dit_logbook` database and the tables used by the application.
-4. Review the connection values in [`db.php`](db.php). The local defaults are:
+3. Review the connection values in [`db.php`](db.php). The local defaults are:
 
    | Setting | Default |
    | --- | --- |
@@ -119,8 +121,38 @@ PHP API and MySQL database.
    | Username | `root` |
    | Password | *(empty)* |
 
-5. Open [http://localhost/DIT-LOGBOOK_RETRY/](http://localhost/DIT-LOGBOOK_RETRY/)
-   in your browser.
+4. Double-click [`start-office-server.bat`](start-office-server.bat). It starts
+   XAMPP Apache and MySQL if needed, finds the current project folder and
+   network address, and opens the admin portal. On first run, approve the
+   Windows prompt to add a firewall rule for Apache on port 80 **only on
+   Private networks**. This avoids manually creating the rule in Windows
+   Firewall.
+
+   The launcher displays both the local address and addresses for other
+   computers on the same trusted Wi-Fi/network. Keep the host computer and
+   XAMPP running while others use the site. If Windows classifies a trusted
+   office/home network as Public, change that network to Private in Windows
+   Settings; the launcher deliberately does not allow connections on Public
+   networks.
+
+For a standalone setup and transfer walkthrough, see
+[Windows Setup and Computer-to-Computer Use](WINDOWS-SETUP.md).
+
+#### Moving the app and its records to another computer
+
+Copy the whole project folder into that computer's XAMPP `htdocs` directory.
+To move existing records, export the `dit_logbook` database as an SQL file from
+phpMyAdmin on the old computer, then import that export on the new computer.
+[`database.sql`](database.sql) initializes the schema for a fresh install; it
+does not contain your live records. Check the new computer's database username
+and password in [`db.php`](db.php), then run `start-office-server.bat`.
+Do not copy a live MySQL data directory while its server is running.
+
+This launcher is for the host computer and other devices on the same trusted
+Private network; it does not make the site available over mobile data or the
+public internet. Phone camera scanning requires trusted HTTPS, which needs a
+certificate configured for the new host. Until HTTPS is set up, use the QR
+image-upload option on the scanner.
 
 The extension-free routes depend on Apache URL rewriting. If you see a 404
 when opening a page, confirm that `mod_rewrite` is enabled and that Apache
@@ -195,7 +227,7 @@ npm run dev
 Open the Vite URL shown in the terminal (usually
 [http://localhost:5173](http://localhost:5173)). Keep Apache and MySQL running:
 the Vite development server proxies `/api` requests to the PHP app under
-`/DIT-LOGBOOK_RETRY`.
+the project's actual `htdocs` folder name.
 
 ### Build the web client
 
@@ -219,9 +251,10 @@ This script builds the web client and runs the Android app through Capacitor.
 ### Mobile API endpoint
 
 The bundled Android default is
-`http://10.0.2.2/DIT-LOGBOOK_RETRY/mobile-api.php`. Android emulators use
-`10.0.2.2` to reach the development host machine. For another host, provide
-`VITE_API_ENDPOINT` at build time as the complete URL to `mobile-api.php`.
+`http://10.0.2.2/<project-folder>/mobile-api.php`. Android emulators use
+`10.0.2.2` to reach the development host machine, and the project folder name
+is detected at build time. For another host, provide `VITE_API_ENDPOINT` at
+build time as the complete URL to `mobile-api.php`.
 
 ## Project layout
 
@@ -300,6 +333,7 @@ expanded notes.
 | --- | --- |
 | Database connection error | Start MySQL and confirm the host, username, password, and database in `db.php`. |
 | Clean page routes return 404 | Enable Apache `mod_rewrite` and allow `.htaccess` overrides for the project directory. |
+| Another computer cannot open the site | Run `start-office-server.bat` on the host computer, approve its Private-network firewall prompt, and use the network URL it prints. Keep both computers on the same trusted network and leave Apache/MySQL running. |
 | Mobile app cannot reach the API | Keep Apache/MySQL running and verify the Vite proxy or `VITE_API_ENDPOINT`. On Android emulators, use `10.0.2.2` rather than `localhost`. |
 | SMS sending fails | Check cURL, notification settings, provider credentials, and provider account status. |
 | Android build cannot find a device | Open the Android project in Android Studio, install the required SDK components, and start an emulator or connect a device. |

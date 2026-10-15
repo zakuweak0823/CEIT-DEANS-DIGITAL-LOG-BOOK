@@ -22,7 +22,8 @@ const sections = [
 
 const API_ENDPOINT = import.meta.env.DEV
   ? '/api/mobile-api.php'
-  : import.meta.env.VITE_API_ENDPOINT || 'http://10.0.2.2/DIT-LOGBOOK_RETRY/mobile-api.php';
+  : import.meta.env.VITE_API_ENDPOINT
+    || `http://10.0.2.2${import.meta.env.VITE_PROJECT_PATH}/mobile-api.php`;
 
 const playConfirmTone = () => {
   const audio = new Audio(confirmToneUrl);

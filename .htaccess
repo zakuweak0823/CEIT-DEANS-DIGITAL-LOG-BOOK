@@ -1,6 +1,5 @@
 Options -MultiViews
 RewriteEngine On
-RewriteBase /DIT-LOGBOOK_RETRY/
 
 # Redirect browser page requests to extension-free URLs; leave POST submissions unchanged.
 RewriteCond %{THE_REQUEST} \s/+[^\s?]*/?(dashboard|quick_document|incoming|outgoing|batch_papers|batch_tracker|borrowed|item_categories|sms|notification_settings|settings|reports|records|login|logout)\.php(?:[?\s]) [NC]
