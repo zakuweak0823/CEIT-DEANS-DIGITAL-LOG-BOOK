@@ -1,5 +1,5 @@
 <div align="center">
-<img src="CVSU.jpeg" alt="Cavite State University seal" width="112">
+<img src="assets/images/CVSU.jpeg" alt="Cavite State University seal" width="112">
 
 <h1>CEIT Dean's Office Digital Logbook</h1>
 
@@ -24,7 +24,7 @@
 - [What you can do](#what-you-can-do)
 - [Technology](#technology)
 - [Get started](#get-started)
-- [Windows setup and computer-to-computer use](WINDOWS-SETUP.md)
+- [Windows setup and computer-to-computer use](docs/WINDOWS-SETUP.md)
 - [Mobile app](#mobile-app)
 - [Project layout](#project-layout)
 - [Patch history](#patch-history)
@@ -110,7 +110,7 @@ PHP API and MySQL database.
    `C:\xampp\htdocs\<any-folder-name>`. The folder can be renamed or copied
    without editing the app's routing configuration.
 2. On first setup, start **Apache** and **MySQL** in the XAMPP Control Panel,
-   open phpMyAdmin, and import [`database.sql`](database.sql). It creates the
+   open phpMyAdmin, and import [`database/schema.sql`](database/schema.sql). It creates the
    `dit_logbook` database and the tables used by the application.
 3. Review the connection values in [`db.php`](db.php). The local defaults are:
 
@@ -136,14 +136,14 @@ PHP API and MySQL database.
    networks.
 
 For a standalone setup and transfer walkthrough, see
-[Windows Setup and Computer-to-Computer Use](WINDOWS-SETUP.md).
+[Windows Setup and Computer-to-Computer Use](docs/WINDOWS-SETUP.md).
 
 #### Moving the app and its records to another computer
 
 Copy the whole project folder into that computer's XAMPP `htdocs` directory.
 To move existing records, export the `dit_logbook` database as an SQL file from
 phpMyAdmin on the old computer, then import that export on the new computer.
-[`database.sql`](database.sql) initializes the schema for a fresh install; it
+[`database/schema.sql`](database/schema.sql) initializes the schema for a fresh install; it
 does not contain your live records. Check the new computer's database username
 and password in [`db.php`](db.php), then run `start-office-server.bat`.
 Do not copy a live MySQL data directory while its server is running.
@@ -260,28 +260,42 @@ build time as the complete URL to `mobile-api.php`.
 
 ```text
 .
-├── database.sql                     # Application schema and initial admin seed
-├── db.php                           # Database connection and query helpers
-├── header.php / footer.php          # Shared admin layout
-├── dashboard.php                    # Admin dashboard
-├── incoming.php / outgoing.php      # Document workflows
-├── batch_papers.php                 # Bulk paper registration
-├── batch_tracker.php                # Batch tracking
-├── borrowed.php                     # Borrowed item management
-├── records.php                      # Document search
-├── reports.php                      # Reports
-├── sms.php                          # SMS logs and operations
-├── mobile-api.php                   # API for the mobile client
-├── tools/                           # Mobile submission console utilities
-├── tone/                            # Admin notification audio
+├── assets/
+│   ├── audio/                        # Admin notification sounds
+│   ├── css/                          # Admin stylesheets
+│   ├── images/                       # Logos and other web images
+│   └── js/                           # Browser-ready JavaScript bundles
+├── database/
+│   └── schema.sql                    # Fresh-install schema and initial admin seed
+├── docs/
+│   ├── WINDOWS-SETUP.md              # Windows setup and computer transfer
+│   └── Patch V1.00.md                # Project patch history
+├── tools/
+│   ├── start-office-server.ps1       # XAMPP startup and network helper
+│   └── mobile submission utilities
+├── start-office-server.bat           # Double-click Windows launcher
+├── db.php                            # Database connection and query helpers
+├── header.php / footer.php           # Shared admin layout
+├── dashboard.php                     # Admin dashboard
+├── incoming.php / outgoing.php       # Document workflows
+├── batch_papers.php                  # Bulk paper registration
+├── batch_tracker.php                 # Batch tracking
+├── borrowed.php                      # Borrowed item management
+├── records.php                       # Document search
+├── reports.php                       # Reports
+├── sms.php                           # SMS logs and operations
+├── mobile-api.php                    # API for the mobile client
 └── mobile-ui/
     ├── src/                         # React/Vite mobile client
     ├── android/                     # Capacitor Android project
     └── expo-wrapper/                # Expo wrapper project
 ```
 
-Other root-level PHP pages provide authentication, quick submission, item
-categories, notification settings, and document activity.
+The root PHP files intentionally stay together because XAMPP serves this
+directory as the application root and the clean routes, shared includes, and
+form endpoints rely on those paths. Keep the whole project folder intact when
+copying it to another XAMPP `htdocs` directory; the launcher detects its new
+folder name.
 
 ## Patch history
 
@@ -296,7 +310,7 @@ identifies the Git commit that contains the recorded changes.
 | **V1.02 — Server recovery** | [`bcd85eb`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/bcd85eb) | Added a styled database-disconnection page, retry guidance, JSON 503 responses, a health-check endpoint, and an authenticated admin outage/recovery notice. Distinguished an unreachable server from a browser offline state. |
 | **V1.03 — Admin settings and mobile Compact Mode** | [`707b78e`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/707b78e) | Added a dedicated Settings page and route; browser preferences for activity polling, sound and desktop alerts, and the pending-documents bubble; and a persistent Compact Mode preference. Reworked Compact Mode as a phone-style workspace with card layouts, touch controls, and bottom-sheet dialogs. |
 | **V1.04 — Compact navigation refinement** | Included in [`707b78e`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/707b78e) | Hid the sidebar in Compact Mode, lightened its theme, reduced the bottom dock to Dashboard, Pending inbox, New record, Records, and More, and moved other destinations into the More sheet. |
-| **V1.05 — Patch history documentation** | [`cde0f54`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/cde0f54) | Added the versioned `Patch V1.00.md` history and linked it from the README. |
+| **V1.05 — Patch history documentation** | [`cde0f54`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/cde0f54) | Added the versioned [`docs/Patch V1.00.md`](docs/Patch%20V1.00.md) history and linked it from the README. |
 | **V1.06 — Admin Assistant** | Included in V1.07 below | Added a built-in, browser-side admin guide with suggested questions and links to common workflows. It does not call an external AI service, access record contents, or save chat history. |
 | **V1.07 — Movable assistant and safe form help** | [`8fbda35`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/8fbda35) | Moved the assistant to a draggable side launcher with a smooth, on-demand panel and saved position. Added field-value previews that require approval before filling visible form fields; the assistant never submits forms. Compact Mode hides the CMD log control and stops an active log. |
 | **V1.08 — Side-peeking assistant visibility setting** | Included in V1.09 below | Changed the assistant launcher to peek from the screen edge while keeping a clickable handle visible, revealing the full launcher on hover, focus, or drag. Added a Settings switch to hide or restore the assistant; the preference is saved per browser and synchronized across admin tabs. |
@@ -310,7 +324,7 @@ Earlier chat iterations included repeated README and footer refinements,
 pending-document bubble improvements and its hide/show setting, admin
 notification/activity preferences, and several rounds of Compact Mode
 redesign. Some iterations were consolidated into later commits rather than
-saved as separate Git patches. See [Patch V1.00.md](Patch%20V1.00.md) for the
+saved as separate Git patches. See [Patch V1.00.md](docs/Patch%20V1.00.md) for the
 expanded notes.
 
 ## Security before deployment

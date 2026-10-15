@@ -192,7 +192,7 @@ if (document.body.classList.contains('admin-body')) {
     let pendingNotificationTone = false;
     let notificationCheckInProgress = false;
     let documentActivityIntervalId = 0;
-    const notificationTone = new Audio(new URL('tone/notif_tone.mp3', window.location.href).href);
+    const notificationTone = new Audio(new URL('assets/audio/notif_tone.mp3', window.location.href).href);
     notificationTone.preload = 'auto';
 
     const playAdminNotificationTone = function () {
@@ -212,7 +212,7 @@ if (document.body.classList.contains('admin-body')) {
         try {
             const notification = new Notification('New logbook activity', {
                 body: 'A new record was added. Open the admin portal to review it.',
-                icon: new URL('CVSU.jpeg', window.location.href).href,
+                icon: new URL('assets/images/CVSU.jpeg', window.location.href).href,
                 tag: 'ceit-new-logbook-record'
             });
             notification.addEventListener('click', function () {

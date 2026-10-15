@@ -884,7 +884,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
         </div>
     </div>
 </div>
-<script src="qr-tools.bundle.js"></script>
+<script src="assets/js/qr-tools.bundle.js"></script>
 <script>
 
 function showBatchQr(token, batchCode) {

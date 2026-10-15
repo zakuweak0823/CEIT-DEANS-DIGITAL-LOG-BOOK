@@ -4,9 +4,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $firewallRuleName = 'CEIT Digital Logbook - Apache HTTP (Private)'
+$projectRoot = Split-Path -Parent $PSScriptRoot
 
 function Find-XamppRoot {
-    $directory = Get-Item -LiteralPath $PSScriptRoot
+    $directory = Get-Item -LiteralPath $projectRoot
     while ($null -ne $directory) {
         $apachePath = Join-Path $directory.FullName 'apache\bin\httpd.exe'
         $mysqlStartPath = Join-Path $directory.FullName 'mysql_start.bat'
@@ -141,7 +142,7 @@ if (-not (Test-TcpPort -ComputerName '127.0.0.1' -Port 80)) {
     }
 }
 
-$folderName = Split-Path -Leaf $PSScriptRoot
+$folderName = Split-Path -Leaf $projectRoot
 $urlPath = [Uri]::EscapeDataString($folderName)
 $localUrl = "http://localhost/$urlPath/"
 $lanAddresses = @(

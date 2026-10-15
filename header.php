@@ -62,7 +62,7 @@ if ($adminName && isset($conn) && function_exists('safe_query')) {
     <title>CEIT Deans Office Digital Logbook</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="style.css?v=compact-quick-actions-36">
+    <link rel="stylesheet" href="assets/css/style.css?v=compact-quick-actions-36">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body<?php echo $adminName ? ' class="admin-body' . (($_GET['embed'] ?? '') === '1' ? ' admin-embedded-body' : '') . '" data-latest-document-id="' . (int)($latestDocumentId ?? 0) . '" data-document-activity-ready="' . ($latestDocumentId === null ? 'false' : 'true') . '"' : ''; ?>>
@@ -130,7 +130,7 @@ if ($adminName && isset($conn) && function_exists('safe_query')) {
         <div class="sidebar-brand border-bottom">
             <a class="sidebar-brand-link" href="dashboard" aria-label="CEIT Deans Office Digital Logbook dashboard">
                 <span class="sidebar-brand-mark" aria-hidden="true">
-                    <img class="brand-logo" src="CVSU.jpeg" alt="">
+                    <img class="brand-logo" src="assets/images/CVSU.jpeg" alt="">
                 </span>
                 <span class="sidebar-brand-copy">
                     <strong>CEIT Deans Office</strong>

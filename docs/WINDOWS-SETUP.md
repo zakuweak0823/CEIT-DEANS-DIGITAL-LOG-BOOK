@@ -20,18 +20,20 @@ automatically.
 
 1. Copy the complete project folder into XAMPP's `htdocs` directory.
 2. Start MySQL in the XAMPP Control Panel. Open phpMyAdmin and import
-   [`database.sql`](database.sql) to initialize a new, empty database.
-3. Check the connection settings in [`db.php`](db.php). The defaults are
+   [`database/schema.sql`](../database/schema.sql) to initialize a new, empty
+   database.
+3. Check the connection settings in [`db.php`](../db.php). The defaults are
    database `dit_logbook`, user `root`, and an empty password. Adjust them if
    the local MySQL account is configured differently.
-4. Double-click [`start-office-server.bat`](start-office-server.bat).
+4. Double-click [`start-office-server.bat`](../start-office-server.bat).
    The launcher starts MySQL and Apache if needed, detects the project
    directory, and opens the admin portal.
 5. On first launch, approve the Windows administrator prompt. It creates a
    firewall rule allowing the detected XAMPP Apache executable on TCP port 80
    **only on Private networks**. MySQL is not opened to the network.
 6. Sign in with the initial credentials shown in the main
-   [README](README.md#2-sign-in-for-the-first-time), then change the password.
+   [README](../README.md#2-sign-in-for-the-first-time), then change the
+   password.
 
 The launcher prints a local URL and any detected Private-network addresses.
 To open the admin portal from another computer, use one of those network
@@ -46,8 +48,8 @@ enable inbound access on Public networks.
 ## Move the application and database
 
 1. On the old computer, use phpMyAdmin to export the `dit_logbook` database as
-   an SQL file. `database.sql` is only the schema initializer; it does not
-   contain your live records.
+   an SQL file. `database/schema.sql` is only the schema initializer; it does
+   not contain your live records.
 2. Copy the project folder to a location inside the new computer's XAMPP
    `htdocs` directory. You may use a different folder name.
 3. On the new computer, start MySQL and import the SQL export in phpMyAdmin.
