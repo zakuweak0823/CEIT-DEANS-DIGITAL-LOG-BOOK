@@ -21,6 +21,7 @@
 ## Contents
 
 - [Overview](#overview)
+- [Start here](#start-here)
 - [What you can do](#what-you-can-do)
 - [Technology](#technology)
 - [Get started](#get-started)
@@ -37,6 +38,16 @@ DIT Logbook provides one place to record office document activity, follow
 incoming and outgoing submissions, organize bulk papers, and keep track of
 borrowed items. The browser-based admin portal and mobile client use the same
 PHP API and MySQL database.
+
+### Start here
+
+| Goal | Start with |
+| --- | --- |
+| Set up the admin portal on Windows | [Windows setup guide](docs/WINDOWS-SETUP.md) |
+| Start the local/LAN server | Double-click [`start-office-server.bat`](start-office-server.bat) from the project folder inside XAMPP's `htdocs`. |
+| Move the app and records to another computer | [Transfer instructions](docs/WINDOWS-SETUP.md#move-the-application-and-database) |
+| Run or build the mobile client | [Mobile app instructions](#mobile-app) |
+| Deploy outside a trusted local network | Read [Security before deployment](#security-before-deployment) first. |
 
 ## What you can do
 
@@ -104,14 +115,18 @@ PHP API and MySQL database.
 - Android Studio, Android SDK, and a configured device/emulator to run the
   Android app
 
+For the administrator portal, XAMPP and a database are required. Node.js is
+only needed for mobile development/builds; Android Studio and the Android SDK
+are only needed to build or run the native Android project.
+
 ### 1. Set up the web app
 
 1. Put the project folder in the XAMPP web root:
    `C:\xampp\htdocs\<any-folder-name>`. The folder can be renamed or copied
    without editing the app's routing configuration.
 2. On first setup, start **Apache** and **MySQL** in the XAMPP Control Panel,
-   open phpMyAdmin, and import [`database/schema.sql`](database/schema.sql). It creates the
-   `dit_logbook` database and the tables used by the application.
+   open phpMyAdmin, and import [`database/schema.sql`](database/schema.sql).
+   It creates the `dit_logbook` database and the tables used by the application.
 3. Review the connection values in [`db.php`](db.php). The local defaults are:
 
    | Setting | Default |
@@ -135,18 +150,19 @@ PHP API and MySQL database.
    Settings; the launcher deliberately does not allow connections on Public
    networks.
 
-For a standalone setup and transfer walkthrough, see
-[Windows Setup and Computer-to-Computer Use](docs/WINDOWS-SETUP.md).
+For step-by-step first-time setup, firewall behavior, and transfer details,
+see [Windows Setup and Computer-to-Computer Use](docs/WINDOWS-SETUP.md).
 
 #### Moving the app and its records to another computer
 
 Copy the whole project folder into that computer's XAMPP `htdocs` directory.
 To move existing records, export the `dit_logbook` database as an SQL file from
 phpMyAdmin on the old computer, then import that export on the new computer.
-[`database/schema.sql`](database/schema.sql) initializes the schema for a fresh install; it
-does not contain your live records. Check the new computer's database username
-and password in [`db.php`](db.php), then run `start-office-server.bat`.
-Do not copy a live MySQL data directory while its server is running.
+[`database/schema.sql`](database/schema.sql) initializes the schema for a
+fresh install; it does not contain your live records. Check the new computer's
+database username and password in [`db.php`](db.php), then run
+[`start-office-server.bat`](start-office-server.bat). Do not copy a live MySQL
+data directory while its server is running.
 
 This launcher is for the host computer and other devices on the same trusted
 Private network; it does not make the site available over mobile data or the
@@ -187,36 +203,43 @@ settings or server environment—not in Git-tracked files or database exports.
 ### Scan QR codes from a phone on local XAMPP
 
 Phone browsers require a trusted HTTPS origin before they will allow camera
-access. This XAMPP computer is configured to serve the project over HTTPS at
-`https://192.168.18.162/DIT-LOGBOOK_RETRY/`. The phone and computer must be on
-the same Wi-Fi. Replace the IP address if the computer's local IPv4 address
-changes, and reissue/reconfigure the development certificate for that new IP;
-the existing certificate is valid only for `192.168.18.162`.
+access. The phone and host computer must be on the same trusted Wi-Fi/network,
+and the HTTPS certificate must be trusted by the phone and valid for the
+address used to open the app. Local IP addresses and certificates are specific
+to a host computer; do not assume the address or development certificate from
+another computer will work.
 
 1. From the computer, open **Admin Settings** and choose **Download
-   certificate** under **Mobile camera certificate**. Transfer the downloaded
-   `ceit-logbook-local-ca.crt` file to the phone. The public CA certificate's
-   SHA-256 fingerprint is
-   `BE:2D:49:60:F7:19:03:10:34:80:AB:F4:63:F1:33:90:D2:0A:F2:2E:4D:CE:AC:96:88:D2:4A:20:BD:D5:53:A3`.
+   certificate** under **Mobile camera certificate**, if a certificate has
+   been configured for this host. Transfer the downloaded public certificate
+   to the phone using a trusted method.
 2. Install that file on the phone as a **CA certificate**. On Android, use
    **Settings → Security → Encryption & credentials → Install a certificate
    → CA certificate** (menu names vary by device). On iPhone, install the
    downloaded profile in **Settings**, then enable full trust for it under
    **Settings → General → About → Certificate Trust Settings**.
-3. Open the HTTPS address above in the phone's browser, sign in, and use the
-   QR scanner. Allow camera access when prompted.
+3. Open the host's configured HTTPS address in the phone's browser, sign in,
+   and use the QR scanner. Allow camera access when prompted.
 
-If the browser still reports an untrusted connection, confirm the CA was
-installed and fully trusted, and that the URL uses the computer's current IP.
-The CA file is a public certificate for this local development setup; its
-private key is kept outside the project and must never be shared or committed.
-Do not use this locally trusted CA for a public or production server.
+If the browser still reports an untrusted connection, confirm the CA is
+installed and fully trusted, and that the certificate matches the address
+being used. A public CA certificate is not a private key, but the matching
+private key must never be shared or committed. This local development
+certificate is not for a public or production server. See the
+[Windows setup guide](docs/WINDOWS-SETUP.md#access-outside-the-local-network)
+for the limits of the local setup.
 
 ## Mobile app
 
+The main mobile client is the React/Vite app in `mobile-ui/`, with Capacitor
+providing its Android project. The separate `mobile-ui/expo-wrapper/` is an
+optional Expo wrapper with its own dependencies; the steps below use the
+primary Vite/Capacitor app.
+
 ### Run the web client locally
 
-From the repository root:
+From the repository root, install dependencies and start the development
+server:
 
 ```powershell
 cd mobile-ui
@@ -236,7 +259,9 @@ npm run build
 ```
 
 The generated web app is written to `mobile-ui/dist`. This output is ignored by
-Git and is used as the Capacitor web asset directory.
+Git and copied into the Android project by Capacitor when syncing/building.
+You can recreate generated output with the build command; do not use generated
+folders as the source when transferring the project.
 
 ### Run on Android
 
@@ -250,11 +275,11 @@ This script builds the web client and runs the Android app through Capacitor.
 
 ### Mobile API endpoint
 
-The bundled Android default is
-`http://10.0.2.2/<project-folder>/mobile-api.php`. Android emulators use
-`10.0.2.2` to reach the development host machine, and the project folder name
-is detected at build time. For another host, provide `VITE_API_ENDPOINT` at
-build time as the complete URL to `mobile-api.php`.
+The Android emulator's default API address uses `10.0.2.2` to reach the host
+computer. The project folder is detected at build time. For a deployed API or
+another server, set `VITE_API_ENDPOINT` at build time to the complete
+`mobile-api.php` URL for that server. A built app cannot use the emulator's
+`10.0.2.2` address to reach a production server.
 
 ## Project layout
 
@@ -272,7 +297,8 @@ build time as the complete URL to `mobile-api.php`.
 │   └── Patch V1.00.md                # Project patch history
 ├── tools/
 │   ├── start-office-server.ps1       # XAMPP startup and network helper
-│   └── mobile submission utilities
+│   ├── mobile_submission_console.php
+│   └── start_mobile_submission_log.bat
 ├── start-office-server.bat           # Double-click Windows launcher
 ├── db.php                            # Database connection and query helpers
 ├── header.php / footer.php           # Shared admin layout
@@ -288,14 +314,16 @@ build time as the complete URL to `mobile-api.php`.
 └── mobile-ui/
     ├── src/                         # React/Vite mobile client
     ├── android/                     # Capacitor Android project
-    └── expo-wrapper/                # Expo wrapper project
+    └── expo-wrapper/                # Optional Expo wrapper with separate dependencies
 ```
 
 The root PHP files intentionally stay together because XAMPP serves this
 directory as the application root and the clean routes, shared includes, and
 form endpoints rely on those paths. Keep the whole project folder intact when
 copying it to another XAMPP `htdocs` directory; the launcher detects its new
-folder name.
+folder name. Do not copy `node_modules`, `dist`, or Android build/Gradle output
+to move the project; those are generated or machine-specific and can be
+recreated from the package manifests and source.
 
 ## Patch history
 
