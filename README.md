@@ -220,7 +220,10 @@ The **Mobile app appearance and experience** section lets administrators keep
 the existing Classic kiosk UI as the default or switch to a translucent green
 Glass theme, customize the kiosk header and welcome text, and enable or disable
 successful-action and pull-to-refresh sounds. These settings are stored
-server-side and apply to connected mobile clients.
+server-side and apply to connected mobile clients. Glass adds frosted surfaces,
+ambient highlights, staggered status and action-card entrances, responsive
+button and form feedback, and animated dialogs. It honors the device's reduced-
+motion preference.
 The mobile **Submit Document**
 form requires an 11-digit contact number; **Quick Submit** remains contact-free.
 Mobile document-status lookup also includes bulk-paper batches assigned to the
