@@ -66,7 +66,7 @@ if ($adminName && isset($conn) && function_exists('safe_query')) {
     <title>CEIT Deans Office Digital Logbook</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="assets/css/style.css?v=prism-glass-green-2">
+    <link rel="stylesheet" href="assets/css/style.css?v=dashboard-compact-balance-5">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body<?php echo $adminName ? ' class="admin-body' . ($showAdminLoginArrival ? ' admin-login-arrival' : '') . (($_GET['embed'] ?? '') === '1' ? ' admin-embedded-body' : '') . '" data-latest-document-id="' . (int)($latestDocumentId ?? 0) . '" data-document-activity-ready="' . ($latestDocumentId === null ? 'false' : 'true') . '"' : ($currentPage === 'login.php' ? ' class="login-page"' : ''); ?>>

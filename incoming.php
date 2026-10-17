@@ -239,10 +239,12 @@ if ($stmt !== false) {
                                     <tr>
                                         <td><?php echo sanitize($document['date_created']); ?></td>
                                         <td>
-                                            <span class="badge text-bg-light border"><?php echo sanitize($document['submitter_type']); ?></span>
-                                            <?php if ($document['submitter_type'] === 'Faculty' && (int)$document['is_priority'] === 1): ?>
-                                                <span class="badge text-bg-warning"><i class="bi bi-star-fill me-1" aria-hidden="true"></i>Priority</span>
-                                            <?php endif; ?>
+                                            <div class="table-cell-badges">
+                                                <span class="badge text-bg-light border"><?php echo sanitize($document['submitter_type']); ?></span>
+                                                <?php if ($document['submitter_type'] === 'Faculty' && (int)$document['is_priority'] === 1): ?>
+                                                    <span class="badge text-bg-warning"><i class="bi bi-star-fill me-1" aria-hidden="true"></i>Priority</span>
+                                                <?php endif; ?>
+                                            </div>
                                         </td>
                                         <td><?php echo sanitize($document['subject']); ?></td>
                                         <td><?php echo sanitize($document['recipient']); ?></td>

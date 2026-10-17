@@ -817,6 +817,15 @@ body {
     margin: 0;
 }
 
+.admin-content .admin-mobile-card-table .table-cell-badges {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
 @media (max-width: 767.98px) {
     .admin-content .admin-mobile-card-wrap {
         overflow: visible;
@@ -4394,6 +4403,11 @@ body.admin-body.admin-compact {
     background: #fafbfc;
 }
 
+.admin-body.admin-compact .admin-content .admin-mobile-card-table tbody tr > [data-label="Status"] > .badge {
+    justify-self: start;
+    width: auto;
+}
+
 .admin-body.admin-compact .admin-content .admin-mobile-card-table tbody tr > [data-label="Actions"]::before {
     display: block;
     margin-bottom: 0.45rem;
@@ -4401,7 +4415,7 @@ body.admin-body.admin-compact {
 
 .admin-body.admin-compact .admin-content .admin-mobile-card-table .table-actions {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
     gap: 0.4rem;
 }
 
@@ -4500,6 +4514,73 @@ body.admin-body.admin-compact {
 
 .admin-body.admin-compact .modal-body {
     padding: 0.9rem;
+}
+
+body.admin-body.admin-theme-civic.admin-compact .admin-content > .row > .col-12:first-child .civic-dashboard-hero h1 {
+    color: #fff !important;
+}
+
+body.admin-body.admin-theme-glass.admin-compact .admin-content > .row > .col-12:first-child .civic-dashboard-hero h1 {
+    color: #174b34 !important;
+}
+
+@media (min-width: 992px) {
+    .admin-body.admin-compact .admin-content .table-responsive {
+        overflow-x: auto;
+    }
+
+    .admin-body.admin-compact .admin-content .table-responsive > .admin-mobile-card-table {
+        display: table;
+        width: 100%;
+        min-width: 48rem;
+        border: 0;
+    }
+
+    .admin-body.admin-compact .admin-content .admin-mobile-card-table thead {
+        display: table-header-group;
+    }
+
+    .admin-body.admin-compact .admin-content .admin-mobile-card-table tbody {
+        display: table-row-group;
+    }
+
+    .admin-body.admin-compact .admin-content .admin-mobile-card-table tbody tr {
+        display: table-row;
+        overflow: visible;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+    .admin-body.admin-compact .admin-content .admin-mobile-card-table tbody tr > * {
+        display: table-cell;
+        padding: 0.65rem 0.75rem;
+        border-bottom: 1px solid #e8efe8;
+        text-align: center;
+    }
+
+    .admin-body.admin-compact .admin-content .admin-mobile-card-table tbody tr > *::before {
+        display: none;
+        content: none;
+    }
+
+    .admin-body.admin-compact .admin-content .admin-mobile-card-table tbody tr > [data-label="Actions"] {
+        background: transparent;
+    }
+
+    .admin-body.admin-compact .admin-content .admin-mobile-card-table .table-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .admin-body.admin-compact .admin-content .admin-mobile-card-table .table-actions form {
+        display: inline-flex;
+    }
+
+    .admin-body.admin-compact .admin-content .admin-mobile-card-table .table-actions .btn {
+        width: auto;
+    }
 }
 
 @media (min-width: 768px) {
@@ -8028,6 +8109,40 @@ body.admin-theme-glass.admin-compact .admin-quick-access-count {
     body.admin-theme-glass.admin-compact .admin-quick-access-links a,
     body.admin-theme-glass.admin-compact .admin-quick-access-links .admin-quick-access-more {
         font-size: 0.58rem;
+    }
+}
+
+@media (min-width: 768px) {
+    body.admin-body.admin-compact .dashboard-quick-actions {
+        max-width: none;
+    }
+
+    body.admin-theme-civic.admin-compact .dashboard-quick-actions-grid,
+    body.admin-theme-glass.admin-compact .dashboard-quick-actions-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.65rem;
+    }
+
+    body.admin-theme-civic.admin-compact .civic-dashboard-hero,
+    body.admin-theme-glass.admin-compact .civic-dashboard-hero {
+        min-height: 15rem;
+        flex-direction: row;
+        align-items: stretch;
+        gap: clamp(1rem, 2.4vw, 2rem);
+        padding: clamp(1.2rem, 2vw, 1.8rem);
+    }
+
+    body.admin-theme-civic.admin-compact .civic-dashboard-hero-copy,
+    body.admin-theme-glass.admin-compact .civic-dashboard-hero-copy {
+        min-width: 0;
+        max-width: none;
+    }
+
+    body.admin-theme-civic.admin-compact .civic-dashboard-hero-aside,
+    body.admin-theme-glass.admin-compact .civic-dashboard-hero-aside {
+        width: min(36%, 18rem);
+        flex: 0 0 min(36%, 18rem);
+        align-self: center;
     }
 }
 
