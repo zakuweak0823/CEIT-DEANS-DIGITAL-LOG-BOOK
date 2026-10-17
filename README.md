@@ -216,6 +216,11 @@ Use the **Shared form labels** section in Admin Settings to rename sender,
 recipient, document type, contact number, and remarks fields across admin
 document/bulk-paper forms and the mobile app. The Recipient switch can hide
 recipient inputs in both interfaces; hidden recipients are saved as blank.
+The **Mobile app appearance and experience** section lets administrators keep
+the existing Classic kiosk UI as the default or switch to a translucent green
+Glass theme, customize the kiosk header and welcome text, and enable or disable
+successful-action and pull-to-refresh sounds. These settings are stored
+server-side and apply to connected mobile clients.
 The mobile **Submit Document**
 form requires an 11-digit contact number; **Quick Submit** remains contact-free.
 Mobile document-status lookup also includes bulk-paper batches assigned to the

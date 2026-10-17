@@ -18,6 +18,7 @@ require_once 'db.php';
 require_once 'sms_service.php';
 require_once 'batch_support.php';
 require_once 'mobile_form_settings.php';
+require_once 'mobile_app_settings.php';
 
 // Initialize incremental schema additions before serving any mobile action.
 try {
@@ -81,6 +82,14 @@ try {
 }
 $batchWorkflowSettings = get_batch_workflow_settings($conn);
 $mobileFormLabels = get_mobile_form_labels($conn);
+try {
+    $mobileAppSettings = get_mobile_app_settings($conn);
+} catch (Throwable $error) {
+    error_log('Mobile app settings could not be loaded: ' . $error->getMessage());
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Mobile app settings are unavailable']);
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $rawInput = file_get_contents('php://input');
@@ -782,6 +791,7 @@ $systemOverview = [
 $response = [
     'mobileKioskEnabled' => $officeKioskEnabled,
     'formLabels' => $mobileFormLabels,
+    'mobileSettings' => $mobileAppSettings,
     'dashboard' => $dashboard,
     'smsSummary' => $smsSummary,
     'systemOverview' => $systemOverview,

@@ -2,6 +2,7 @@
 require_once 'auth.php';
 require_once 'db.php';
 require_once 'mobile_form_settings.php';
+require_once 'mobile_app_settings.php';
 require_once 'batch_support.php';
 ensure_admin();
 
@@ -60,8 +61,41 @@ if (isset($_POST['save_batch_workflow'])) {
             $formSettingsNoticeType = 'danger';
         }
     }
+} elseif (isset($_POST['save_mobile_app_settings'])) {
+    $formSettingsNoticeScope = 'mobile-app';
+    $theme = $_POST['mobile_theme'] ?? '';
+    $submittedSettings = [
+        'theme' => $theme,
+        'headerTitle' => $_POST['mobile_header_title'] ?? null,
+        'officeName' => $_POST['mobile_office_name'] ?? null,
+        'welcomeHeading' => $_POST['mobile_welcome_heading'] ?? null,
+        'welcomeMessage' => $_POST['mobile_welcome_message'] ?? null,
+        'confirmationSound' => ($_POST['mobile_confirmation_sound'] ?? '') === '1',
+        'pullToRefreshSound' => ($_POST['mobile_refresh_sound'] ?? '') === '1',
+    ];
+    $limits = ['headerTitle' => 48, 'officeName' => 48, 'welcomeHeading' => 90, 'welcomeMessage' => 180];
+    $valid = is_string($theme) && in_array($theme, ['classic', 'glass'], true);
+    foreach ($limits as $key => $limit) {
+        $value = $submittedSettings[$key];
+        if (!is_string($value) || trim($value) === '' || strlen(trim($value)) > $limit) {
+            $valid = false;
+            break;
+        }
+        $submittedSettings[$key] = trim($value);
+    }
+
+    if (!$valid) {
+        $formSettingsNotice = 'Choose a valid mobile theme and enter each display text within its character limit.';
+        $formSettingsNoticeType = 'danger';
+    } elseif (save_mobile_app_settings($conn, $submittedSettings)) {
+        $formSettingsNotice = 'Mobile app settings saved and will apply to connected devices.';
+    } else {
+        $formSettingsNotice = 'Mobile app settings could not be saved. Check the server log and try again.';
+        $formSettingsNoticeType = 'danger';
+    }
 }
 $mobileFormLabels = get_mobile_form_labels($conn);
+$mobileAppSettings = get_mobile_app_settings($conn);
 $batchWorkflowSettings = get_batch_workflow_settings($conn);
 
 $localCaCertificateName = 'ceit-logbook-local-ca.crt';
@@ -129,6 +163,64 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                     <p class="form-text mt-3">Changing a label only changes how the field is named; it does not rename or alter stored records.</p>
                     <button class="btn btn-primary" type="submit" name="save_form_labels" value="1">
                         <i class="bi bi-check2 me-1" aria-hidden="true"></i>Save form labels
+                    </button>
+                </form>
+            </div>
+        </section>
+    </div>
+
+    <div class="col-12">
+        <section class="card shadow-sm" aria-labelledby="mobile-app-settings-title">
+            <div class="card-header bg-white px-3 px-md-4 py-3">
+                <h5 class="mb-1 text-primary" id="mobile-app-settings-title">Mobile app appearance and experience</h5>
+                <p class="mb-0 small text-muted">Configure the shared kiosk look, welcome text, and optional sounds for phones and browsers.</p>
+            </div>
+            <div class="card-body p-3 p-md-4">
+                <?php if ($formSettingsNotice !== '' && $formSettingsNoticeScope === 'mobile-app'): ?>
+                    <div class="alert alert-<?php echo sanitize($formSettingsNoticeType); ?>" role="status"><?php echo sanitize($formSettingsNotice); ?></div>
+                <?php endif; ?>
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label fw-semibold" for="mobileTheme">Mobile app theme</label>
+                            <select class="form-select" id="mobileTheme" name="mobile_theme" required>
+                                <option value="classic" <?php echo $mobileAppSettings['theme'] === 'classic' ? 'selected' : ''; ?>>Classic — current mobile UI (default)</option>
+                                <option value="glass" <?php echo $mobileAppSettings['theme'] === 'glass' ? 'selected' : ''; ?>>Glass — translucent green panels</option>
+                            </select>
+                            <div class="form-text">This theme applies to all mobile kiosk users. Classic remains the default until changed here.</div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold" for="mobileHeaderTitle">Header title</label>
+                            <input class="form-control" id="mobileHeaderTitle" name="mobile_header_title" maxlength="48" value="<?php echo sanitize($mobileAppSettings['headerTitle']); ?>" required>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold" for="mobileOfficeName">Office name</label>
+                            <input class="form-control" id="mobileOfficeName" name="mobile_office_name" maxlength="48" value="<?php echo sanitize($mobileAppSettings['officeName']); ?>" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold" for="mobileWelcomeHeading">Welcome heading</label>
+                            <input class="form-control" id="mobileWelcomeHeading" name="mobile_welcome_heading" maxlength="90" value="<?php echo sanitize($mobileAppSettings['welcomeHeading']); ?>" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold" for="mobileWelcomeMessage">Welcome message</label>
+                            <textarea class="form-control" id="mobileWelcomeMessage" name="mobile_welcome_message" maxlength="180" rows="2" required><?php echo sanitize($mobileAppSettings['welcomeMessage']); ?></textarea>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="mobileConfirmationSound" name="mobile_confirmation_sound" value="1" <?php echo $mobileAppSettings['confirmationSound'] ? 'checked' : ''; ?>>
+                                <label class="form-check-label fw-semibold" for="mobileConfirmationSound">Play sound after a successful action</label>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="mobileRefreshSound" name="mobile_refresh_sound" value="1" <?php echo $mobileAppSettings['pullToRefreshSound'] ? 'checked' : ''; ?>>
+                                <label class="form-check-label fw-semibold" for="mobileRefreshSound">Play sound when pull-to-refresh starts</label>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary mt-3" type="submit" name="save_mobile_app_settings" value="1">
+                        <i class="bi bi-check2 me-1" aria-hidden="true"></i>Save mobile app settings
                     </button>
                 </form>
             </div>

@@ -59,6 +59,15 @@ const defaultFormLabels = {
   contactNumber: 'Client contact number',
   remarks: 'Remarks',
 };
+const defaultMobileSettings = {
+  theme: 'classic',
+  headerTitle: 'CEIT Digital Logbook',
+  officeName: "Dean's Office",
+  welcomeHeading: "Welcome to the CEIT Dean's Office",
+  welcomeMessage: 'Keep document submissions, Bulk Papers, and borrowed items organized in one place.',
+  confirmationSound: true,
+  pullToRefreshSound: true,
+};
 
 const inputClass = 'w-full rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100';
 const buttonClass = 'inline-flex min-h-12 items-center justify-center rounded-2xl bg-emerald-900 px-5 py-3.5 text-base font-semibold text-white transition hover:bg-emerald-700 active:scale-[0.99]';
@@ -124,6 +133,7 @@ function App() {
 
   const [apiData, setApiData] = useState(null);
   const formLabels = { ...defaultFormLabels, ...(apiData?.formLabels || {}) };
+  const mobileSettings = { ...defaultMobileSettings, ...(apiData?.mobileSettings || {}) };
   const [loading, setLoading] = useState(true);
   const [refreshError, setRefreshError] = useState('');
   const refreshInProgressRef = useRef(false);
@@ -439,7 +449,7 @@ function App() {
         throw new Error(result.message || `HTTP error! status: ${response.status}`);
       }
       if (result.success) {
-        playConfirmTone();
+        if (mobileSettings.confirmationSound) playConfirmTone();
         const clientPhone = incomingModalMode === 'standard' ? incomingForm.clientPhone : '';
         const incomingStatus = 'Pending';
         setIncomingItems((prev) => [{ id: result.id, date: incomingForm.date, from: incomingForm.from, subject: incomingForm.subject, recipient: incomingForm.recipient, clientPhone, status: incomingStatus }, ...prev]);
@@ -609,7 +619,7 @@ function App() {
         throw new Error(result.message || `HTTP error! status: ${response.status}`);
       }
       if (result.success) {
-        playConfirmTone();
+        if (mobileSettings.confirmationSound) playConfirmTone();
         const borrowedStatus = result.status || 'Borrowed';
         setBorrowedItems((prev) => [{ id: result.id, ...borrowedForm, borrowed: todayLocalDate(), returned: '', status: borrowedStatus }, ...prev]);
         setReportItems((prev) => [
@@ -758,7 +768,7 @@ function App() {
         };
       } else {
         const savedBatch = { ...result.batch, receivedPaperCount: null, receivedAt: null };
-        playConfirmTone();
+        if (mobileSettings.confirmationSound) playConfirmTone();
         setBatchItems((previous) => [savedBatch, ...previous]);
         successNotice = {
           title: 'Bulk papers submitted',
@@ -1242,7 +1252,7 @@ function App() {
     if (resistedDistance >= 72 && !gesture.armed) {
       gesture.armed = true;
       if (typeof navigator.vibrate === 'function') navigator.vibrate(18);
-      playSwipeTone();
+      if (mobileSettings.pullToRefreshSound) playSwipeTone();
     } else if (resistedDistance < 72 && gesture.armed) {
       gesture.armed = false;
     }
@@ -1302,7 +1312,7 @@ function App() {
 
   return (
     <div
-      className="pull-refresh-enabled min-h-screen min-h-[100svh] overflow-x-clip text-emerald-950"
+      className={`pull-refresh-enabled min-h-screen min-h-[100svh] overflow-x-clip text-emerald-950 ${mobileSettings.theme === 'glass' ? 'mobile-theme-glass' : ''}`}
       onTouchStart={handlePullTouchStart}
       onTouchMove={handlePullTouchMove}
       onTouchEnd={finishPullGesture}
@@ -1328,8 +1338,8 @@ function App() {
           <div className="flex min-w-0 items-center gap-2.5">
             <img src={officeLogoUrl} alt="Cavite State University seal" className="app-header-logo" />
             <div className="min-w-0">
-              <p className="truncate text-[10px] font-semibold uppercase text-emerald-600">CEIT Digital Logbook</p>
-              <p className="truncate text-sm font-semibold text-emerald-950">Dean&apos;s Office</p>
+              <p className="truncate text-[10px] font-semibold uppercase text-emerald-600">{mobileSettings.headerTitle}</p>
+              <p className="truncate text-sm font-semibold text-emerald-950">{mobileSettings.officeName}</p>
             </div>
           </div>
           <div className="flex shrink-0 items-center">
@@ -1382,12 +1392,12 @@ function App() {
             <section className="welcome-card grid w-full items-stretch gap-4 rounded-3xl border border-emerald-200 bg-white p-3 shadow-sm sm:gap-6 sm:p-6 lg:grid-cols-[1fr_0.85fr] lg:gap-8 lg:p-8">
               <div className="welcome-hero flex flex-col items-center justify-center rounded-2xl bg-emerald-50/70 p-5 text-center sm:p-8">
                 <img src={officeLogoUrl} alt="Cavite State University seal" className="welcome-logo rounded-xl bg-white p-1 ring-1 ring-emerald-200" />
-                <p className="mt-6 text-sm font-semibold text-emerald-700">Dean&apos;s Office</p>
+                <p className="mt-6 text-sm font-semibold text-emerald-700">{mobileSettings.officeName}</p>
                 <h1 className="mt-2 w-full max-w-xl text-center text-3xl font-bold leading-tight text-emerald-950 sm:text-4xl">
-                  Welcome to the CEIT Dean&apos;s Office
+                  {mobileSettings.welcomeHeading}
                 </h1>
                 <p className="mt-3 max-w-lg text-center text-base leading-relaxed text-emerald-800">
-                  Keep document submissions, Bulk Papers, and borrowed items organized in one place.
+                  {mobileSettings.welcomeMessage}
                 </p>
                 <button
                   type="button"
