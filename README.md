@@ -7,6 +7,8 @@
 
 <p>Manage office records through a PHP and MySQL admin portal, with a React mobile app for on-the-go logbook tasks.</p>
 
+<p><img src="assets/images/ceit-web-android-showcase.svg" alt="Illustrated showcase of the CEIT Admin web dashboard and Android public kiosk UI" width="100%"></p>
+
 <p>
 <a href="https://www.php.net/"><img src="https://img.shields.io/badge/PHP-8%2B-777BB4?logo=php&logoColor=white" alt="PHP 8 or later"></a>
 <a href="https://www.mysql.com/"><img src="https://img.shields.io/badge/Database-MySQL%20%7C%20MariaDB-4479A1?logo=mysql&logoColor=white" alt="MySQL or MariaDB"></a>

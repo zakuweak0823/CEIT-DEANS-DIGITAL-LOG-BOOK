@@ -1,0 +1,276 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1260" height="866" viewBox="0 0 1600 1100" fill="none">
+  <defs>
+    <linearGradient id="backdrop" x1="120" y1="64" x2="1465" y2="1070" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F7FBF6"/>
+      <stop offset=".52" stop-color="#E5F1E6"/>
+      <stop offset="1" stop-color="#D5E8D8"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="326" y1="256" x2="1274" y2="812" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FBFDFB"/>
+      <stop offset="1" stop-color="#EDF4EE"/>
+    </linearGradient>
+    <linearGradient id="hero" x1="461" y1="423" x2="1156" y2="560" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#174B34"/>
+      <stop offset="1" stop-color="#32734A"/>
+    </linearGradient>
+    <linearGradient id="phoneScreen" x1="1061" y1="318" x2="1329" y2="787" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FBFDFB"/>
+      <stop offset="1" stop-color="#EEF6EF"/>
+    </linearGradient>
+    <linearGradient id="phoneGlass" x1="1036" y1="276" x2="1343" y2="850" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#29332D"/>
+      <stop offset=".5" stop-color="#121A15"/>
+      <stop offset="1" stop-color="#35443A"/>
+    </linearGradient>
+    <linearGradient id="laptopBase" x1="324" y1="807" x2="1196" y2="903" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#69796D"/>
+      <stop offset=".52" stop-color="#E2E9E2"/>
+      <stop offset="1" stop-color="#748379"/>
+    </linearGradient>
+    <linearGradient id="glassShine" x1="1046" y1="294" x2="1327" y2="825" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff" stop-opacity=".24"/>
+      <stop offset=".42" stop-color="#fff" stop-opacity=".015"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".08"/>
+    </linearGradient>
+    <filter id="shadow" x="115" y="168" width="1400" height="850" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" result="hardAlpha" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0"/>
+      <feOffset dy="28"/>
+      <feGaussianBlur stdDeviation="24"/>
+      <feComposite in2="hardAlpha" operator="out"/>
+      <feColorMatrix values="0 0 0 0 .105 0 0 0 0 .235 0 0 0 0 .145 0 0 0 .24 0"/>
+      <feBlend in2="BackgroundImageFix" result="effect1_dropShadow"/>
+      <feBlend in="SourceGraphic" in2="effect1_dropShadow" result="shape"/>
+    </filter>
+    <filter id="smallShadow" x="975" y="253" width="432" height="677" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" result="hardAlpha" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0"/>
+      <feOffset dy="16"/>
+      <feGaussianBlur stdDeviation="15"/>
+      <feComposite in2="hardAlpha" operator="out"/>
+      <feColorMatrix values="0 0 0 0 .055 0 0 0 0 .17 0 0 0 0 .09 0 0 0 .3 0"/>
+      <feBlend in2="BackgroundImageFix" result="effect1_dropShadow"/>
+      <feBlend in="SourceGraphic" in2="effect1_dropShadow" result="shape"/>
+    </filter>
+    <clipPath id="desktopScreen">
+      <rect x="292" y="223" width="904" height="565" rx="15"/>
+    </clipPath>
+    <clipPath id="mobileScreen">
+      <rect x="1057" y="315" width="272" height="500" rx="30"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1600" height="1100" fill="url(#backdrop)"/>
+  <circle cx="1327" cy="148" r="224" fill="#C8E4CB" fill-opacity=".46"/>
+  <circle cx="1352" cy="164" r="151" stroke="#A7CDAA" stroke-opacity=".35" stroke-width="2"/>
+  <circle cx="188" cy="801" r="257" fill="#D3E9D4" fill-opacity=".6"/>
+  <circle cx="199" cy="808" r="183" stroke="#A8CDAE" stroke-opacity=".35" stroke-width="2"/>
+  <path d="M0 930C233 826 408 1053 658 967c223-77 361-166 942-30v163H0V930Z" fill="#D0E4D1" fill-opacity=".56"/>
+  <path d="M0 1002c281-69 485 63 741 9 246-52 481-151 859-60v149H0v-98Z" fill="#EAF4E9" fill-opacity=".85"/>
+
+  <g font-family="Inter,Segoe UI,Arial,sans-serif">
+    <text x="118" y="105" fill="#286647" font-size="15" font-weight="750" letter-spacing="3.5">CVSU · CEIT DEAN'S OFFICE</text>
+    <text x="116" y="166" fill="#173F2B" font-size="44" font-weight="760" letter-spacing="-1.9">The office logbook,</text>
+    <text x="116" y="217" fill="#173F2B" font-size="44" font-weight="760" letter-spacing="-1.9">wherever work happens.</text>
+    <text x="119" y="245" fill="#5D7562" font-size="17" font-weight="450">One connected experience for office staff and campus visitors.</text>
+  </g>
+
+  <g filter="url(#shadow)" transform="translate(0 55)">
+    <rect x="267" y="198" width="955" height="615" rx="30" fill="#202B23"/>
+    <rect x="279" y="210" width="931" height="589" rx="22" fill="#111A14"/>
+    <g clip-path="url(#desktopScreen)">
+      <rect x="292" y="223" width="904" height="565" fill="url(#screen)"/>
+      <rect x="292" y="223" width="904" height="50" fill="#FFFFFF"/>
+      <circle cx="319" cy="248" r="5" fill="#D8E3DA"/>
+      <circle cx="336" cy="248" r="5" fill="#D8E3DA"/>
+      <circle cx="353" cy="248" r="5" fill="#D8E3DA"/>
+      <rect x="371" y="238" width="356" height="20" rx="10" fill="#F2F6F2"/>
+      <circle cx="386" cy="248" r="4" stroke="#728676" stroke-width="1.5"/>
+      <path d="m389 251 3 3" stroke="#728676" stroke-width="1.5" stroke-linecap="round"/>
+      <rect x="305" y="286" width="164" height="502" rx="14" fill="#174B34"/>
+      <rect x="320" y="303" width="34" height="34" rx="11" fill="#F7FBF6"/>
+      <circle cx="337" cy="320" r="11" fill="#317747"/>
+      <path d="m337 310 7 10-7 10-7-10 7-10Z" fill="#D3B45D"/>
+      <text x="364" y="317" fill="#FFFFFF" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="10" font-weight="700">CEIT Dean's Office</text>
+      <text x="364" y="331" fill="#CAE0CC" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="9">DIGITAL LOGBOOK</text>
+      <text x="323" y="367" fill="#A8C4AC" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="8" font-weight="700" letter-spacing="1.6">WORKSPACE</text>
+      <rect x="316" y="378" width="142" height="33" rx="9" fill="#FFFFFF" fill-opacity=".14" stroke="#C8E0CA" stroke-opacity=".28"/>
+      <path d="M330 395h12m-6-6v12" stroke="#E6F3E7" stroke-width="1.5" stroke-linecap="round"/>
+      <text x="350" y="398" fill="#FFFFFF" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="10" font-weight="650">Dashboard</text>
+      <text x="323" y="435" fill="#A8C4AC" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="8" font-weight="700" letter-spacing="1.6">DOCUMENTS</text>
+      <g fill="#D8E9DA" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="9.5">
+        <text x="340" y="459">Quick Submit Records</text>
+        <text x="340" y="485">Incoming Documents</text>
+        <text x="340" y="511">Outgoing Documents</text>
+        <text x="340" y="537">Batch Papers</text>
+        <text x="340" y="582">Borrowed Items</text>
+        <text x="340" y="608">Reports</text>
+        <text x="340" y="634">Settings</text>
+      </g>
+      <g stroke="#B9D2BC" stroke-width="1.4" stroke-linecap="round" opacity=".8">
+        <path d="M324 456h9m-4.5-4.5v9"/>
+        <rect x="324" y="476" width="9" height="11" rx="1.5"/>
+        <path d="M324 506h9m-4.5-4.5v9"/>
+        <rect x="324" y="528" width="9" height="11" rx="1.5"/>
+        <circle cx="328.5" cy="578" r="5"/>
+        <path d="M324 604h9m-4.5-4.5v9M324 630h9m-4.5-4.5v9"/>
+      </g>
+
+      <rect x="482" y="286" width="696" height="53" rx="13" fill="#FFFFFF" stroke="#E5ECE5"/>
+      <text x="502" y="309" fill="#214B32" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="13" font-weight="700">Dashboard</text>
+      <text x="502" y="324" fill="#86958A" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="8.5">OFFICE OVERVIEW</text>
+      <rect x="763" y="298" width="246" height="28" rx="9" fill="#F5F8F5" stroke="#E8EEE8"/>
+      <circle cx="780" cy="312" r="4" stroke="#819183" stroke-width="1.2"/>
+      <path d="m783 315 3 3" stroke="#819183" stroke-width="1.2" stroke-linecap="round"/>
+      <text x="793" y="315" fill="#859187" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="8">Search office records</text>
+      <circle cx="1146" cy="312" r="14" fill="#E7F1E8"/>
+      <text x="1146" y="316" text-anchor="middle" fill="#286647" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="9" font-weight="700">A</text>
+
+      <rect x="482" y="354" width="696" height="154" rx="20" fill="url(#hero)"/>
+      <circle cx="1111" cy="365" r="85" stroke="#D5E8D6" stroke-opacity=".12"/>
+      <circle cx="1111" cy="365" r="119" stroke="#D5E8D6" stroke-opacity=".08"/>
+      <text x="507" y="382" fill="#D4E8D5" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="8" font-weight="750" letter-spacing="1.5">OFFICE ACTIVITY</text>
+      <text x="507" y="416" fill="#FFFFFF" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="24" font-weight="730" letter-spacing="-.7">Office activity, in focus.</text>
+      <text x="508" y="435" fill="#DBEBDD" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="10">Review document flow and priority follow-ups.</text>
+      <rect x="508" y="454" width="116" height="29" rx="9" fill="#E6F2E7"/>
+      <text x="566" y="472" text-anchor="middle" fill="#215537" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="8.5" font-weight="700">Review incoming</text>
+      <rect x="632" y="454" width="108" height="29" rx="9" fill="#FFFFFF" fill-opacity=".12" stroke="#FFFFFF" stroke-opacity=".25"/>
+      <text x="686" y="472" text-anchor="middle" fill="#FFFFFF" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="8.5" font-weight="650">Browse records</text>
+      <rect x="954" y="371" width="199" height="112" rx="14" fill="#103D29" fill-opacity=".28" stroke="#FFFFFF" stroke-opacity=".2"/>
+      <text x="971" y="391" fill="#D6E8D7" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="7" font-weight="700" letter-spacing="1.1">TODAY'S ACTIVITY</text>
+      <text x="971" y="426" fill="#FFFFFF" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="31" font-weight="720">—</text>
+      <text x="1000" y="423" fill="#D8E7DA" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="8">document movements</text>
+      <path d="M971 439h165" stroke="#FFFFFF" stroke-opacity=".18"/>
+      <text x="978" y="459" fill="#FFFFFF" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="9" font-weight="700">↓</text>
+      <text x="991" y="458" fill="#D9E7DB" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="8">Incoming</text>
+      <text x="1061" y="459" fill="#FFFFFF" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="9" font-weight="700">↑</text>
+      <text x="1075" y="458" fill="#D9E7DB" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="8">Outgoing</text>
+
+      <rect x="482" y="521" width="696" height="103" rx="17" fill="#FFFFFF" stroke="#E1EAE2"/>
+      <text x="501" y="544" fill="#28573A" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="11" font-weight="700">Quick actions</text>
+      <text x="1090" y="544" fill="#7A8D7E" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="7.5">Common tasks</text>
+      <g font-family="Inter,Segoe UI,Arial,sans-serif">
+        <rect x="499" y="554" width="157" height="53" rx="11" fill="#FBFDFB" stroke="#E6EEE7"/>
+        <rect x="510" y="565" width="30" height="30" rx="9" fill="#E8F3E9"/>
+        <path d="M520 573h10v13h-10zM523 570h8v12" stroke="#286647" stroke-width="1.4" stroke-linejoin="round"/>
+        <text x="547" y="577" fill="#30513A" font-size="8.5" font-weight="700">Add incoming</text>
+        <text x="547" y="590" fill="#86958A" font-size="7">Register a document</text>
+        <rect x="665" y="554" width="157" height="53" rx="11" fill="#FBFDFB" stroke="#E6EEE7"/>
+        <rect x="676" y="565" width="30" height="30" rx="9" fill="#E8F3E9"/>
+        <path d="M685 574v12m4-12v12m4-12v12m-10-9h12m-12 6h12" stroke="#286647" stroke-width="1.3"/>
+        <text x="713" y="577" fill="#30513A" font-size="8.5" font-weight="700">Scan CEIT QR</text>
+        <text x="713" y="590" fill="#86958A" font-size="7">Open the scanner</text>
+        <rect x="831" y="554" width="157" height="53" rx="11" fill="#FBFDFB" stroke="#E6EEE7"/>
+        <rect x="842" y="565" width="30" height="30" rx="9" fill="#E8F3E9"/>
+        <rect x="851" y="571" width="11" height="16" rx="2" stroke="#286647" stroke-width="1.4"/>
+        <text x="879" y="577" fill="#30513A" font-size="8.5" font-weight="700">Batch papers</text>
+        <text x="879" y="590" fill="#86958A" font-size="7">Manage paper batches</text>
+        <rect x="997" y="554" width="164" height="53" rx="11" fill="#FBFDFB" stroke="#E6EEE7"/>
+        <rect x="1008" y="565" width="30" height="30" rx="9" fill="#E8F3E9"/>
+        <path d="M1017 571h10v16h-10zM1019 575h6m-6 3h6m-6 3h4" stroke="#286647" stroke-width="1.3" stroke-linejoin="round"/>
+        <text x="1045" y="577" fill="#30513A" font-size="8.5" font-weight="700">View reports</text>
+        <text x="1045" y="590" fill="#86958A" font-size="7">Review office activity</text>
+      </g>
+
+      <rect x="482" y="637" width="696" height="130" rx="17" fill="#FFFFFF" stroke="#E1EAE2"/>
+      <text x="501" y="663" fill="#28573A" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="12" font-weight="700">Needs attention</text>
+      <text x="501" y="680" fill="#87958B" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="8">Priority follow-ups and latest office activity</text>
+      <g>
+        <rect x="501" y="693" width="204" height="56" rx="11" fill="#FBFDFB" stroke="#E7EEE7"/>
+        <circle cx="522" cy="721" r="12" fill="#EDF5E9"/>
+        <path d="M516 720h12l-1.3 7h-9.4l-1.3-7Zm2-3h8l2 3h-12l2-3Z" stroke="#568052" stroke-width="1.2" stroke-linejoin="round"/>
+        <text x="545" y="719" fill="#31553A" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="8.5" font-weight="700">Incoming to review</text>
+        <text x="545" y="733" fill="#839087" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="7">Pending documents</text>
+        <rect x="715" y="693" width="204" height="56" rx="11" fill="#FBFDFB" stroke="#E7EEE7"/>
+        <circle cx="736" cy="721" r="12" fill="#EDF5E9"/>
+        <path d="M732 717v8m0 0-3-3m3 3 3-3m4-5v8m0-8 3 3m-3-3-3 3" stroke="#568052" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="759" y="719" fill="#31553A" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="8.5" font-weight="700">Ready for release</text>
+        <text x="759" y="733" fill="#839087" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="7">Outgoing documents</text>
+        <rect x="929" y="693" width="232" height="56" rx="11" fill="#FBFDFB" stroke="#E7EEE7"/>
+        <circle cx="950" cy="721" r="12" fill="#F5F3E8"/>
+        <path d="M945 717h10v8h-10zM947 720h6m-6 2h4" stroke="#91783D" stroke-width="1.1" stroke-linejoin="round"/>
+        <text x="973" y="719" fill="#31553A" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="8.5" font-weight="700">Office records</text>
+        <text x="973" y="733" fill="#839087" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="7">Track and follow up</text>
+      </g>
+    </g>
+    <circle cx="744" cy="804" r="4" fill="#708074"/>
+    <path d="M169 814h1158c-11 21-31 35-56 39l-1011 7c-32-3-73-18-91-46Z" fill="url(#laptopBase)"/>
+    <path d="M208 820h1072c-19 12-39 18-65 20l-929 7c-27-3-54-11-78-27Z" fill="#87958A" fill-opacity=".42"/>
+    <path d="M667 825h162l-14 8H679l-12-8Z" fill="#65756A" fill-opacity=".54"/>
+  </g>
+
+  <g filter="url(#smallShadow)" transform="translate(0 55) rotate(5 1193 565)">
+    <rect x="1014" y="274" width="358" height="608" rx="52" fill="url(#phoneGlass)"/>
+    <rect x="1024" y="284" width="338" height="588" rx="44" fill="#09110C"/>
+    <rect x="1057" y="315" width="272" height="500" rx="30" fill="url(#phoneScreen)"/>
+    <g clip-path="url(#mobileScreen)">
+      <rect x="1057" y="315" width="272" height="500" fill="url(#phoneScreen)"/>
+      <rect x="1057" y="315" width="272" height="30" fill="#F9FCF9"/>
+      <text x="1076" y="334" fill="#233B2A" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="9" font-weight="700">9:41</text>
+      <g stroke="#52745A" stroke-width="1.2" stroke-linecap="round">
+        <path d="M1284 329h2m3-2h2m3-2h2"/>
+        <path d="M1301 327h13v8h-13zM1314 329h2v4h-2z"/>
+      </g>
+      <rect x="1071" y="355" width="244" height="54" rx="15" fill="#FFFFFF" stroke="#E0EBE1"/>
+      <rect x="1081" y="366" width="32" height="32" rx="10" fill="#EAF4EA"/>
+      <circle cx="1097" cy="382" r="10" fill="#32754A"/>
+      <path d="m1097 373 6 9-6 9-6-9 6-9Z" fill="#D2B45F"/>
+      <text x="1121" y="377" fill="#46744F" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="7" font-weight="700" letter-spacing=".4">CEIT DIGITAL LOGBOOK</text>
+      <text x="1121" y="392" fill="#193C29" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="11" font-weight="700">Dean's Office</text>
+      <text x="1075" y="474" fill="#244B31" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="8.5" font-weight="700">Document Status</text>
+      <rect x="1071" y="482" width="77" height="31" rx="9" fill="#FFF8E7" stroke="#F0DEA9"/>
+      <text x="1078" y="501" fill="#715D30" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="7" font-weight="650">Pending</text>
+      <rect x="1154" y="482" width="77" height="31" rx="9" fill="#EDF8F0"/>
+      <text x="1160" y="501" fill="#386747" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="6.5" font-weight="650">For Release</text>
+      <rect x="1237" y="482" width="78" height="31" rx="9" fill="#EAF5EA"/>
+      <text x="1243" y="501" fill="#386747" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="7" font-weight="650">Released</text>
+
+      <rect x="1071" y="521" width="244" height="96" rx="14" fill="#F2FAF2" stroke="#DDEBDD"/>
+      <rect x="1082" y="531" width="28" height="28" rx="9" fill="#FFFFFF" stroke="#D6E8D7"/>
+      <circle cx="1096" cy="545" r="9" fill="#32754A"/>
+      <path d="m1096 537 5.5 8-5.5 8-5.5-8 5.5-8Z" fill="#D2B45F"/>
+      <text x="1117" y="540" fill="#47744E" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="6.5" font-weight="700" letter-spacing=".5">CEIT DEAN'S OFFICE</text>
+      <text x="1117" y="552" fill="#193C29" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="8.5" font-weight="700">Welcome to the Dean's Office</text>
+      <text x="1084" y="572" fill="#1B412B" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="11" font-weight="740">Your office, all in one place.</text>
+      <text x="1084" y="584" fill="#708576" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="6.8">Documents, bulk papers, and borrowed items.</text>
+      <rect x="1084" y="591" width="112" height="19" rx="8" fill="#17613D"/>
+      <text x="1140" y="604" text-anchor="middle" fill="#FFFFFF" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="7" font-weight="700">Open Logbook</text>
+      <path d="m1184 598 3 3-3 3" stroke="#FFFFFF" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>
+
+      <rect x="1071" y="625" width="244" height="151" rx="14" fill="#FFFFFF" stroke="#E1EAE1"/>
+      <text x="1084" y="643" fill="#46744F" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="6.5" font-weight="750" letter-spacing="1">QUICK GUIDE</text>
+      <text x="1084" y="656" fill="#244B31" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="9" font-weight="700">Choose the right tool</text>
+      <path d="M1084 663h218" stroke="#E6ECE4"/>
+      <rect x="1083" y="670" width="30" height="28" rx="9" fill="#E8F4E9"/>
+      <path d="M1092 677h12v14h-12zM1095 674h12v14" stroke="#286647" stroke-width="1.2" stroke-linejoin="round"/>
+      <text x="1120" y="681" fill="#244B31" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="7.5" font-weight="700">Submit document</text>
+      <text x="1120" y="691" fill="#7B8E7E" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="6.2">Send to the Dean's Office</text>
+      <rect x="1083" y="704" width="30" height="28" rx="9" fill="#E8F4E9"/>
+      <path d="M1090 711h15v13h-15zM1093 708h15v13" stroke="#286647" stroke-width="1.2" stroke-linejoin="round"/>
+      <text x="1120" y="715" fill="#244B31" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="7.5" font-weight="700">Quick submit</text>
+      <text x="1120" y="725" fill="#7B8E7E" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="6.2">Log a document in a few steps</text>
+      <rect x="1083" y="738" width="30" height="28" rx="9" fill="#E8F4E9"/>
+      <path d="M1090 744h15v15h-15zM1093 741h12v3" stroke="#286647" stroke-width="1.2" stroke-linejoin="round"/>
+      <text x="1120" y="749" fill="#244B31" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="7.5" font-weight="700">Bulk Papers</text>
+      <text x="1120" y="759" fill="#7B8E7E" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="6.2">Register multiple papers together</text>
+      <rect x="1148" y="787" width="90" height="4" rx="2" fill="#223128" fill-opacity=".72"/>
+      <rect x="1057" y="315" width="272" height="500" rx="30" fill="url(#glassShine)"/>
+    </g>
+    <rect x="1126" y="294" width="111" height="18" rx="9" fill="#111A15"/>
+    <circle cx="1248" cy="303" r="4" fill="#29372D"/>
+    <path d="M1052 386c-5 19-7 52-4 77" stroke="#FFFFFF" stroke-opacity=".4" stroke-width="2" stroke-linecap="round"/>
+  </g>
+
+  <g font-family="Inter,Segoe UI,Arial,sans-serif">
+    <rect x="412" y="977" width="27" height="27" rx="9" fill="#DDEEDF"/>
+    <path d="M420 990h11m-5.5-5.5v11" stroke="#286647" stroke-width="1.5" stroke-linecap="round"/>
+    <text x="449" y="989" fill="#214B32" font-size="12" font-weight="750">ADMIN WEB</text>
+    <text x="449" y="1005" fill="#718473" font-size="10">Live office overview · documents · reports</text>
+    <rect x="1035" y="977" width="27" height="27" rx="9" fill="#DDEEDF"/>
+    <rect x="1043" y="982" width="11" height="17" rx="2.5" stroke="#286647" stroke-width="1.4"/>
+    <circle cx="1048.5" cy="995.5" r=".8" fill="#286647"/>
+    <text x="1072" y="989" fill="#214B32" font-size="12" font-weight="750">ANDROID KIOSK</text>
+    <text x="1072" y="1005" fill="#718473" font-size="10">Public document submission · status lookup</text>
+    <text x="800" y="1060" text-anchor="middle" fill="#6D846F" font-size="10" font-weight="650" letter-spacing="2.2">ONE CAMPUS · ONE CONNECTED LOGBOOK</text>
+  </g>
+</svg>
