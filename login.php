@@ -34,6 +34,7 @@ if (isset($_POST['login'])) {
                 if ($hash !== '' && password_verify($password, $hash)) {
                     session_regenerate_id(true);
                     $_SESSION['admin'] = $username;
+                    $_SESSION['admin_login_arrival'] = true;
                     header('Location: dashboard');
                     exit;
                 }
@@ -50,6 +51,7 @@ if (isset($_POST['login'])) {
 
                     session_regenerate_id(true);
                     $_SESSION['admin'] = $username;
+                    $_SESSION['admin_login_arrival'] = true;
                     header('Location: dashboard');
                     exit;
                 }
@@ -63,28 +65,49 @@ if (isset($_POST['login'])) {
 }
 ?>
 <?php include 'header.php'; ?>
-<div class="row justify-content-center">
-    <div class="col-md-6 col-lg-5">
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <h2 class="card-title mb-4 text-primary">Admin Login</h2>
-                <?php if ($error): ?>
-                    <div class="alert alert-danger"><?php echo sanitize($error); ?></div>
-                <?php endif; ?>
-                <form method="POST" novalidate>
-                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
-                    <div class="mb-3">
-                        <label for="username" class="form-label">Username</label>
-                        <input type="text" id="username" name="username" class="form-control" value="<?php echo sanitize($username); ?>" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="password" class="form-label">Password</label>
-                        <input type="password" id="password" name="password" class="form-control" required>
-                    </div>
-                    <button type="submit" name="login" class="btn btn-primary w-100">Login</button>
-                </form>
+<section class="login-shell" aria-labelledby="loginTitle">
+    <div class="login-panel">
+        <div class="login-form-wrap">
+            <div class="login-card-brand">
+                <img src="assets/images/CVSU.jpeg" alt="" class="login-card-logo">
+                <span>
+                    <strong>CEIT Dean's Office</strong>
+                    <small>Digital Logbook</small>
+                </span>
             </div>
+            <div class="login-heading">
+                <p class="login-eyebrow">ADMINISTRATOR SIGN IN</p>
+                <h1 id="loginTitle">Welcome back</h1>
+                <p class="login-intro">Enter your account details to continue.</p>
+            </div>
+            <?php if ($error): ?>
+                <div class="alert alert-danger login-error" role="alert">
+                    <i class="bi bi-exclamation-circle-fill" aria-hidden="true"></i>
+                    <span><?php echo sanitize($error); ?></span>
+                </div>
+            <?php endif; ?>
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                <div class="login-field">
+                    <label for="username">Username</label>
+                    <div class="login-input-wrap">
+                        <i class="bi bi-person" aria-hidden="true"></i>
+                        <input type="text" id="username" name="username" class="form-control" value="<?php echo sanitize($username); ?>" autocomplete="username" required autofocus>
+                    </div>
+                </div>
+                <div class="login-field">
+                    <label for="password">Password</label>
+                    <div class="login-input-wrap">
+                        <i class="bi bi-lock" aria-hidden="true"></i>
+                        <input type="password" id="password" name="password" class="form-control" autocomplete="current-password" required>
+                    </div>
+                </div>
+                <button type="submit" name="login" class="btn login-submit">
+                    <span>Sign in to Admin</span><i class="bi bi-arrow-right" aria-hidden="true"></i>
+                </button>
+            </form>
+            <p class="login-security-note"><i class="bi bi-shield-lock" aria-hidden="true"></i> Authorized administrators only</p>
         </div>
     </div>
-</div>
+</section>
 <?php include 'footer.php'; ?>

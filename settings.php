@@ -222,6 +222,50 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                         <div class="form-text">When enabled, a small clickable tab stays at the screen edge. Turn it off to hide the assistant completely.</div>
                     </div>
                     <div class="col-12">
+                        <fieldset class="admin-theme-picker">
+                            <legend class="form-label fw-semibold mb-1">Admin appearance</legend>
+                            <p class="form-text mt-0 mb-3">Choose the workspace style used across Admin pages, including Compact Mode. Your choice is saved in this browser.</p>
+                            <div class="row g-3">
+                                <div class="col-12 col-md-6">
+                                    <label class="admin-theme-option" for="adminThemeDefault">
+                                        <input class="form-check-input" type="radio" name="adminTheme" id="adminThemeDefault" value="default">
+                                        <span class="admin-theme-preview admin-theme-preview-default" aria-hidden="true">
+                                            <span></span><span></span><span></span><i></i>
+                                        </span>
+                                        <span class="admin-theme-option-copy">
+                                            <strong>Classic</strong>
+                                            <small>Current Admin design · Default</small>
+                                        </span>
+                                    </label>
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <label class="admin-theme-option" for="adminThemeCivic">
+                                        <input class="form-check-input" type="radio" name="adminTheme" id="adminThemeCivic" value="civic">
+                                        <span class="admin-theme-preview admin-theme-preview-civic" aria-hidden="true">
+                                            <span></span><span></span><span></span><i></i>
+                                        </span>
+                                        <span class="admin-theme-option-copy">
+                                            <strong>Civic Canvas</strong>
+                                            <small>Editorial-style navigation · rich green and warm canvas</small>
+                                        </span>
+                                    </label>
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <label class="admin-theme-option" for="adminThemeGlass">
+                                        <input class="form-check-input" type="radio" name="adminTheme" id="adminThemeGlass" value="glass">
+                                        <span class="admin-theme-preview admin-theme-preview-glass" aria-hidden="true">
+                                            <span></span><span></span><span></span><i></i>
+                                        </span>
+                                        <span class="admin-theme-option-copy">
+                                            <strong>Prism Glass</strong>
+                                            <small>Transparent glass · CvSU greens · soft sage accents</small>
+                                        </span>
+                                    </label>
+                                </div>
+                            </div>
+                        </fieldset>
+                    </div>
+                    <div class="col-12">
                         <div class="d-flex align-items-center justify-content-between gap-3">
                             <div class="form-check form-switch admin-compact-mode-switch">
                             <input class="form-check-input" type="checkbox" role="switch" id="adminCompactMode">
@@ -286,7 +330,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
 <script>
 (function () {
     const storageKey = 'ceit-admin-preferences-v1';
-    const defaults = { activityInterval: 15, soundAlerts: true, desktopAlerts: false, pendingBubble: true, assistantEnabled: true, compactMode: false };
+    const defaults = { activityInterval: 15, soundAlerts: true, desktopAlerts: false, pendingBubble: true, assistantEnabled: true, compactMode: false, adminTheme: 'default' };
     const intervalControl = document.getElementById('adminActivityInterval');
     const soundControl = document.getElementById('adminSoundAlerts');
     const desktopControl = document.getElementById('adminDesktopAlerts');
@@ -295,6 +339,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
     const assistantEnabledControl = document.getElementById('adminAssistantEnabled');
     const compactModeControl = document.getElementById('adminCompactMode');
     const compactModeStatus = document.getElementById('settingsCompactModeStatus');
+    const themeControls = Array.from(document.querySelectorAll('input[name="adminTheme"]'));
     const status = document.getElementById('adminPreferencesStatus');
     const resetButton = document.getElementById('resetAdminPreferences');
     if (!intervalControl || !soundControl || !desktopControl || !desktopHelp || !pendingBubbleControl || !assistantEnabledControl || !compactModeControl || !status || !resetButton) return;
@@ -309,7 +354,8 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                 desktopAlerts: saved.desktopAlerts === true,
                 pendingBubble: saved.pendingBubble !== false,
                 assistantEnabled: saved.assistantEnabled !== false,
-                compactMode: saved.compactMode === true
+                compactMode: saved.compactMode === true,
+                adminTheme: ['civic', 'glass'].includes(saved.adminTheme) ? saved.adminTheme : defaults.adminTheme
             };
         } catch (error) {
             storageAvailable = false;
@@ -327,6 +373,9 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
         pendingBubbleControl.checked = preferences.pendingBubble;
         assistantEnabledControl.checked = preferences.assistantEnabled;
         compactModeControl.checked = preferences.compactMode;
+        themeControls.forEach(function (control) {
+            control.checked = control.value === preferences.adminTheme;
+        });
         compactModeStatus.textContent = preferences.compactMode ? 'On' : 'Off';
         compactModeStatus.classList.toggle('is-on', preferences.compactMode);
         if (!notificationsSupported) {
@@ -396,6 +445,17 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
     compactModeControl.addEventListener('change', function () {
         preferences.compactMode = compactModeControl.checked;
         savePreferences();
+    });
+    themeControls.forEach(function (control) {
+        control.addEventListener('change', function () {
+            if (!control.checked) return;
+            preferences.adminTheme = ['civic', 'glass'].includes(control.value) ? control.value : 'default';
+            savePreferences(preferences.adminTheme === 'civic'
+                ? 'Civic Canvas applied across the Admin workspace.'
+                : preferences.adminTheme === 'glass'
+                    ? 'Prism Glass applied across the Admin workspace.'
+                    : 'Classic Admin appearance restored.');
+        });
     });
     resetButton.addEventListener('click', function () {
         preferences = Object.assign({}, defaults);

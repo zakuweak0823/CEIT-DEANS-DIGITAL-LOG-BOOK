@@ -15,7 +15,7 @@
     </div>
 </div>
 <?php else: ?>
-<footer class="bg-white border-top py-3">
+<footer class="bg-white border-top py-3<?php echo $currentPage === 'login.php' ? ' login-page-footer' : ''; ?>">
     <div class="container text-center small text-muted">
         &copy; <?php echo date('Y'); ?> Cavite State University - CEIT Deans Office Digital Logbook. Admin web interface only.
     </div>
@@ -55,6 +55,10 @@ if (document.body.classList.contains('admin-body')) {
     const compactModeStorageKey = 'ceit-admin-preferences-v1';
     const compactModeToggle = document.getElementById('adminCompactModeToggle');
     const compactModeStatus = document.getElementById('adminCompactModeStatus');
+    const applyAdminTheme = function (theme) {
+        document.body.classList.toggle('admin-theme-civic', theme === 'civic');
+        document.body.classList.toggle('admin-theme-glass', theme === 'glass');
+    };
     const applyCompactMode = function (enabled) {
         document.body.classList.toggle('admin-compact', enabled && !document.body.classList.contains('admin-embedded-body'));
         if (compactModeToggle) {
@@ -69,9 +73,11 @@ if (document.body.classList.contains('admin-body')) {
     const readCompactMode = function () {
         try {
             const preferences = JSON.parse(window.localStorage.getItem(compactModeStorageKey) || '{}');
+            applyAdminTheme(['civic', 'glass'].includes(preferences.adminTheme) ? preferences.adminTheme : 'default');
             return preferences.compactMode === true;
         } catch (error) {
             console.warn('Compact mode preference could not be read.', error);
+            applyAdminTheme('default');
             return false;
         }
     };
@@ -94,6 +100,9 @@ if (document.body.classList.contains('admin-body')) {
         if (event.key === compactModeStorageKey) applyCompactMode(readCompactMode());
     });
     window.addEventListener('adminpreferenceschange', function (event) {
+        if (event.detail && typeof event.detail.adminTheme === 'string') {
+            applyAdminTheme(['civic', 'glass'].includes(event.detail.adminTheme) ? event.detail.adminTheme : 'default');
+        }
         if (event.detail && typeof event.detail.compactMode === 'boolean') {
             applyCompactMode(event.detail.compactMode);
         }
@@ -129,7 +138,7 @@ if (document.body.classList.contains('admin-body')) {
                     options.method = 'POST';
                     options.body = formData;
                 }
-                const response = await fetch('dashboard.php?mobile_console=1', options);
+                const response = await fetch('dashboard?mobile_console=1', options);
                 const data = await response.json();
                 if (!response.ok || !data.success) {
                     throw new Error(data.message || 'Could not update the CMD log.');
@@ -171,7 +180,7 @@ if (document.body.classList.contains('admin-body')) {
     let latestObservedDocumentId = Number.isSafeInteger(latestDocumentAttribute) ? latestDocumentAttribute : 0;
     let hasDocumentActivityBaseline = document.body.dataset.documentActivityReady === 'true';
     const adminPreferenceStorageKey = 'ceit-admin-preferences-v1';
-    const defaultAdminPreferences = { activityInterval: 15, soundAlerts: true, desktopAlerts: false, pendingBubble: true, assistantEnabled: true, compactMode: false };
+    const defaultAdminPreferences = { activityInterval: 15, soundAlerts: true, desktopAlerts: false, pendingBubble: true, assistantEnabled: true, compactMode: false, adminTheme: 'default' };
     const readAdminPreferences = function () {
         try {
             const saved = JSON.parse(window.localStorage.getItem(adminPreferenceStorageKey) || '{}');
@@ -181,7 +190,8 @@ if (document.body.classList.contains('admin-body')) {
                 desktopAlerts: saved.desktopAlerts === true,
                 pendingBubble: saved.pendingBubble !== false,
                 assistantEnabled: saved.assistantEnabled !== false,
-                compactMode: saved.compactMode === true
+                compactMode: saved.compactMode === true,
+                adminTheme: ['civic', 'glass'].includes(saved.adminTheme) ? saved.adminTheme : defaultAdminPreferences.adminTheme
             };
         } catch (error) {
             console.warn('Admin preferences could not be read; using default monitoring settings.', error);
@@ -276,11 +286,14 @@ if (document.body.classList.contains('admin-body')) {
                 desktopAlerts: preferences.desktopAlerts === true,
                 pendingBubble: preferences.pendingBubble !== false,
                 assistantEnabled: preferences.assistantEnabled !== false,
-                compactMode: preferences.compactMode === true
+                compactMode: preferences.compactMode === true,
+                adminTheme: ['civic', 'glass'].includes(preferences.adminTheme) ? preferences.adminTheme : defaultAdminPreferences.adminTheme
             };
         } else {
             adminPreferences = readAdminPreferences();
         }
+        document.body.classList.toggle('admin-theme-civic', adminPreferences.adminTheme === 'civic');
+        document.body.classList.toggle('admin-theme-glass', adminPreferences.adminTheme === 'glass');
         if (!adminPreferences.soundAlerts) pendingNotificationTone = false;
         const pendingShortcut = document.querySelector('.pending-documents-float');
         if (pendingShortcut) {

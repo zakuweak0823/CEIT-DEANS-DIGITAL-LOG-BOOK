@@ -185,10 +185,36 @@ for ($i = 5; $i >= 0; $i--) {
 <?php include 'header.php'; ?>
 <div class="row g-3 dashboard-page">
     <div class="col-12">
+        <section class="civic-dashboard-hero" aria-labelledby="civicDashboardTitle">
+            <div class="civic-dashboard-hero-copy">
+                <span class="civic-dashboard-kicker"><i class="bi bi-grid-1x2" aria-hidden="true"></i> OFFICE OVERVIEW <span aria-hidden="true"></span> <?php echo sanitize(date('l, F j')); ?></span>
+                <h1 id="civicDashboardTitle">Office activity, in focus.</h1>
+                <p>Track document flow, follow-ups, and today’s work from one place.</p>
+                <div class="civic-dashboard-actions">
+                    <a href="incoming?status=Pending"><i class="bi bi-inbox" aria-hidden="true"></i> Review incoming <span><?php echo number_format((int)$pendingIncoming); ?></span></a>
+                    <a href="records"><i class="bi bi-arrow-up-right" aria-hidden="true"></i> Browse records</a>
+                </div>
+            </div>
+            <div class="civic-dashboard-hero-aside" aria-label="Today's activity">
+                <span class="civic-dashboard-aside-label">TODAY'S ACTIVITY</span>
+                <div class="civic-dashboard-total">
+                    <strong><?php echo number_format((int)$incomingToday + (int)$outgoingToday); ?></strong>
+                    <span>documents recorded</span>
+                </div>
+                <div class="civic-dashboard-split">
+                    <span><i class="bi bi-arrow-down-left" aria-hidden="true"></i><strong><?php echo number_format((int)$incomingToday); ?></strong><small>Incoming</small></span>
+                    <span><i class="bi bi-arrow-up-right" aria-hidden="true"></i><strong><?php echo number_format((int)$outgoingToday); ?></strong><small>Outgoing</small></span>
+                </div>
+                <span class="civic-dashboard-updated"><i class="bi bi-clock-history" aria-hidden="true"></i> Snapshot at <?php echo sanitize(date('g:i A')); ?></span>
+            </div>
+            <span class="civic-dashboard-orbit civic-dashboard-orbit-one" aria-hidden="true"></span>
+            <span class="civic-dashboard-orbit civic-dashboard-orbit-two" aria-hidden="true"></span>
+        </section>
+    </div>
+    <div class="col-12">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-1 dashboard-welcome">
             <div>
-                <?php $dashboardGreeting = (int)date('G') < 12 ? 'Good morning' : ((int)date('G') < 17 ? 'Good afternoon' : 'Good evening'); ?>
-                <h2 class="mb-1 text-primary"><?php echo sanitize($dashboardGreeting . ', ' . (string)($_SESSION['admin'] ?? 'Admin')); ?>.</h2>
+                <h2 class="mb-1 text-primary">Office activity</h2>
                 <p class="text-muted mb-0">Review priority follow-ups and the latest office activity below.</p>
             </div>
         </div>

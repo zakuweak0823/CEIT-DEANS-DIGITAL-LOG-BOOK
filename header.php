@@ -3,6 +3,10 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 $adminName = $_SESSION['admin'] ?? null;
+$showAdminLoginArrival = $adminName !== null && !empty($_SESSION['admin_login_arrival']);
+if ($showAdminLoginArrival) {
+    unset($_SESSION['admin_login_arrival']);
+}
 $today = date('F j, Y');
 $time = date('g:i A');
 // The router preserves the original script filename so active navigation works with clean URLs.
@@ -62,11 +66,29 @@ if ($adminName && isset($conn) && function_exists('safe_query')) {
     <title>CEIT Deans Office Digital Logbook</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="assets/css/style.css?v=compact-quick-actions-36">
+    <link rel="stylesheet" href="assets/css/style.css?v=prism-glass-green-2">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body<?php echo $adminName ? ' class="admin-body' . (($_GET['embed'] ?? '') === '1' ? ' admin-embedded-body' : '') . '" data-latest-document-id="' . (int)($latestDocumentId ?? 0) . '" data-document-activity-ready="' . ($latestDocumentId === null ? 'false' : 'true') . '"' : ''; ?>>
+<body<?php echo $adminName ? ' class="admin-body' . ($showAdminLoginArrival ? ' admin-login-arrival' : '') . (($_GET['embed'] ?? '') === '1' ? ' admin-embedded-body' : '') . '" data-latest-document-id="' . (int)($latestDocumentId ?? 0) . '" data-document-activity-ready="' . ($latestDocumentId === null ? 'false' : 'true') . '"' : ($currentPage === 'login.php' ? ' class="login-page"' : ''); ?>>
 <?php if ($adminName): ?>
+<script>
+try {
+    const theme = JSON.parse(window.localStorage.getItem('ceit-admin-preferences-v1') || '{}').adminTheme;
+    if (theme === 'civic' || theme === 'glass') document.body.classList.add('admin-theme-' + theme);
+} catch (error) {
+    console.warn('Admin appearance preference could not be applied before rendering.', error);
+}
+</script>
+<?php endif; ?>
+<?php if ($adminName): ?>
+    <?php if ($showAdminLoginArrival): ?>
+        <div class="admin-login-transition" role="status" aria-live="polite">
+            <span class="admin-login-transition-mark"><img src="assets/images/CVSU.jpeg" alt=""></span>
+            <span class="admin-login-transition-title">Welcome back</span>
+            <span class="admin-login-transition-caption">Opening your workspace</span>
+            <span class="admin-login-transition-progress" aria-hidden="true"></span>
+        </div>
+    <?php endif; ?>
     <?php
     $pendingBadge = $pendingDocumentCount === null ? '!' : ($pendingDocumentCount > 99 ? '99+' : (string)$pendingDocumentCount);
     $pendingLabel = $pendingDocumentCount === null
@@ -157,6 +179,11 @@ if ($adminName && isset($conn) && function_exists('safe_query')) {
             <a href="reports" class="sidebar-link<?php echo $isDocumentReportActive ? ' active' : ''; ?>"<?php echo $isDocumentReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-file-earmark-text me-2"></i>Document Reports</a>
             <a href="reports?report_type=Borrowed%20Items&amp;generate=1" class="sidebar-link<?php echo $isBorrowedReportActive ? ' active' : ''; ?>"<?php echo $isBorrowedReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-clipboard-data me-2"></i>Borrowed Items Reports</a>
             <a href="reports?report_type=SMS%20Logs&amp;generate=1" class="sidebar-link<?php echo $isSmsReportActive ? ' active' : ''; ?>"<?php echo $isSmsReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-left-text me-2"></i>SMS Reports</a>
+        </div>
+        <div class="civic-sidebar-footer">
+            <span class="civic-sidebar-status"><i aria-hidden="true"></i> LOCAL WORKSPACE</span>
+            <span class="civic-sidebar-footer-copy">Your office records, in one place.</span>
+            <a href="settings"><i class="bi bi-sliders2" aria-hidden="true"></i>Workspace settings<i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
         </div>
     </aside>
     <div class="main-panel">
@@ -285,27 +312,33 @@ if ($adminName && isset($conn) && function_exists('safe_query')) {
         </div>
         <main class="admin-content container-fluid">
 <?php else: ?>
-<nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm<?php echo $currentPage === 'login.php' ? ' login-page-navbar' : ''; ?>">
     <div class="container">
         <a class="navbar-brand d-flex align-items-center" href="dashboard">
-            <span class="brand-icon me-2">CVSU</span>
+            <?php if ($currentPage === 'login.php'): ?>
+                <img class="login-brand-logo me-3" src="assets/images/CVSU.jpeg" alt="">
+            <?php else: ?>
+                <span class="brand-icon me-2">CVSU</span>
+            <?php endif; ?>
             <div>
                 <div class="fw-bold">CEIT Deans Office Digital Logbook</div>
                 <small class="text-light opacity-75">Dean's Office</small>
             </div>
         </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu" aria-controls="navMenu" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navMenu">
-            <ul class="navbar-nav ms-auto align-items-center">
-                <li class="nav-item"><a class="nav-link" href="login">Admin Login</a></li>
-                <li class="nav-item ms-lg-3 mt-3 mt-lg-0">
-                    <span class="badge bg-light text-primary py-2 px-3"><?php echo $today; ?> &bull; <?php echo $time; ?></span>
-                </li>
-            </ul>
-        </div>
+        <?php if ($currentPage !== 'login.php'): ?>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu" aria-controls="navMenu" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navMenu">
+                <ul class="navbar-nav ms-auto align-items-center">
+                    <li class="nav-item"><a class="nav-link" href="login">Admin Login</a></li>
+                    <li class="nav-item ms-lg-3 mt-3 mt-lg-0">
+                        <span class="badge bg-light text-primary py-2 px-3"><?php echo $today; ?> &bull; <?php echo $time; ?></span>
+                    </li>
+                </ul>
+            </div>
+        <?php endif; ?>
     </div>
 </nav>
-<main class="container my-5">
+<main class="<?php echo $currentPage === 'login.php' ? 'login-page-main' : 'container my-5'; ?>">
 <?php endif; ?>

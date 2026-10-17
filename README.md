@@ -65,6 +65,16 @@ PHP API and MySQL database.
 
 ## Admin workspace options
 
+- **Admin appearances** are available in **Settings** and apply across the
+  portal, including Compact Mode. **Classic** remains the default;
+  **Civic Canvas** offers an editorial green-and-warm-canvas design, while
+  **Prism Glass** uses translucent frosted panels with CvSU-inspired green and
+  soft sage accents. Appearance choices are stored in the current browser.
+- **Dashboard overview** in the alternate appearances replaces the greeting
+  with office activity, today's incoming and outgoing counts, pending incoming
+  work, and shortcuts for common tasks.
+- **Sign-in page** uses a responsive campus-branded visual design while
+  retaining the existing authentication and credential handling.
 - **Compact Mode** turns the admin portal into a mobile-style workspace, even
   on desktop. It hides the sidebar, adds a bottom navigation dock and More
   sheet, and presents records in touch-friendly cards. Its mint-and-cream
