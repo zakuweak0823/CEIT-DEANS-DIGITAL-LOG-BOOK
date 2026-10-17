@@ -1,4 +1,68 @@
 <?php
+function batch_workflow_setting_defaults()
+{
+    return [
+        'intake_confirmation_mode' => 'confirm_with_release',
+        'batch_qr_mode' => 'local_batch_id',
+    ];
+}
+
+function get_batch_workflow_settings($conn)
+{
+    $settings = batch_workflow_setting_defaults();
+    $stmt = safe_query(
+        $conn,
+        "SELECT key_name, value FROM settings WHERE key_name IN ('intake_confirmation_mode', 'batch_qr_mode')"
+    );
+    if ($stmt === false) {
+        throw new RuntimeException('Could not load batch workflow settings.');
+    }
+    $result = mysqli_stmt_get_result($stmt);
+    while ($row = mysqli_fetch_assoc($result)) {
+        $allowedValues = $row['key_name'] === 'intake_confirmation_mode'
+            ? ['confirm_before_release', 'confirm_with_release']
+            : ['local_batch_id', 'tracking_url'];
+        if (array_key_exists($row['key_name'], $settings) && in_array($row['value'], $allowedValues, true)) {
+            $settings[$row['key_name']] = $row['value'];
+        }
+    }
+    mysqli_stmt_close($stmt);
+    return $settings;
+}
+
+function save_batch_workflow_settings($conn, $settings)
+{
+    $defaults = batch_workflow_setting_defaults();
+    foreach ($defaults as $key => $default) {
+        if (!isset($settings[$key]) || !in_array($settings[$key], $key === 'intake_confirmation_mode'
+            ? ['confirm_before_release', 'confirm_with_release']
+            : ['local_batch_id', 'tracking_url'], true)) {
+            return false;
+        }
+    }
+    if (!$conn->begin_transaction()) {
+        return false;
+    }
+    foreach ($defaults as $key => $default) {
+        $stmt = safe_query(
+            $conn,
+            'INSERT INTO settings (key_name, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)',
+            'ss',
+            [$key, $settings[$key]]
+        );
+        if ($stmt === false) {
+            $conn->rollback();
+            return false;
+        }
+        mysqli_stmt_close($stmt);
+    }
+    if (!$conn->commit()) {
+        $conn->rollback();
+        return false;
+    }
+    return true;
+}
+
 function ensure_batch_storage($conn)
 {
     $conn->query("CREATE TABLE IF NOT EXISTS document_batches (
@@ -36,6 +100,17 @@ function ensure_batch_storage($conn)
     $conn->query("ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS recipient_contact_type VARCHAR(20) NOT NULL DEFAULT 'Unassigned'");
     $conn->query('ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS paper_count INT UNSIGNED NOT NULL DEFAULT 0');
     $conn->query('ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS is_priority TINYINT(1) NOT NULL DEFAULT 0');
+    foreach ([
+        'ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS received_paper_count INT UNSIGNED DEFAULT NULL',
+        'ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS intake_expected_count INT UNSIGNED DEFAULT NULL',
+        'ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS intake_notes TEXT',
+        'ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS received_at DATETIME DEFAULT NULL',
+        "ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS received_by VARCHAR(100) NOT NULL DEFAULT ''",
+    ] as $intakeSchemaStatement) {
+        if ($conn->query($intakeSchemaStatement) === false) {
+            throw new RuntimeException('Could not update batch intake storage: ' . $conn->error);
+        }
+    }
     $conn->query("CREATE TABLE IF NOT EXISTS batch_papers (
         paper_id INT AUTO_INCREMENT PRIMARY KEY,
         batch_id INT NOT NULL,

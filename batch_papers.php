@@ -2,7 +2,11 @@
 require_once 'auth.php';
 require_once 'db.php';
 require_once 'batch_support.php';
+require_once 'mobile_form_settings.php';
 ensure_admin();
+
+$mobileFormLabels = get_mobile_form_labels($conn);
+$batchWorkflowSettings = get_batch_workflow_settings($conn);
 
 try {
     ensure_batch_storage($conn);
@@ -23,8 +27,8 @@ $batchType = trim($_POST['batch_type'] ?? '');
 $batchPriority = isset($_POST['is_priority']) ? 1 : 0;
 $batchDate = $_POST['batch_date'] ?? date('Y-m-d');
 $senderType = $_POST['sender_type'] ?? 'Student';
-$recipientContactType = $_POST['recipient_contact_type'] ?? 'Unassigned';
-$recipient = contact_number_input($_POST['recipient'] ?? '') ?? '';
+$recipientContactType = $mobileFormLabels['recipientEnabled'] ? ($_POST['recipient_contact_type'] ?? 'Unassigned') : 'Unassigned';
+$recipient = $mobileFormLabels['recipientEnabled'] ? (contact_number_input($_POST['recipient'] ?? '') ?? '') : '';
 $paperCount = (int)($_POST['paper_count'] ?? 1);
 $batchRemarks = trim($_POST['remarks'] ?? '');
 $search = trim($_GET['search'] ?? '');
@@ -36,20 +40,23 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (isset($_POST['scan_batch_qr'])) {
         header('Content-Type: application/json; charset=utf-8');
         $trackingToken = trim($_POST['tracking_token'] ?? '');
-        if (!preg_match('/^[a-f0-9]{64}$/', $trackingToken)) {
+        $batchCode = trim($_POST['batch_code'] ?? '');
+        if ((!preg_match('/^[a-f0-9]{64}$/', $trackingToken) && $batchCode === '') ||
+            ($batchCode !== '' && !preg_match('/^[A-Z0-9-]{1,32}$/', $batchCode))) {
             http_response_code(400);
-            echo json_encode(['success' => false, 'message' => 'This QR code is not a valid CEIT batch tracking code.']);
+            echo json_encode(['success' => false, 'message' => 'This QR code is not a valid CEIT batch code.']);
             exit;
         }
 
         $stmt = safe_query(
             $conn,
-            'SELECT b.batch_id, b.batch_code, b.document_type, b.batch_type, b.status, b.batch_date, b.paper_count, b.is_priority
+            'SELECT b.batch_id, b.batch_code, b.document_type, b.batch_type, b.status, b.batch_date, b.paper_count, b.is_priority,
+                    b.tracking_token, b.received_paper_count, b.intake_expected_count, b.intake_notes, b.received_at, b.received_by
              FROM document_batches b
-             WHERE b.tracking_token = ?
+             WHERE (? <> \'\' AND b.tracking_token = ?) OR (? <> \'\' AND b.batch_code = ?)
              LIMIT 1',
-            's',
-            [$trackingToken]
+            'ssss',
+            [$trackingToken, $trackingToken, $batchCode, $batchCode]
         );
         if ($stmt === false) {
             http_response_code(500);
@@ -63,11 +70,17 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($row) {
             $batch = [
                 'code' => $row['batch_code'],
+                'trackingToken' => $row['tracking_token'],
                 'type' => $row['batch_type'],
                 'date' => $row['batch_date'],
                 'paperCount' => (int)$row['paper_count'],
                 'status' => $row['status'],
                 'isPriority' => (int)$row['is_priority'],
+                'receivedPaperCount' => $row['received_paper_count'] === null ? null : (int)$row['received_paper_count'],
+                'intakeExpectedCount' => $row['intake_expected_count'] === null ? null : (int)$row['intake_expected_count'],
+                'receivedAt' => $row['received_at'],
+                'receivedBy' => $row['received_by'],
+                'intakeNotes' => $row['intake_notes'],
             ];
         }
         mysqli_stmt_close($stmt);
@@ -79,6 +92,120 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         echo json_encode(['success' => true, 'batch' => $batch]);
         exit;
+    } elseif (isset($_POST['confirm_batch_intake'])) {
+        header('Content-Type: application/json; charset=utf-8');
+        if ($batchWorkflowSettings['intake_confirmation_mode'] !== 'confirm_before_release') {
+            http_response_code(409);
+            echo json_encode(['success' => false, 'message' => 'Use the batch status action to confirm receipt and move the batch to For Release.']);
+            exit;
+        }
+        $trackingToken = trim($_POST['tracking_token'] ?? '');
+        $receivedCount = filter_var($_POST['received_paper_count'] ?? null, FILTER_VALIDATE_INT);
+        $intakeNotesInput = $_POST['intake_notes'] ?? '';
+        $intakeNotes = is_string($intakeNotesInput) ? trim($intakeNotesInput) : '';
+        if (!preg_match('/^[a-f0-9]{64}$/', $trackingToken) ||
+            !is_string($intakeNotesInput) ||
+            $receivedCount === false || $receivedCount < 0 || $receivedCount > 9999 ||
+            strlen($intakeNotes) > 1000) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Enter a received paper count from 0 to 9,999 and a note of no more than 1,000 characters.']);
+            exit;
+        }
+
+        try {
+            $conn->begin_transaction();
+            $stmt = safe_query(
+                $conn,
+                'SELECT batch_id, batch_code, batch_type, batch_date, paper_count, status, is_priority,
+                        received_paper_count, intake_expected_count, intake_notes, received_at, received_by
+                 FROM document_batches WHERE tracking_token = ? FOR UPDATE',
+                's',
+                [$trackingToken]
+            );
+            if ($stmt === false) {
+                throw new RuntimeException('Could not verify the batch QR.');
+            }
+            $row = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+            mysqli_stmt_close($stmt);
+            if (!$row) {
+                throw new RuntimeException('This QR code was not issued by the CEIT batch tracking system.');
+            }
+            if ($row['received_at'] !== null) {
+                $conn->commit();
+                echo json_encode(['success' => true, 'alreadyConfirmed' => true, 'batch' => [
+                    'code' => $row['batch_code'],
+                    'type' => $row['batch_type'],
+                    'date' => $row['batch_date'],
+                    'paperCount' => (int)$row['paper_count'],
+                    'status' => $row['status'],
+                    'isPriority' => (int)$row['is_priority'],
+                    'receivedPaperCount' => (int)$row['received_paper_count'],
+                    'intakeExpectedCount' => (int)$row['intake_expected_count'],
+                    'intakeNotes' => $row['intake_notes'],
+                    'receivedAt' => $row['received_at'],
+                    'receivedBy' => $row['received_by'],
+                ]]);
+                exit;
+            }
+            if ($row['status'] !== 'Pending') {
+                throw new DomainException('Receipt confirmation is available only while the batch is Pending.');
+            }
+            if ((int)$row['paper_count'] < 1 || (int)$row['paper_count'] > 9999) {
+                throw new RuntimeException('This batch has an invalid expected paper count. Update the batch before confirming receipt.');
+            }
+            if ($receivedCount !== (int)$row['paper_count'] && $intakeNotes === '') {
+                throw new InvalidArgumentException('Add a note describing the count difference before confirming receipt.');
+            }
+
+            $receivedBy = trim((string)($_SESSION['admin'] ?? 'Staff'));
+            $stmt = safe_query(
+                $conn,
+                'UPDATE document_batches
+                 SET received_paper_count = ?, intake_expected_count = paper_count, intake_notes = ?, received_at = NOW(), received_by = ?
+                 WHERE batch_id = ? AND received_at IS NULL',
+                'issi',
+                [$receivedCount, $intakeNotes, $receivedBy, $row['batch_id']]
+            );
+            if ($stmt === false || mysqli_stmt_affected_rows($stmt) !== 1) {
+                if ($stmt !== false) mysqli_stmt_close($stmt);
+                throw new RuntimeException('The intake receipt could not be saved. Refresh the batch and try again.');
+            }
+            mysqli_stmt_close($stmt);
+            $receiptStmt = safe_query($conn, 'SELECT received_at FROM document_batches WHERE batch_id = ?', 'i', [$row['batch_id']]);
+            if ($receiptStmt === false) {
+                throw new RuntimeException('The confirmation time could not be verified.');
+            }
+            $receiptRow = mysqli_fetch_assoc(mysqli_stmt_get_result($receiptStmt));
+            mysqli_stmt_close($receiptStmt);
+            if (!$receiptRow || !$receiptRow['received_at']) {
+                throw new RuntimeException('The receipt confirmation time could not be verified.');
+            }
+            $conn->commit();
+            echo json_encode(['success' => true, 'batch' => [
+                'code' => $row['batch_code'],
+                'type' => $row['batch_type'],
+                'date' => $row['batch_date'],
+                'paperCount' => (int)$row['paper_count'],
+                'status' => $row['status'],
+                'isPriority' => (int)$row['is_priority'],
+                'receivedPaperCount' => $receivedCount,
+                'intakeExpectedCount' => (int)$row['paper_count'],
+                'intakeNotes' => $intakeNotes,
+                'receivedAt' => $receiptRow['received_at'],
+                'receivedBy' => $receivedBy,
+            ]]);
+        } catch (Throwable $error) {
+            $conn->rollback();
+            if ($error instanceof DomainException || $error instanceof InvalidArgumentException) {
+                http_response_code(409);
+                echo json_encode(['success' => false, 'message' => $error->getMessage()]);
+            } else {
+                error_log('Batch intake confirmation failed: ' . $error->getMessage());
+                http_response_code(500);
+                echo json_encode(['success' => false, 'message' => 'The intake receipt could not be saved. No receipt was issued.']);
+            }
+        }
+        exit;
     } elseif (isset($_POST['set_batch_status'])) {
         $batchId = (int)($_POST['status_batch_id'] ?? 0);
         if ($batchId <= 0) {
@@ -86,7 +213,7 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 $conn->begin_transaction();
-                $stmt = safe_query($conn, 'SELECT status FROM document_batches WHERE batch_id = ? FOR UPDATE', 'i', [$batchId]);
+                $stmt = safe_query($conn, 'SELECT status, paper_count, received_at FROM document_batches WHERE batch_id = ? FOR UPDATE', 'i', [$batchId]);
                 if ($stmt === false) {
                     throw new RuntimeException('Could not verify the batch status.');
                 }
@@ -100,6 +227,39 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     : ($currentBatch['status'] === 'For Release' ? 'Released' : '');
                 if ($nextStatus === '') {
                     throw new RuntimeException('This batch has already been released.');
+                }
+                if ($currentBatch['status'] === 'Pending' && $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_before_release' && $currentBatch['received_at'] === null) {
+                    throw new DomainException('Confirm the received paper count using Scan CEIT QR before moving this batch to For Release.');
+                }
+
+                if ($currentBatch['status'] === 'Pending' &&
+                    $currentBatch['received_at'] === null &&
+                    $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_with_release') {
+                    $receivedCount = filter_var($_POST['status_received_count'] ?? null, FILTER_VALIDATE_INT);
+                    $notesInput = $_POST['status_intake_notes'] ?? '';
+                    $intakeNotes = is_string($notesInput) ? trim($notesInput) : '';
+                    if ((int)$currentBatch['paper_count'] < 1 || (int)$currentBatch['paper_count'] > 9999 ||
+                        $receivedCount === false || $receivedCount < 0 || $receivedCount > 9999 ||
+                        !is_string($notesInput) || strlen($intakeNotes) > 1000) {
+                        throw new DomainException('Enter a received count from 0 to 9,999 and a note of no more than 1,000 characters.');
+                    }
+                    if ($receivedCount !== (int)$currentBatch['paper_count'] && $intakeNotes === '') {
+                        throw new DomainException('Add a note describing the count difference before moving the batch to For Release.');
+                    }
+                    $receivedBy = trim((string)($_SESSION['admin'] ?? ''));
+                    $receiptStmt = safe_query(
+                        $conn,
+                        'UPDATE document_batches
+                         SET received_paper_count = ?, intake_expected_count = paper_count, intake_notes = ?, received_at = NOW(), received_by = ?
+                         WHERE batch_id = ? AND received_at IS NULL',
+                        'issi',
+                        [$receivedCount, $intakeNotes, $receivedBy, $batchId]
+                    );
+                    if ($receiptStmt === false || mysqli_stmt_affected_rows($receiptStmt) !== 1) {
+                        if ($receiptStmt !== false) mysqli_stmt_close($receiptStmt);
+                        throw new RuntimeException('Could not save the intake receipt.');
+                    }
+                    mysqli_stmt_close($receiptStmt);
                 }
                 $stmt = safe_query($conn, 'UPDATE document_batches SET status = ? WHERE batch_id = ?', 'si', [$nextStatus, $batchId]);
                 if ($stmt === false) {
@@ -117,11 +277,15 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 mysqli_stmt_close($stmt);
                 $conn->commit();
-                $_SESSION['batch_flash'] = show_alert('Batch status updated to ' . $nextStatus . '.');
+                $_SESSION['batch_flash'] = show_alert(
+                    $currentBatch['status'] === 'Pending' && $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_with_release' && $currentBatch['received_at'] === null
+                        ? 'Receipt confirmed and batch status updated to ' . $nextStatus . '.'
+                        : 'Batch status updated to ' . $nextStatus . '.'
+                );
             } catch (Throwable $error) {
                 $conn->rollback();
                 error_log('Batch status update failed: ' . $error->getMessage());
-                $_SESSION['batch_flash'] = show_alert('Batch status could not be updated.', 'danger');
+                $_SESSION['batch_flash'] = show_alert($error instanceof DomainException ? $error->getMessage() : 'Batch status could not be updated.', 'danger');
             }
         }
         header('Location: batch_papers' . ($search !== '' ? '?search=' . rawurlencode($search) : ''));
@@ -232,7 +396,7 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($batchId > 0) {
             try {
                 $conn->begin_transaction();
-                $existsStmt = safe_query($conn, 'SELECT batch_id, status FROM document_batches WHERE batch_id = ? FOR UPDATE', 'i', [$batchId]);
+                $existsStmt = safe_query($conn, 'SELECT batch_id, status, paper_count, received_at FROM document_batches WHERE batch_id = ? FOR UPDATE', 'i', [$batchId]);
                 if ($existsStmt === false) {
                     throw new RuntimeException('Could not verify the batch.');
                 }
@@ -240,6 +404,9 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 mysqli_stmt_close($existsStmt);
                 if (!$existingBatch) {
                     throw new RuntimeException('The batch was not found.');
+                }
+                if ($existingBatch['received_at'] !== null && $paperCount !== (int)$existingBatch['paper_count']) {
+                    throw new RuntimeException('The expected paper count cannot be changed after staff confirm receipt.');
                 }
                 $batchStatus = $existingBatch['status'];
                 $recipientValue = $recipientContactType === 'Unassigned' ? '' : $recipient;
@@ -254,7 +421,9 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new RuntimeException('Could not update batch details.');
                 }
                 mysqli_stmt_close($stmt);
-                $legacyRecipient = $recipientValue === '' ? 'Unassigned' : $recipientValue;
+                $legacyRecipient = !$mobileFormLabels['recipientEnabled'] && $recipientValue === ''
+                    ? ''
+                    : ($recipientValue === '' ? 'Unassigned' : $recipientValue);
                 $legacyPhone = $recipientContactType === 'Contact' ? $recipientValue : null;
                 // Keep legacy document fields synchronized because existing reports and screens query documents.
                 $stmt = safe_query(
@@ -312,7 +481,14 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 $conn->begin_transaction();
-                $batchStmt = safe_query($conn, 'SELECT batch_id FROM batch_papers WHERE paper_id = ? FOR UPDATE', 'i', [$paperId]);
+                $batchStmt = safe_query(
+                    $conn,
+                    'SELECT p.batch_id, b.received_at
+                     FROM batch_papers p INNER JOIN document_batches b ON b.batch_id = p.batch_id
+                     WHERE p.paper_id = ? FOR UPDATE',
+                    'i',
+                    [$paperId]
+                );
                 if ($batchStmt === false) {
                     throw new RuntimeException('Could not find the paper entry.');
                 }
@@ -320,6 +496,9 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 mysqli_stmt_close($batchStmt);
                 if (!$paperBatch) {
                     throw new RuntimeException('The paper entry was not found.');
+                }
+                if ($paperBatch['received_at'] !== null) {
+                    throw new DomainException('A paper cannot be removed after the batch receipt has been confirmed.');
                 }
                 $stmt = safe_query(
                     $conn,
@@ -344,7 +523,7 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
             } catch (Throwable $error) {
                 $conn->rollback();
                 error_log('Batch paper deletion failed: ' . $error->getMessage());
-                $message = show_alert('The paper could not be removed from the batch.', 'danger');
+                $message = show_alert($error instanceof DomainException ? $error->getMessage() : 'The paper could not be removed from the batch.', 'danger');
             }
         }
     } elseif (isset($_POST['delete_batch'])) {
@@ -352,6 +531,18 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($batchId > 0) {
             try {
                 $conn->begin_transaction();
+                $checkStmt = safe_query($conn, 'SELECT received_at FROM document_batches WHERE batch_id = ? FOR UPDATE', 'i', [$batchId]);
+                if ($checkStmt === false) {
+                    throw new RuntimeException('Could not verify the batch.');
+                }
+                $batchForDeletion = mysqli_fetch_assoc(mysqli_stmt_get_result($checkStmt));
+                mysqli_stmt_close($checkStmt);
+                if (!$batchForDeletion) {
+                    throw new RuntimeException('The batch was not found.');
+                }
+                if ($batchForDeletion['received_at'] !== null) {
+                    throw new DomainException('A batch cannot be deleted after its receipt has been confirmed.');
+                }
                 $stmt = safe_query(
                     $conn,
                     'DELETE d FROM documents d INNER JOIN batch_papers p ON p.doc_id = d.doc_id WHERE p.batch_id = ?',
@@ -374,9 +565,14 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
             } catch (Throwable $error) {
                 $conn->rollback();
                 error_log('Batch papers deletion failed: ' . $error->getMessage());
+                if ($error instanceof DomainException) {
+                    $message = show_alert($error->getMessage(), 'danger');
+                }
             }
         }
-        $message = show_alert('Unable to delete the selected batch.', 'danger');
+        if ($message === '') {
+            $message = show_alert('Unable to delete the selected batch.', 'danger');
+        }
     }
 }
 
@@ -498,27 +694,27 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                     </div>
                     <div class="col-12 col-md-6">
                     <div class="mb-3">
-                        <label class="form-label" for="batchSenderType">From</label>
+                        <label class="form-label" for="batchSenderType"><?php echo sanitize($mobileFormLabels['sender']); ?></label>
                         <select class="form-select" id="batchSenderType" name="sender_type" required>
                             <option value="Student" <?php echo $senderType === 'Student' ? 'selected' : ''; ?>>Student</option>
                             <option value="Faculty" <?php echo $senderType === 'Faculty' ? 'selected' : ''; ?>>Faculty</option>
                         </select>
                     </div>
                     </div>
-                    <div class="col-12 col-md-6">
+                    <div class="col-12 col-md-6" <?php echo $mobileFormLabels['recipientEnabled'] ? '' : 'hidden'; ?>>
                     <div class="mb-3">
                         <label class="form-label" for="batchRecipientType">Recipient contact type</label>
-                        <select class="form-select" id="batchRecipientType" name="recipient_contact_type" required>
+                        <select class="form-select" id="batchRecipientType" name="recipient_contact_type" required <?php echo $mobileFormLabels['recipientEnabled'] ? '' : 'disabled'; ?>>
                             <option value="Email" <?php echo $recipientContactType === 'Email' ? 'selected' : ''; ?>>Email</option>
                             <option value="Contact" <?php echo $recipientContactType === 'Contact' ? 'selected' : ''; ?>>Contact</option>
                             <option value="Unassigned" <?php echo $recipientContactType === 'Unassigned' ? 'selected' : ''; ?>>Unassigned</option>
                         </select>
                     </div>
                     </div>
-                    <div class="col-12 col-md-6">
+                    <div class="col-12 col-md-6" <?php echo $mobileFormLabels['recipientEnabled'] ? '' : 'hidden'; ?>>
                     <div class="mb-3">
-                        <label class="form-label" for="batchRecipient">Recipient</label>
-                        <input class="form-control" type="text" id="batchRecipient" name="recipient" maxlength="255" value="<?php echo sanitize($recipient); ?>" placeholder="Select email or contact type" readonly>
+                        <label class="form-label" for="batchRecipient" data-base-label="<?php echo sanitize($mobileFormLabels['recipient']); ?>"><?php echo sanitize($mobileFormLabels['recipient']); ?></label>
+                        <input class="form-control" type="text" id="batchRecipient" name="recipient" maxlength="255" value="<?php echo sanitize($recipient); ?>" placeholder="Select email or contact type" readonly <?php echo $mobileFormLabels['recipientEnabled'] ? '' : 'disabled'; ?>>
                     </div>
                     </div>
                     <div class="col-12">
@@ -533,11 +729,12 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                     <div class="mb-3">
                         <label class="form-label" for="batchPaperCount">Number of papers</label>
                         <input class="form-control" type="number" id="batchPaperCount" name="paper_count" min="1" max="9999" value="<?php echo $paperCount; ?>" required>
+                        <div class="form-text" id="batchPaperCountLockedHelp" hidden>The expected count is locked because staff have confirmed the intake receipt.</div>
                     </div>
                     </div>
                     <div class="col-12">
                     <div class="mb-3">
-                        <label class="form-label" for="batchRemarks">Batch remarks</label>
+                        <label class="form-label" for="batchRemarks"><?php echo sanitize($mobileFormLabels['remarks']); ?></label>
                         <textarea class="form-control" id="batchRemarks" name="remarks" rows="2"><?php echo sanitize($batchRemarks); ?></textarea>
                     </div>
                     </div>
@@ -583,7 +780,16 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                         <td><?php echo sanitize($batch['batch_type']); ?></td>
                                         <td><span class="badge <?php echo $batch['status'] === 'Released' ? 'text-bg-success' : ($batch['status'] === 'For Release' ? 'text-bg-primary' : 'text-bg-warning'); ?>"><?php echo sanitize($batch['status']); ?></span></td>
                                         <td><?php echo sanitize($batch['sender_type']); ?><br><small class="text-muted"><?php echo sanitize($batch['recipient_contact_type']); ?><?php echo $batch['recipient'] !== '' ? ': ' . sanitize($batch['recipient']) : ''; ?></small></td>
-                                        <td><?php echo (int)$batch['paper_count']; ?></td>
+                                        <td>
+                                            <?php echo (int)$batch['paper_count']; ?> expected
+                                            <?php if ($batch['received_at'] !== null): ?>
+                                                <br><small class="<?php echo (int)$batch['received_paper_count'] === (int)$batch['intake_expected_count'] ? 'text-success' : 'text-danger'; ?>">
+                                                    <?php echo (int)$batch['received_paper_count']; ?> received · <?php echo sanitize(date('M j, g:i A', strtotime($batch['received_at']))); ?>
+                                                </small>
+                                            <?php else: ?>
+                                                <br><small class="text-muted">Awaiting count</small>
+                                            <?php endif; ?>
+                                        </td>
                                         <td class="text-nowrap">
                                                 <form method="POST" class="d-inline">
                                                     <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
@@ -598,10 +804,23 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                                         <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                                                         <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
                                                         <input type="hidden" name="status_batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
-                                                        <button class="btn btn-sm <?php echo $batch['status'] === 'For Release' ? 'btn-success' : 'btn-outline-primary'; ?>" type="submit" name="set_batch_status"
-                                                            data-confirm-title="<?php echo $batch['status'] === 'For Release' ? 'Mark batch as Released?' : 'Move batch to For Release?'; ?>"
-                                                            data-confirm-message="<?php echo $batch['status'] === 'For Release' ? 'This will mark the batch and its linked papers as Released.' : 'This will move the batch and its linked papers to For Release.'; ?>"
-                                                            data-confirm-button="<?php echo $batch['status'] === 'For Release' ? 'Released' : 'For Release'; ?>">
+                                                        <button class="btn btn-sm <?php echo $batch['status'] === 'For Release' ? 'btn-success' : 'btn-outline-primary'; ?>"
+                                                            type="<?php echo $batch['status'] === 'Pending' && $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_with_release' && $batch['received_at'] === null ? 'button' : 'submit'; ?>"
+                                                            <?php if ($batch['status'] === 'Pending' && $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_with_release' && $batch['received_at'] === null): ?>
+                                                                data-bs-toggle="modal" data-bs-target="#confirmBatchReleaseModal"
+                                                                data-batch-id="<?php echo (int)$batch['batch_id']; ?>"
+                                                                data-batch-code="<?php echo sanitize($batch['batch_code']); ?>"
+                                                                data-paper-count="<?php echo (int)$batch['paper_count']; ?>"
+                                                            <?php else: ?>
+                                                                name="set_batch_status"
+                                                                <?php if ($batch['status'] === 'Pending' && $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_before_release' && $batch['received_at'] === null): ?>
+                                                                    disabled title="Confirm receipt using Scan CEIT QR before moving this batch to For Release."
+                                                                <?php else: ?>
+                                                                    data-confirm-title="<?php echo $batch['status'] === 'For Release' ? 'Mark batch as Released?' : 'Move batch to For Release?'; ?>"
+                                                                    data-confirm-message="<?php echo $batch['status'] === 'For Release' ? 'This will mark the batch and its linked papers as Released.' : 'This will move the batch and its linked papers to For Release.'; ?>"
+                                                                    data-confirm-button="<?php echo $batch['status'] === 'For Release' ? 'Released' : 'For Release'; ?>"
+                                                                <?php endif; ?>
+                                                            <?php endif; ?>>
                                                             <?php echo $batch['status'] === 'For Release' ? 'Released' : 'For Release'; ?>
                                                         </button>
                                                     </form>
@@ -619,6 +838,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                                 data-paper-count="<?php echo (int)$batch['paper_count']; ?>"
                                                 data-remarks="<?php echo sanitize($batch['remarks'] ?? ''); ?>"
                                                 data-batch-code="<?php echo sanitize($batch['batch_code']); ?>"
+                                                data-received-at="<?php echo sanitize((string)$batch['received_at']); ?>"
                                                 title="Edit Bulk Papers"><i class="bi bi-pencil"></i></button>
                                             <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#papers<?php echo (int)$batch['batch_id']; ?>" aria-expanded="false" aria-controls="papers<?php echo (int)$batch['batch_id']; ?>" title="View papers"><i class="bi bi-eye"></i></button>
                                             <form method="POST" class="d-inline">
@@ -626,9 +846,11 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                                 <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
                                                 <input type="hidden" name="batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
                                                 <?php if (!empty($batch['tracking_token'])): ?>
-                                                    <button class="btn btn-sm btn-outline-success" type="button" onclick="showBatchQr(<?php echo htmlspecialchars(json_encode($batch['tracking_token'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($batch['batch_code'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)" title="Show batch tracking QR code" aria-label="Show tracking QR code for <?php echo sanitize($batch['batch_code']); ?>"><i class="bi bi-qr-code"></i></button>
+                                                    <button class="btn btn-sm btn-outline-success" type="button" onclick="showBatchQr(<?php echo htmlspecialchars(json_encode($batch['tracking_token'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($batch['batch_code'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($batchWorkflowSettings['batch_qr_mode']), ENT_QUOTES, 'UTF-8'); ?>)" title="Show batch QR code" aria-label="Show QR code for <?php echo sanitize($batch['batch_code']); ?>"><i class="bi bi-qr-code"></i></button>
                                                 <?php endif; ?>
-                                                <button class="btn btn-sm btn-outline-danger" type="submit" name="delete_batch" title="Delete batch" data-confirm-title="Delete this batch?" data-confirm-message="This permanently deletes the batch and all of its associated papers." data-confirm-button="Delete batch"><i class="bi bi-trash"></i></button>
+                                                <?php if ($batch['received_at'] === null): ?>
+                                                    <button class="btn btn-sm btn-outline-danger" type="submit" name="delete_batch" title="Delete batch" data-confirm-title="Delete this batch?" data-confirm-message="This permanently deletes the batch and all of its associated papers." data-confirm-button="Delete batch"><i class="bi bi-trash"></i></button>
+                                                <?php endif; ?>
                                             </form>
                                         </td>
                                     </tr>
@@ -651,14 +873,16 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                                                 <button class="btn btn-sm btn-outline-primary edit-batch-paper" type="button" data-bs-toggle="modal" data-bs-target="#editBatchPaperModal" data-paper-id="<?php echo (int)$paper['paper_id']; ?>" data-paper-subject="<?php echo sanitize($paper['subject']); ?>" data-paper-remarks="<?php echo sanitize($paper['remarks']); ?>">
                                                                     <i class="bi bi-pencil me-1" aria-hidden="true"></i>Edit
                                                                 </button>
-                                                                <form method="POST">
-                                                                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
-                                                                    <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
-                                                                    <input type="hidden" name="paper_id" value="<?php echo (int)$paper['paper_id']; ?>">
-                                                                    <button class="btn btn-sm btn-outline-danger" type="submit" name="delete_batch_paper" data-confirm-title="Remove this paper?" data-confirm-message="This removes the paper and its linked document record from the batch." data-confirm-button="Remove paper">
-                                                                        <i class="bi bi-trash me-1" aria-hidden="true"></i>Remove
-                                                                    </button>
-                                                                </form>
+                                                                <?php if ($batch['received_at'] === null): ?>
+                                                                    <form method="POST">
+                                                                        <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                                                                        <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
+                                                                        <input type="hidden" name="paper_id" value="<?php echo (int)$paper['paper_id']; ?>">
+                                                                        <button class="btn btn-sm btn-outline-danger" type="submit" name="delete_batch_paper" data-confirm-title="Remove this paper?" data-confirm-message="This removes the paper and its linked document record from the batch." data-confirm-button="Remove paper">
+                                                                            <i class="bi bi-trash me-1" aria-hidden="true"></i>Remove
+                                                                        </button>
+                                                                    </form>
+                                                                <?php endif; ?>
                                                             </div>
                                                         </li>
                                                     <?php endforeach; ?>
@@ -698,7 +922,14 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                         <dt class="col-4 text-muted">Recipient</dt>
                                         <dd class="col-8 mb-0 text-break"><?php echo sanitize($batch['recipient_contact_type']); ?><?php echo $batch['recipient'] !== '' ? ': ' . sanitize($batch['recipient']) : ''; ?></dd>
                                         <dt class="col-4 text-muted">Papers</dt>
-                                        <dd class="col-8 mb-0"><?php echo (int)$batch['paper_count']; ?></dd>
+                                        <dd class="col-8 mb-0">
+                                            <?php echo (int)$batch['paper_count']; ?> expected
+                                            <?php if ($batch['received_at'] !== null): ?>
+                                                <br><span class="<?php echo (int)$batch['received_paper_count'] === (int)$batch['intake_expected_count'] ? 'text-success' : 'text-danger'; ?>"><?php echo (int)$batch['received_paper_count']; ?> received at <?php echo sanitize(date('M j, g:i A', strtotime($batch['received_at']))); ?></span>
+                                            <?php else: ?>
+                                                <br><span class="text-muted">Awaiting count</span>
+                                            <?php endif; ?>
+                                        </dd>
                                     </dl>
                                     <div class="d-flex flex-wrap gap-2">
                                             <form method="POST">
@@ -714,10 +945,23 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                                     <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                                                     <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
                                                     <input type="hidden" name="status_batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
-                                                    <button class="btn btn-sm <?php echo $batch['status'] === 'For Release' ? 'btn-success' : 'btn-outline-primary'; ?>" type="submit" name="set_batch_status"
-                                                        data-confirm-title="<?php echo $batch['status'] === 'For Release' ? 'Mark batch as Released?' : 'Move batch to For Release?'; ?>"
-                                                        data-confirm-message="<?php echo $batch['status'] === 'For Release' ? 'This will mark the batch and its linked papers as Released.' : 'This will move the batch and its linked papers to For Release.'; ?>"
-                                                        data-confirm-button="<?php echo $batch['status'] === 'For Release' ? 'Released' : 'For Release'; ?>">
+                                                    <button class="btn btn-sm <?php echo $batch['status'] === 'For Release' ? 'btn-success' : 'btn-outline-primary'; ?>"
+                                                        type="<?php echo $batch['status'] === 'Pending' && $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_with_release' && $batch['received_at'] === null ? 'button' : 'submit'; ?>"
+                                                        <?php if ($batch['status'] === 'Pending' && $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_with_release' && $batch['received_at'] === null): ?>
+                                                            data-bs-toggle="modal" data-bs-target="#confirmBatchReleaseModal"
+                                                            data-batch-id="<?php echo (int)$batch['batch_id']; ?>"
+                                                            data-batch-code="<?php echo sanitize($batch['batch_code']); ?>"
+                                                            data-paper-count="<?php echo (int)$batch['paper_count']; ?>"
+                                                        <?php else: ?>
+                                                            name="set_batch_status"
+                                                            <?php if ($batch['status'] === 'Pending' && $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_before_release' && $batch['received_at'] === null): ?>
+                                                                disabled title="Confirm receipt using Scan CEIT QR before moving this batch to For Release."
+                                                            <?php else: ?>
+                                                                data-confirm-title="<?php echo $batch['status'] === 'For Release' ? 'Mark batch as Released?' : 'Move batch to For Release?'; ?>"
+                                                                data-confirm-message="<?php echo $batch['status'] === 'For Release' ? 'This will mark the batch and its linked papers as Released.' : 'This will move the batch and its linked papers to For Release.'; ?>"
+                                                                data-confirm-button="<?php echo $batch['status'] === 'For Release' ? 'Released' : 'For Release'; ?>"
+                                                            <?php endif; ?>
+                                                        <?php endif; ?>>
                                                         <?php echo $batch['status'] === 'For Release' ? 'Released' : 'For Release'; ?>
                                                     </button>
                                                 </form>
@@ -734,25 +978,26 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                             data-recipient="<?php echo sanitize($batch['recipient']); ?>"
                                             data-paper-count="<?php echo (int)$batch['paper_count']; ?>"
                                             data-remarks="<?php echo sanitize($batch['remarks'] ?? ''); ?>"
-                                            data-batch-code="<?php echo sanitize($batch['batch_code']); ?>">
+                                            data-batch-code="<?php echo sanitize($batch['batch_code']); ?>"
+                                            data-received-at="<?php echo sanitize((string)$batch['received_at']); ?>">
                                             <i class="bi bi-pencil me-1" aria-hidden="true"></i>Edit Bulk Papers
                                         </button>
                                         <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#mobile-papers<?php echo (int)$batch['batch_id']; ?>" aria-expanded="false" aria-controls="mobile-papers<?php echo (int)$batch['batch_id']; ?>">
                                             <i class="bi bi-eye me-1" aria-hidden="true"></i>View papers
                                         </button>
                                         <?php if (!empty($batch['tracking_token'])): ?>
-                                            <button class="btn btn-sm btn-outline-success" type="button" onclick="showBatchQr(<?php echo htmlspecialchars(json_encode($batch['tracking_token'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($batch['batch_code'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
-                                                <i class="bi bi-qr-code me-1" aria-hidden="true"></i>Tracking QR
+                                            <button class="btn btn-sm btn-outline-success" type="button" onclick="showBatchQr(<?php echo htmlspecialchars(json_encode($batch['tracking_token'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($batch['batch_code'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($batchWorkflowSettings['batch_qr_mode']), ENT_QUOTES, 'UTF-8'); ?>)">
+                                                <i class="bi bi-qr-code me-1" aria-hidden="true"></i>Batch QR
                                             </button>
                                         <?php endif; ?>
-                                        <form method="POST" class="d-inline">
+                                        <?php if ($batch['received_at'] === null): ?><form method="POST" class="d-inline">
                                             <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                                             <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
                                             <input type="hidden" name="batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
                                             <button class="btn btn-sm btn-outline-danger" type="submit" name="delete_batch" data-confirm-title="Delete this batch?" data-confirm-message="This permanently deletes the batch and all of its associated papers." data-confirm-button="Delete batch">
                                                 <i class="bi bi-trash me-1" aria-hidden="true"></i>Delete
                                             </button>
-                                        </form>
+                                        </form><?php endif; ?>
                                     </div>
                                     <div class="collapse mt-3" id="mobile-papers<?php echo (int)$batch['batch_id']; ?>">
                                         <div class="rounded-3 bg-light p-3">
@@ -771,14 +1016,16 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                                                 <button class="btn btn-sm btn-outline-primary edit-batch-paper" type="button" data-bs-toggle="modal" data-bs-target="#editBatchPaperModal" data-paper-id="<?php echo (int)$paper['paper_id']; ?>" data-paper-subject="<?php echo sanitize($paper['subject']); ?>" data-paper-remarks="<?php echo sanitize($paper['remarks']); ?>">
                                                                     <i class="bi bi-pencil me-1" aria-hidden="true"></i>Edit
                                                                 </button>
-                                                                <form method="POST">
-                                                                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
-                                                                    <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
-                                                                    <input type="hidden" name="paper_id" value="<?php echo (int)$paper['paper_id']; ?>">
-                                                                    <button class="btn btn-sm btn-outline-danger" type="submit" name="delete_batch_paper" data-confirm-title="Remove this paper?" data-confirm-message="This removes the paper and its linked document record from the batch." data-confirm-button="Remove paper">
-                                                                        <i class="bi bi-trash me-1" aria-hidden="true"></i>Remove
-                                                                    </button>
-                                                                </form>
+                                                                <?php if ($batch['received_at'] === null): ?>
+                                                                    <form method="POST">
+                                                                        <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                                                                        <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
+                                                                        <input type="hidden" name="paper_id" value="<?php echo (int)$paper['paper_id']; ?>">
+                                                                        <button class="btn btn-sm btn-outline-danger" type="submit" name="delete_batch_paper" data-confirm-title="Remove this paper?" data-confirm-message="This removes the paper and its linked document record from the batch." data-confirm-button="Remove paper">
+                                                                            <i class="bi bi-trash me-1" aria-hidden="true"></i>Remove
+                                                                        </button>
+                                                                    </form>
+                                                                <?php endif; ?>
                                                             </div>
                                                         </li>
                                                     <?php endforeach; ?>
@@ -817,7 +1064,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                         <input class="form-control" type="text" id="editBatchPaperSubject" name="paper_subject" maxlength="255" required>
                     </div>
                     <div>
-                        <label class="form-label" for="editBatchPaperRemarks">Paper notes</label>
+                        <label class="form-label" for="editBatchPaperRemarks"><?php echo sanitize($mobileFormLabels['remarks']); ?></label>
                         <textarea class="form-control" id="editBatchPaperRemarks" name="paper_remarks" rows="4"></textarea>
                     </div>
                 </div>
@@ -841,7 +1088,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
             </div>
             <div class="modal-body text-center">
                 <canvas id="batchQrCanvas" class="img-fluid mx-auto" aria-label="QR code for tracking this batch"></canvas>
-                <p class="small text-muted mt-3 mb-2">Scan to view the batch status, priority, and paper count.</p>
+                <p class="small text-muted mt-3 mb-2" id="batchQrHelp">Choose whether this QR identifies the local batch or opens its tracking page.</p>
                 <a id="batchTrackingLink" href="#" target="_blank" rel="noopener noreferrer" class="small text-break">Open batch tracker</a>
                 <p id="batchQrError" class="small text-danger mt-3 mb-0" role="alert" hidden></p>
             </div>
@@ -849,6 +1096,35 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                 <a id="downloadBatchQr" class="btn btn-primary disabled" aria-disabled="true" download="batch-tracking.png"><i class="bi bi-download me-1" aria-hidden="true"></i>Download QR</a>
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
             </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="confirmBatchReleaseModal" tabindex="-1" aria-labelledby="confirmBatchReleaseTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="POST" id="confirmBatchReleaseForm">
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title text-primary" id="confirmBatchReleaseTitle">Confirm receipt and move to For Release</h5>
+                        <p class="small text-muted mb-0 mt-1" id="confirmBatchReleaseSummary"></p>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                    <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
+                    <input type="hidden" name="status_batch_id" id="confirmBatchReleaseId">
+                    <label class="form-label fw-semibold" for="statusReceivedCount">Papers physically received</label>
+                    <input class="form-control mb-3" type="number" name="status_received_count" id="statusReceivedCount" min="0" max="9999" inputmode="numeric" required>
+                    <label class="form-label fw-semibold" for="statusIntakeNotes">Count difference / condition note</label>
+                    <textarea class="form-control" name="status_intake_notes" id="statusIntakeNotes" rows="3" maxlength="1000" placeholder="Required if the received count differs"></textarea>
+                    <p class="form-text mb-0">The receipt and status change are saved together. If the count differs, the note appears on the submitter's receipt.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" name="set_batch_status" value="1">Confirm receipt and move to For Release</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -868,7 +1144,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                 <div class="ratio ratio-4x3 bg-dark rounded overflow-hidden">
                 <video id="batchScannerVideo" class="w-100 h-100" style="object-fit: cover;" autoplay muted playsinline aria-label="Camera view for scanning a CEIT batch QR"></video>
                 </div>
-                <p id="batchScannerStatus" class="small mt-3 mb-2" role="status" aria-live="polite">Start the camera and point it at a CEIT batch tracking QR code.</p>
+                <p id="batchScannerStatus" class="small mt-3 mb-2" role="status" aria-live="polite">Scan a batch QR to look up its record. Scanning alone never confirms receipt.</p>
                 <div class="border rounded p-3 mb-3">
                     <label for="batchQrUpload" class="form-label fw-semibold">Or upload a QR image</label>
                     <input type="file" id="batchQrUpload" class="form-control" accept="image/png,image/jpeg,image/webp,image/gif">
@@ -887,26 +1163,39 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
 <script src="assets/js/qr-tools.bundle.js"></script>
 <script>
 
-function showBatchQr(token, batchCode) {
+const batchIntakeConfirmationMode = <?php echo json_encode($batchWorkflowSettings['intake_confirmation_mode']); ?>;
+
+function showBatchQr(token, batchCode, qrMode) {
     const trackingUrl = new URL('batch_tracker', window.location.href);
     trackingUrl.search = new URLSearchParams({ token }).toString();
+    const qrPayload = qrMode === 'local_batch_id' ? 'CEIT-BATCH:' + batchCode : trackingUrl.href;
     const canvas = document.getElementById('batchQrCanvas');
     const error = document.getElementById('batchQrError');
     const modal = document.getElementById('batchQrModal');
     const download = document.getElementById('downloadBatchQr');
+    const trackingLink = document.getElementById('batchTrackingLink');
     document.getElementById('batchQrCode').textContent = batchCode;
-    document.getElementById('batchTrackingLink').href = trackingUrl.href;
+    trackingLink.href = trackingUrl.href;
+    trackingLink.hidden = qrMode !== 'tracking_url';
+    document.getElementById('batchQrTitle').textContent = qrMode === 'local_batch_id' ? 'Local batch QR' : 'Batch tracking QR';
+    document.getElementById('batchQrCanvas').setAttribute(
+        'aria-label',
+        qrMode === 'local_batch_id' ? 'Local batch identifier QR code' : 'Public batch tracking QR code'
+    );
+    document.getElementById('batchQrHelp').textContent = qrMode === 'local_batch_id'
+        ? 'This QR contains only the batch code. Scan it in Admin to look up the record; scanning never confirms receipt.'
+        : 'This QR opens the batch tracker on devices that can reach this server. A localhost link works only on the server device.';
     download.classList.add('disabled');
     download.setAttribute('aria-disabled', 'true');
     download.removeAttribute('href');
-    download.download = batchCode.replace(/[^a-z0-9_-]/gi, '_') + '-tracking-qr.png';
+    download.download = batchCode.replace(/[^a-z0-9_-]/gi, '_') + '-batch-qr.png';
     error.hidden = true;
 
     if (!window.QRCode || typeof window.QRCode.toCanvas !== 'function') {
         error.textContent = 'The QR generator could not be loaded. Refresh the page and try again.';
         error.hidden = false;
     } else {
-        window.QRCode.toCanvas(canvas, trackingUrl.href, { width: 480, margin: 2, errorCorrectionLevel: 'H', color: { dark: '#064e3b', light: '#ffffff' } }, function (generationError) {
+        window.QRCode.toCanvas(canvas, qrPayload, { width: 480, margin: 2, errorCorrectionLevel: 'H', color: { dark: '#064e3b', light: '#ffffff' } }, function (generationError) {
             if (generationError) {
                 error.textContent = 'Could not generate the tracking QR code.';
                 error.hidden = false;
@@ -921,22 +1210,61 @@ function showBatchQr(token, batchCode) {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
+    const releaseModal = document.getElementById('confirmBatchReleaseModal');
+    const releaseForm = document.getElementById('confirmBatchReleaseForm');
+    const releaseId = document.getElementById('confirmBatchReleaseId');
+    const releaseCount = document.getElementById('statusReceivedCount');
+    const releaseNotes = document.getElementById('statusIntakeNotes');
+    releaseModal.addEventListener('show.bs.modal', function (event) {
+        const trigger = event.relatedTarget;
+        if (!trigger) return;
+        releaseId.value = trigger.dataset.batchId || '';
+        releaseCount.value = trigger.dataset.paperCount || '';
+        releaseCount.dataset.expectedCount = trigger.dataset.paperCount || '';
+        releaseNotes.value = '';
+        document.getElementById('confirmBatchReleaseSummary').textContent =
+            `${trigger.dataset.batchCode || 'Batch'} · ${trigger.dataset.paperCount || '0'} papers expected`;
+        releaseNotes.setCustomValidity('');
+    });
+    releaseForm.addEventListener('submit', function (event) {
+        const mismatch = Number(releaseCount.value) !== Number(releaseCount.dataset.expectedCount);
+        if (mismatch && !releaseNotes.value.trim()) {
+            event.preventDefault();
+            releaseNotes.setCustomValidity('Add a note explaining the count difference.');
+            releaseNotes.reportValidity();
+            return;
+        }
+        releaseNotes.setCustomValidity('');
+    });
+    releaseNotes.addEventListener('input', function () { releaseNotes.setCustomValidity(''); });
+
     const batchModal = document.getElementById('create-batch');
     const batchForm = batchModal.querySelector('form');
     const isEmbeddedBatchAction = document.body.classList.contains('admin-embedded-body');
     const recipientType = document.getElementById('batchRecipientType');
     const recipientInput = document.getElementById('batchRecipient');
     const recipientLabel = document.querySelector('label[for="batchRecipient"]');
+    const baseRecipientLabel = recipientLabel.dataset.baseLabel || recipientLabel.textContent.trim();
+    const recipientEnabled = <?php echo $mobileFormLabels['recipientEnabled'] ? 'true' : 'false'; ?>;
     const batchIdInput = document.getElementById('editBatchId');
     const batchTypeInput = document.getElementById('batchType');
     const batchPriorityInput = document.getElementById('batchPriority');
+    const batchPaperCountInput = document.getElementById('batchPaperCount');
+    const batchPaperCountLockedHelp = document.getElementById('batchPaperCountLockedHelp');
     const title = document.getElementById('createBatchTitle');
     const saveButton = document.getElementById('saveBatchButton');
 
     function updateRecipientField(clearUnassignedValue) {
+        if (!recipientEnabled) {
+            recipientType.value = 'Unassigned';
+            recipientInput.value = '';
+            recipientInput.required = false;
+            recipientInput.readOnly = true;
+            return;
+        }
         const type = recipientType.value;
         if (type === 'Unassigned') {
-            recipientLabel.textContent = 'Recipient';
+            recipientLabel.textContent = baseRecipientLabel;
             recipientInput.type = 'text';
             recipientInput.placeholder = 'No recipient assigned';
             recipientInput.required = false;
@@ -944,7 +1272,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (clearUnassignedValue) recipientInput.value = '';
             return;
         }
-        recipientLabel.textContent = type === 'Email' ? 'Recipient email' : 'Recipient contact number';
+        recipientLabel.textContent = `${baseRecipientLabel} ${type === 'Email' ? 'email' : 'contact number'}`;
         recipientInput.type = type === 'Email' ? 'email' : 'tel';
         recipientInput.placeholder = type === 'Email' ? 'name@example.com' : 'e.g. 09123456789';
         recipientInput.required = true;
@@ -980,6 +1308,8 @@ document.addEventListener('DOMContentLoaded', function () {
             recipientType.value = trigger.dataset.recipientType || 'Unassigned';
             recipientInput.value = trigger.dataset.recipient || '';
             document.getElementById('batchPaperCount').value = trigger.dataset.paperCount || '1';
+            batchPaperCountInput.readOnly = Boolean(trigger.dataset.receivedAt);
+            batchPaperCountLockedHelp.hidden = !batchPaperCountInput.readOnly;
             document.getElementById('batchRemarks').value = trigger.dataset.remarks || '';
             title.textContent = 'Edit Bulk Papers';
             saveButton.innerHTML = '<i class="bi bi-check-lg me-1" aria-hidden="true"></i>Save Bulk Papers Changes';
@@ -992,6 +1322,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 : '<i class="bi bi-archive me-1" aria-hidden="true"></i>Save Bulk Papers';
         } else {
             batchForm.reset();
+            batchPaperCountInput.readOnly = false;
+            batchPaperCountLockedHelp.hidden = true;
             batchIdInput.value = '';
             document.getElementById('documentType').value = 'Incoming';
             batchTypeInput.value = '';
@@ -1061,34 +1393,163 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function showBatchResult(batch) {
-            const heading = document.createElement('strong');
-            heading.textContent = batch.code + ' · ' + batch.type + ' · ' + batch.date;
-            const count = document.createElement('p');
-            count.className = 'mb-0 mt-2';
-            count.textContent = batch.paperCount + (batch.paperCount === 1 ? ' paper' : ' papers') +
-                ' · Status: ' + batch.status + (batch.isPriority ? ' · Priority' : '');
-            resultPanel.replaceChildren(heading, count);
+        const heading = document.createElement('strong');
+        heading.textContent = batch.code + ' · ' + batch.type + ' · ' + batch.date;
+        const expected = document.createElement('p');
+        expected.className = 'mb-2 mt-2';
+        expected.textContent = 'Expected: ' + batch.paperCount + (batch.paperCount === 1 ? ' paper' : ' papers') +
+            ' · Status: ' + batch.status + (batch.isPriority ? ' · Priority' : '');
+        resultPanel.replaceChildren(heading, expected);
+
+        if (batch.receivedPaperCount !== null && batch.receivedPaperCount !== undefined) {
+            const receipt = document.createElement('p');
+            receipt.className = 'mb-2';
+            receipt.textContent = 'Receipt already confirmed: ' + batch.receivedPaperCount + ' received of ' +
+                batch.intakeExpectedCount + ' expected at ' + batch.receivedAt +
+                (batch.receivedBy ? ' by ' + batch.receivedBy : '') + '.';
+            resultPanel.appendChild(receipt);
+            if (batch.receivedPaperCount !== batch.intakeExpectedCount) {
+                const countDifference = batch.receivedPaperCount - batch.intakeExpectedCount;
+                const discrepancy = document.createElement('p');
+                discrepancy.className = 'mb-2 fw-semibold';
+                discrepancy.textContent = 'Count difference: ' + Math.abs(countDifference) +
+                    (countDifference < 0 ? ' fewer' : ' more') + ' than expected.';
+                resultPanel.appendChild(discrepancy);
+            }
+            if (batch.intakeNotes) {
+                const note = document.createElement('p');
+                note.className = 'mb-2';
+                note.textContent = 'Receipt note: ' + batch.intakeNotes;
+                resultPanel.appendChild(note);
+            }
+        } else if (batchIntakeConfirmationMode === 'confirm_before_release') {
+            const intakeForm = document.createElement('form');
+            intakeForm.className = 'mt-3 border-top pt-3';
+            const countLabel = document.createElement('label');
+            countLabel.className = 'form-label fw-semibold';
+            countLabel.htmlFor = 'batchReceivedCount';
+            countLabel.textContent = 'Count physically received';
+            const countInput = document.createElement('input');
+            countInput.id = 'batchReceivedCount';
+            countInput.name = 'received_paper_count';
+            countInput.type = 'number';
+            countInput.className = 'form-control mb-3';
+            countInput.min = '0';
+            countInput.max = '9999';
+            countInput.inputMode = 'numeric';
+            countInput.required = true;
+            countInput.value = String(batch.paperCount);
+            const noteLabel = document.createElement('label');
+            noteLabel.className = 'form-label fw-semibold';
+            noteLabel.htmlFor = 'batchIntakeNotes';
+            noteLabel.textContent = 'Count difference / condition note';
+            const notesInput = document.createElement('textarea');
+            notesInput.id = 'batchIntakeNotes';
+            notesInput.name = 'intake_notes';
+            notesInput.className = 'form-control mb-2';
+            notesInput.maxLength = 1000;
+            notesInput.rows = 2;
+            notesInput.placeholder = 'Shown on the submitter receipt; required if the count differs';
+            notesInput.addEventListener('input', function () { notesInput.setCustomValidity(''); });
+            const help = document.createElement('p');
+            help.className = 'form-text';
+            help.textContent = 'Confirm only after counting. The submitter can see this note on their receipt; a note is required if the count differs.';
+            const confirmButton = document.createElement('button');
+            confirmButton.type = 'submit';
+            confirmButton.className = 'btn btn-primary';
+            confirmButton.textContent = 'Confirm receipt and issue receipt';
+            intakeForm.append(countLabel, countInput, noteLabel, notesInput, help, confirmButton);
+            intakeForm.addEventListener('submit', async function (event) {
+                event.preventDefault();
+                if (confirmButton.disabled) return;
+                if (Number(countInput.value) !== Number(batch.paperCount) && !notesInput.value.trim()) {
+                    notesInput.setCustomValidity('Add a note explaining the count difference.');
+                    notesInput.reportValidity();
+                    return;
+                }
+                notesInput.setCustomValidity('');
+                confirmButton.disabled = true;
+                confirmButton.textContent = 'Saving receipt…';
+                const formData = new FormData();
+                formData.append('csrf_token', document.getElementById('batchScannerCsrf').value);
+                formData.append('token', document.getElementById('batchScannerSessionToken').value);
+                formData.append('confirm_batch_intake', '1');
+                formData.append('tracking_token', batch.trackingToken);
+                formData.append('received_paper_count', countInput.value);
+                formData.append('intake_notes', notesInput.value.trim());
+                try {
+                    const response = await fetch(window.location.pathname, {
+                        method: 'POST',
+                        body: formData,
+                        credentials: 'same-origin',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    });
+                    const data = await response.json();
+                    if (!response.ok || !data.success) {
+                        throw new Error(data.message || 'The receipt could not be saved.');
+                    }
+                    showBatchResult({ ...data.batch, trackingToken: batch.trackingToken });
+                    status.textContent = 'Receipt saved in the office records.';
+                    status.className = 'small mt-3 mb-2 text-success';
+                } catch (error) {
+                    confirmButton.disabled = false;
+                    confirmButton.textContent = 'Confirm receipt and issue receipt';
+                    showScannerError(error instanceof Error ? error.message : 'The receipt could not be saved.');
+                }
+            });
+            resultPanel.appendChild(intakeForm);
+        } else {
+            const message = document.createElement('p');
+            message.className = 'mt-3 mb-0 text-muted';
+            message.textContent = 'QR scan only looks up this batch. To verify the count, use its For Release action in the batch list.';
+            resultPanel.appendChild(message);
+        }
+        if (batch.trackingToken) {
+            const receiptLink = document.createElement('a');
+            const trackingUrl = new URL('batch_tracker', window.location.href);
+            trackingUrl.search = new URLSearchParams({ token: batch.trackingToken }).toString();
+            receiptLink.href = trackingUrl.href;
+            receiptLink.target = '_blank';
+            receiptLink.rel = 'noopener noreferrer';
+            receiptLink.className = batch.receivedPaperCount !== null && batch.receivedPaperCount !== undefined
+                ? 'btn btn-success mt-2'
+                : 'd-inline-block mt-2';
+            receiptLink.textContent = batch.receivedPaperCount !== null && batch.receivedPaperCount !== undefined
+                ? 'Open / print receipt'
+                : 'Open batch tracker';
+            resultPanel.appendChild(receiptLink);
+        }
         resultPanel.hidden = false;
     }
 
     async function validateSystemQr(value) {
-        let scannedUrl;
-        try {
-            scannedUrl = new URL(value);
-        } catch (error) {
-            showScannerError('Not a CEIT batch tracking QR. Keep scanning for a valid system code.');
-            return false;
-        }
+        let token = '';
+        let batchCode = '';
+        if (value.startsWith('CEIT-BATCH:')) {
+            batchCode = value.slice('CEIT-BATCH:'.length);
+            if (!/^[A-Z0-9-]{1,32}$/.test(batchCode)) {
+                showScannerError('Not a CEIT local batch QR. Keep scanning for a valid system code.');
+                return false;
+            }
+        } else {
+            let scannedUrl;
+            try {
+                scannedUrl = new URL(value);
+            } catch (error) {
+                showScannerError('Not a CEIT batch QR. Keep scanning for a valid system code.');
+                return false;
+            }
 
-        const expectedPath = new URL('batch_tracker', window.location.href).pathname;
-        const token = scannedUrl.searchParams.get('token');
-        const expectedUrl = new URL('batch_tracker', window.location.href);
-        expectedUrl.search = new URLSearchParams({ token: token || '' }).toString();
-        if (scannedUrl.origin !== window.location.origin || scannedUrl.pathname !== expectedPath ||
-            scannedUrl.hash !== '' || [...scannedUrl.searchParams.keys()].length !== 1 ||
-            !/^[a-f0-9]{64}$/.test(token || '') || scannedUrl.href !== expectedUrl.href) {
-            showScannerError('Not a CEIT batch tracking QR. Keep scanning for a valid system code.');
-            return false;
+            const expectedPath = new URL('batch_tracker', window.location.href).pathname;
+            token = scannedUrl.searchParams.get('token') || '';
+            const expectedUrl = new URL('batch_tracker', window.location.href);
+            expectedUrl.search = new URLSearchParams({ token }).toString();
+            if (scannedUrl.origin !== window.location.origin || scannedUrl.pathname !== expectedPath ||
+                scannedUrl.hash !== '' || [...scannedUrl.searchParams.keys()].length !== 1 ||
+                !/^[a-f0-9]{64}$/.test(token) || scannedUrl.href !== expectedUrl.href) {
+                showScannerError('Not a CEIT batch QR. Keep scanning for a valid system code.');
+                return false;
+            }
         }
 
         const formData = new FormData();
@@ -1096,6 +1557,7 @@ document.addEventListener('DOMContentLoaded', function () {
         formData.append('token', document.getElementById('batchScannerSessionToken').value);
         formData.append('scan_batch_qr', '1');
         formData.append('tracking_token', token);
+        formData.append('batch_code', batchCode);
         try {
             const response = await fetch(window.location.pathname, {
                 method: 'POST',
@@ -1111,7 +1573,7 @@ document.addEventListener('DOMContentLoaded', function () {
             stopScanner();
             status.textContent = 'Verified CEIT batch QR code.';
             status.className = 'small mt-3 mb-2 text-success';
-            showBatchResult(data.batch);
+            showBatchResult({ ...data.batch, trackingToken: data.batch.trackingToken || token });
             return true;
         } catch (error) {
             showScannerError('The QR code could not be verified. Check the connection and scan again.');
@@ -1214,7 +1676,7 @@ document.addEventListener('DOMContentLoaded', function () {
             await video.play();
             scanning = true;
             stopButton.disabled = false;
-            status.textContent = 'Camera ready. Point it at a CEIT batch tracking QR code.';
+            status.textContent = 'Camera ready. Point it at a CEIT batch QR code.';
             scanFrame = requestAnimationFrame(scanFrameLoop);
         } catch (error) {
             stopScanner();

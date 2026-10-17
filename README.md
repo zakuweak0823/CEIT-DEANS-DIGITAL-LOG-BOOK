@@ -61,7 +61,7 @@ PHP API and MySQL database.
 | **Records and reports** | Search logbook records, inspect document activity, and generate date-filtered reports. |
 | **SMS and notifications** | Configure SMS and email, tune per-browser activity alerts, send client updates, and review SMS logs. |
 | **Admin Assistant** | Get privacy-friendly workflow guidance from a clickable side-peeking launcher and links to admin tools. Optional form assistance previews changes and requires approval before filling fields; it never submits forms. Toggle it in Settings. |
-| **Mobile app** | Submit and manage documents, batches, and borrowed items; look up client status and view reports. |
+| **Mobile app** | Kiosk for the public to submit documents, check status, and access office logbook features. |
 
 ## Admin workspace options
 
@@ -199,6 +199,35 @@ configure system-wide SMS, email, or mobile office access. Activity
 preferences are saved in the current browser; desktop alerts are optional
 and require browser permission. Provider credentials belong in the application
 settings or server environment—not in Git-tracked files or database exports.
+
+Use the **Shared form labels** section in Admin Settings to rename sender,
+recipient, document type, contact number, and remarks fields across admin
+document/bulk-paper forms and the mobile app. The Recipient switch can hide
+recipient inputs in both interfaces; hidden recipients are saved as blank.
+The mobile **Submit Document**
+form requires an 11-digit contact number; **Quick Submit** remains contact-free.
+Mobile document-status lookup also includes bulk-paper batches assigned to the
+entered contact number and displays each batch's current status and paper count.
+
+### Bulk-paper intake and receipts
+
+1. In Admin Settings, choose the intake confirmation mode and QR payload:
+   **Confirm with release** is the recommended mode; the receipt form appears
+   when staff move a Pending batch to For Release, and both changes save
+   together. Alternatively, staff can confirm receipt first from **Scan CEIT
+   QR**, then move the batch to For Release.
+2. The recommended localhost QR mode encodes only a local batch identifier.
+   Staff scan it in Admin to look up the record; the scan itself never confirms
+   receipt. The optional tracking-URL mode lets a device open the public tracker
+   only when that device can reach the server. A localhost URL works only on the
+   server device.
+3. Staff enter the physical count. If it differs from the expected count, a
+   note is required. The receipt stores the expected and received counts,
+   confirmation time, and staff account. Scans are read-only and never overwrite
+   an existing receipt.
+4. Once intake is confirmed, the expected count cannot be edited and the batch
+   or its papers cannot be deleted or removed, preserving the receipt record.
+   Batch processing statuses remain visible separately from receipt confirmation.
 
 ### Scan QR codes from a phone on local XAMPP
 

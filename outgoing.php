@@ -2,7 +2,10 @@
 require_once 'auth.php';
 require_once 'db.php';
 require_once 'sms_service.php';
+require_once 'mobile_form_settings.php';
 ensure_admin();
+
+$mobileFormLabels = get_mobile_form_labels($conn);
 
 $conn->query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS client_phone VARCHAR(20) DEFAULT NULL');
 $conn->query("ALTER TABLE documents ADD COLUMN IF NOT EXISTS submitter_type VARCHAR(20) NOT NULL DEFAULT 'Other'");
@@ -20,14 +23,14 @@ if (!in_array($statusFilter, ['', 'For Release', 'Released'], true)) {
 }
 if (isset($_POST['update'])) {
     $id = (int)($_POST['id'] ?? 0);
-    $recipient = trim($_POST['recipient'] ?? '');
+    $recipient = $mobileFormLabels['recipientEnabled'] ? trim($_POST['recipient'] ?? '') : '';
     $subject = trim($_POST['subject'] ?? '');
     $remarks = trim($_POST['remarks'] ?? '');
     $clientPhone = contact_number_input($_POST['client_phone'] ?? '');
     $documentDate = trim($_POST['document_date'] ?? '');
     $dateObject = DateTime::createFromFormat('!Y-m-d', $documentDate);
 
-    if ($id > 0 && $recipient !== '' && $subject !== '' && $dateObject && $dateObject->format('Y-m-d') === $documentDate && $clientPhone !== null && ($clientPhone === '' || is_valid_contact_number($clientPhone))) {
+    if ($id > 0 && (!$mobileFormLabels['recipientEnabled'] || $recipient !== '') && $subject !== '' && $dateObject && $dateObject->format('Y-m-d') === $documentDate && $clientPhone !== null && ($clientPhone === '' || is_valid_contact_number($clientPhone))) {
         $phoneValue = $clientPhone === '' ? null : $clientPhone;
         $stmt = safe_query($conn, "UPDATE documents SET recipient = ?, client_phone = ?, subject = ?, remarks = ?, date_created = TIMESTAMP(?, TIME(date_created)) WHERE doc_id = ? AND type = 'Outgoing'", 'sssssi', [$recipient, $phoneValue, $subject, $remarks, $documentDate, $id]);
         if ($stmt !== false) {
@@ -311,21 +314,21 @@ if ($stmt !== false) {
                         <label class="form-label" for="editDate">Date</label>
                         <input type="date" id="editDate" name="document_date" class="form-control" required>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="editRecipient">Recipient</label>
-                        <input type="text" id="editRecipient" name="recipient" class="form-control" required>
+                    <div class="mb-3" <?php echo $mobileFormLabels['recipientEnabled'] ? '' : 'hidden'; ?>>
+                        <label class="form-label" for="editRecipient"><?php echo sanitize($mobileFormLabels['recipient']); ?></label>
+                        <input type="text" id="editRecipient" name="recipient" class="form-control" <?php echo $mobileFormLabels['recipientEnabled'] ? 'required' : 'disabled'; ?>>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="editClientPhone">Client contact number (optional)</label>
+                        <label class="form-label" for="editClientPhone"><?php echo sanitize($mobileFormLabels['contactNumber']); ?> (optional)</label>
                         <input type="tel" id="editClientPhone" name="client_phone" class="form-control" inputmode="numeric" pattern="[0-9]{11}" maxlength="11" placeholder="09123456789" title="Enter exactly 11 digits.">
                         <div class="form-text">Enter exactly 11 digits, or leave blank.</div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="editSubject">Document type</label>
+                        <label class="form-label" for="editSubject"><?php echo sanitize($mobileFormLabels['documentType']); ?></label>
                         <input type="text" id="editSubject" name="subject" class="form-control" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="editRemarks">Remarks</label>
+                        <label class="form-label" for="editRemarks"><?php echo sanitize($mobileFormLabels['remarks']); ?></label>
                         <textarea id="editRemarks" name="remarks" class="form-control" rows="4"></textarea>
                     </div>
                     <div class="mb-3">

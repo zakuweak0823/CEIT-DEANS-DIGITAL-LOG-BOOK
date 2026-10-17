@@ -1,7 +1,68 @@
 <?php
 require_once 'auth.php';
 require_once 'db.php';
+require_once 'mobile_form_settings.php';
+require_once 'batch_support.php';
 ensure_admin();
+
+$formSettingsNotice = '';
+$formSettingsNoticeType = 'success';
+$formSettingsNoticeScope = 'form';
+if (isset($_POST['save_batch_workflow'])) {
+    $formSettingsNoticeScope = 'workflow';
+    $confirmationMode = $_POST['intake_confirmation_mode'] ?? '';
+    $qrMode = $_POST['batch_qr_mode'] ?? '';
+    if (!is_string($confirmationMode) || !is_string($qrMode) ||
+        !in_array($confirmationMode, ['confirm_before_release', 'confirm_with_release'], true) ||
+        !in_array($qrMode, ['local_batch_id', 'tracking_url'], true)) {
+        $formSettingsNotice = 'Choose a valid intake confirmation and QR mode.';
+        $formSettingsNoticeType = 'danger';
+    } elseif (save_batch_workflow_settings($conn, [
+        'intake_confirmation_mode' => $confirmationMode,
+        'batch_qr_mode' => $qrMode,
+    ])) {
+        $formSettingsNotice = 'Bulk-paper workflow and QR settings saved.';
+    } else {
+        $formSettingsNotice = 'Bulk-paper workflow settings could not be saved. Check the server log and try again.';
+        $formSettingsNoticeType = 'danger';
+    }
+} elseif (isset($_POST['save_form_labels'])) {
+    $labels = [];
+    $submittedLabels = $_POST['form_labels'] ?? [];
+    if (!is_array($submittedLabels)) {
+        $submittedLabels = [];
+    }
+    foreach (mobile_form_label_defaults() as $key => $default) {
+        if ($key === 'recipientEnabled') {
+            $labels[$key] = ($_POST['recipient_enabled'] ?? '') === '1';
+            continue;
+        }
+        $value = $submittedLabels[$key] ?? '';
+        if (!is_string($value)) {
+            $formSettingsNotice = 'Each form label must contain 1 to 60 characters.';
+            $formSettingsNoticeType = 'danger';
+            break;
+        }
+        $value = trim($value);
+        if ($value === '' || strlen($value) > 60) {
+            $formSettingsNotice = 'Each form label must contain 1 to 60 characters.';
+            $formSettingsNoticeType = 'danger';
+            break;
+        }
+        $labels[$key] = $value;
+    }
+
+    if ($formSettingsNotice === '') {
+        if (save_mobile_form_labels($conn, $labels)) {
+            $formSettingsNotice = 'Form labels saved for the admin portal and mobile app.';
+        } else {
+            $formSettingsNotice = 'Form labels could not be saved. Check the server log and try again.';
+            $formSettingsNoticeType = 'danger';
+        }
+    }
+}
+$mobileFormLabels = get_mobile_form_labels($conn);
+$batchWorkflowSettings = get_batch_workflow_settings($conn);
 
 $localCaCertificateName = 'ceit-logbook-local-ca.crt';
 $localCaCertificatePath = __DIR__ . DIRECTORY_SEPARATOR . $localCaCertificateName;
@@ -22,6 +83,94 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                 <i class="bi bi-bell me-1" aria-hidden="true"></i>System notification settings
             </a>
         </div>
+    </div>
+
+    <div class="col-12">
+        <section class="card shadow-sm" aria-labelledby="form-label-settings-title">
+            <div class="card-header bg-white px-3 px-md-4 py-3">
+                <h5 class="mb-1 text-primary" id="form-label-settings-title">Shared form labels</h5>
+                <p class="mb-0 small text-muted">Customize field names used by document and bulk-paper forms in the admin portal and mobile app.</p>
+            </div>
+            <div class="card-body p-3 p-md-4">
+                <?php if ($formSettingsNotice !== '' && $formSettingsNoticeScope === 'form'): ?>
+                    <div class="alert alert-<?php echo sanitize($formSettingsNoticeType); ?>" role="status"><?php echo sanitize($formSettingsNotice); ?></div>
+                <?php endif; ?>
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold" for="formLabelSender">Sender</label>
+                            <input class="form-control" id="formLabelSender" name="form_labels[sender]" maxlength="60" value="<?php echo sanitize($mobileFormLabels['sender']); ?>" required>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold" for="formLabelRecipient">Recipient</label>
+                            <input class="form-control" id="formLabelRecipient" name="form_labels[recipient]" maxlength="60" value="<?php echo sanitize($mobileFormLabels['recipient']); ?>" required>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold" for="formLabelDocumentType">Document type</label>
+                            <input class="form-control" id="formLabelDocumentType" name="form_labels[documentType]" maxlength="60" value="<?php echo sanitize($mobileFormLabels['documentType']); ?>" required>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold" for="formLabelContactNumber">Contact number</label>
+                            <input class="form-control" id="formLabelContactNumber" name="form_labels[contactNumber]" maxlength="60" value="<?php echo sanitize($mobileFormLabels['contactNumber']); ?>" required>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold" for="formLabelRemarks">Remarks</label>
+                            <input class="form-control" id="formLabelRemarks" name="form_labels[remarks]" maxlength="60" value="<?php echo sanitize($mobileFormLabels['remarks']); ?>" required>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="formRecipientEnabled" name="recipient_enabled" value="1" <?php echo $mobileFormLabels['recipientEnabled'] ? 'checked' : ''; ?>>
+                                <label class="form-check-label fw-semibold" for="formRecipientEnabled">Show Recipient field in admin and mobile forms</label>
+                            </div>
+                            <div class="form-text">When off, recipient inputs are hidden and documents save with a blank recipient.</div>
+                        </div>
+                    </div>
+                    <p class="form-text mt-3">Changing a label only changes how the field is named; it does not rename or alter stored records.</p>
+                    <button class="btn btn-primary" type="submit" name="save_form_labels" value="1">
+                        <i class="bi bi-check2 me-1" aria-hidden="true"></i>Save form labels
+                    </button>
+                </form>
+            </div>
+        </section>
+    </div>
+
+    <div class="col-12">
+        <section class="card shadow-sm" aria-labelledby="batch-workflow-settings-title">
+            <div class="card-header bg-white px-3 px-md-4 py-3">
+                <h5 class="mb-1 text-primary" id="batch-workflow-settings-title">Bulk-paper intake and QR</h5>
+                <p class="mb-0 small text-muted">Choose how Admin records receipt and what each batch QR contains. You can change these options at any time.</p>
+            </div>
+            <div class="card-body p-3 p-md-4">
+                <?php if ($formSettingsNotice !== '' && $formSettingsNoticeScope === 'workflow'): ?>
+                    <div class="alert alert-<?php echo sanitize($formSettingsNoticeType); ?>" role="status"><?php echo sanitize($formSettingsNotice); ?></div>
+                <?php endif; ?>
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                    <div class="row g-3">
+                        <div class="col-12 col-lg-6">
+                            <label class="form-label fw-semibold" for="intakeConfirmationMode">When should receipt be confirmed?</label>
+                            <select class="form-select" id="intakeConfirmationMode" name="intake_confirmation_mode" required>
+                                <option value="confirm_with_release" <?php echo $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_with_release' ? 'selected' : ''; ?>>Confirm count and move Pending to For Release in one step (recommended)</option>
+                                <option value="confirm_before_release" <?php echo $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_before_release' ? 'selected' : ''; ?>>Confirm receipt first; move Pending to For Release afterwards</option>
+                            </select>
+                            <div class="form-text">The count form is Admin-only. In either mode, an unexpected count requires a note.</div>
+                        </div>
+                        <div class="col-12 col-lg-6">
+                            <label class="form-label fw-semibold" for="batchQrMode">What should a batch QR contain?</label>
+                            <select class="form-select" id="batchQrMode" name="batch_qr_mode" required>
+                                <option value="local_batch_id" <?php echo $batchWorkflowSettings['batch_qr_mode'] === 'local_batch_id' ? 'selected' : ''; ?>>Local batch identifier (recommended for localhost)</option>
+                                <option value="tracking_url" <?php echo $batchWorkflowSettings['batch_qr_mode'] === 'tracking_url' ? 'selected' : ''; ?>>Public tracking-page link</option>
+                            </select>
+                            <div class="form-text">A tracking link is reachable only from devices that can connect to this server. A localhost link works only on the server device.</div>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary mt-3" type="submit" name="save_batch_workflow" value="1">
+                        <i class="bi bi-check2 me-1" aria-hidden="true"></i>Save bulk-paper settings
+                    </button>
+                </form>
+            </div>
+        </section>
     </div>
 
     <div class="col-12">

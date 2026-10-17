@@ -52,6 +52,14 @@ const statusClasses = {
   Failed: 'bg-rose-100 text-rose-700',
 };
 
+const defaultFormLabels = {
+  sender: 'From',
+  recipient: 'Recipient',
+  documentType: 'Document type',
+  contactNumber: 'Client contact number',
+  remarks: 'Remarks',
+};
+
 const inputClass = 'w-full rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100';
 const buttonClass = 'inline-flex min-h-12 items-center justify-center rounded-2xl bg-emerald-900 px-5 py-3.5 text-base font-semibold text-white transition hover:bg-emerald-700 active:scale-[0.99]';
 const todayLocalDate = () => {
@@ -115,6 +123,7 @@ function App() {
   }, []);
 
   const [apiData, setApiData] = useState(null);
+  const formLabels = { ...defaultFormLabels, ...(apiData?.formLabels || {}) };
   const [loading, setLoading] = useState(true);
   const [refreshError, setRefreshError] = useState('');
   const refreshInProgressRef = useRef(false);
@@ -404,8 +413,8 @@ function App() {
   const handleSubmitIncoming = async (event) => {
     event.preventDefault();
     if (incomingSubmitting) return;
-    if (incomingModalMode === 'standard' && incomingForm.clientPhone !== '' && !isValidContactNumber(incomingForm.clientPhone)) {
-      showActionFeedback({ title: 'Check the contact number', description: 'Enter exactly 11 digits using numbers only, or leave it blank.', tone: 'warning' });
+    if (incomingModalMode === 'standard' && !isValidContactNumber(incomingForm.clientPhone)) {
+      showActionFeedback({ title: 'Check the contact number', description: 'Enter the required 11-digit contact number using numbers only.', tone: 'warning' });
       return;
     }
     setIncomingSubmitting(true);
@@ -418,13 +427,13 @@ function App() {
           date: incomingForm.date,
           sender: incomingForm.from,
           submitter_type: incomingForm.from,
-          recipient: incomingForm.recipient,
+          recipient: formLabels.recipientEnabled ? incomingForm.recipient : '',
           client_phone: incomingModalMode === 'standard' ? incomingForm.clientPhone : '',
           subject: incomingForm.subject,
           remarks: '',
         }),
       });
-      
+
       const result = await readApiResponse(response);
       if (!response.ok) {
         throw new Error(result.message || `HTTP error! status: ${response.status}`);
@@ -447,8 +456,8 @@ function App() {
             title: incomingModalMode === 'quick' ? 'Quick submission received' : 'Document submitted',
             description: 'Your document is now recorded and awaiting office review.',
             details: [
-              { label: 'Document type', value: incomingForm.subject },
-              { label: 'Recipient', value: incomingForm.recipient },
+              { label: formLabels.documentType, value: incomingForm.subject },
+              { label: formLabels.recipient, value: incomingForm.recipient },
               { label: 'Status', value: result.status || incomingStatus },
             ],
             reference: result.id ? `Reference #${result.id}` : '',
@@ -698,16 +707,17 @@ function App() {
       return;
     }
     const paperCount = Number(batchForm.paperCount);
-    const recipient = batchForm.recipientType === 'Unassigned' ? '' : batchForm.recipient.trim();
+    const recipientType = formLabels.recipientEnabled ? batchForm.recipientType : 'Unassigned';
+    const recipient = !formLabels.recipientEnabled || recipientType === 'Unassigned' ? '' : batchForm.recipient.trim();
     if (!Number.isInteger(paperCount) || paperCount < 1 || paperCount > 9999) {
       showActionFeedback({ title: 'Check the paper count', description: 'Enter a paper count between 1 and 9,999.', tone: 'warning' });
       return;
     }
-    if (batchForm.recipientType === 'Email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
+    if (formLabels.recipientEnabled && recipientType === 'Email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
       showActionFeedback({ title: 'Check the recipient email', description: 'Enter a valid recipient email address.', tone: 'warning' });
       return;
     }
-    if (batchForm.recipientType === 'Contact' && !isValidContactNumber(recipient)) {
+    if (formLabels.recipientEnabled && recipientType === 'Contact' && !isValidContactNumber(recipient)) {
       showActionFeedback({ title: 'Check the recipient contact', description: 'Enter exactly 11 digits using numbers only.', tone: 'warning' });
       return;
     }
@@ -724,7 +734,7 @@ function App() {
           batch_type: batchType,
           batch_date: batchForm.date,
           sender_type: batchForm.senderType,
-          recipient_contact_type: batchForm.recipientType,
+          recipient_contact_type: recipientType,
           recipient,
           remarks: batchForm.remarks,
           paper_count: paperCount,
@@ -747,7 +757,7 @@ function App() {
           ],
         };
       } else {
-        const savedBatch = result.batch;
+        const savedBatch = { ...result.batch, receivedPaperCount: null, receivedAt: null };
         playConfirmTone();
         setBatchItems((previous) => [savedBatch, ...previous]);
         successNotice = {
@@ -818,7 +828,7 @@ function App() {
               <input type="date" className={inputClass} value={incomingForm.date} onChange={(event) => setIncomingForm({ ...incomingForm, date: event.target.value })} required />
             </label>
             <fieldset className="min-w-0 space-y-2">
-              <legend className="text-sm font-semibold text-emerald-900">From</legend>
+              <legend className="text-sm font-semibold text-emerald-900">{formLabels.sender}</legend>
               <div className="grid grid-cols-2 gap-2">
                 {['Student', 'Faculty'].map((senderType) => {
                   const selected = incomingForm.from === senderType;
@@ -840,17 +850,17 @@ function App() {
               </div>
             </fieldset>
             <label className="space-y-2">
-              <span className="text-sm font-semibold text-emerald-900">Document type</span>
-              <input type="text" className={inputClass} value={incomingForm.subject} onChange={(event) => setIncomingForm({ ...incomingForm, subject: event.target.value })} placeholder="Enter document type" required />
+              <span className="text-sm font-semibold text-emerald-900">{formLabels.documentType}</span>
+              <input type="text" className={inputClass} value={incomingForm.subject} onChange={(event) => setIncomingForm({ ...incomingForm, subject: event.target.value })} placeholder={`Enter ${formLabels.documentType.toLowerCase()}`} required />
             </label>
-            <label className="space-y-2">
-              <span className="text-sm font-semibold text-emerald-900">Recipient</span>
-              <input type="text" className={inputClass} value={incomingForm.recipient} onChange={(event) => setIncomingForm({ ...incomingForm, recipient: event.target.value })} placeholder="Staff or office" required />
+            <label className="space-y-2" hidden={!formLabels.recipientEnabled}>
+              <span className="text-sm font-semibold text-emerald-900">{formLabels.recipient}</span>
+              <input type="text" className={inputClass} value={incomingForm.recipient} onChange={(event) => setIncomingForm({ ...incomingForm, recipient: event.target.value })} placeholder="Staff or office" required={formLabels.recipientEnabled} disabled={!formLabels.recipientEnabled} />
             </label>
             {formType === 'standard' && (
               <label className="space-y-2 sm:col-span-2">
-                <span className="text-sm font-semibold text-emerald-900">Client contact number (optional)</span>
-                <input type="tel" inputMode="numeric" autoComplete="tel-national" pattern="[0-9]{11}" title="Enter exactly 11 digits." className={inputClass} value={incomingForm.clientPhone} onChange={(event) => setIncomingForm({ ...incomingForm, clientPhone: contactNumberDigits(event.target.value) })} placeholder="09123456789" />
+                <span className="text-sm font-semibold text-emerald-900">{formLabels.contactNumber} (required)</span>
+                <input type="tel" inputMode="numeric" autoComplete="tel-national" pattern="[0-9]{11}" title="Enter exactly 11 digits." className={inputClass} value={incomingForm.clientPhone} onChange={(event) => setIncomingForm({ ...incomingForm, clientPhone: contactNumberDigits(event.target.value) })} placeholder="09123456789" required />
               </label>
             )}
           </div>
@@ -880,22 +890,22 @@ function App() {
               <input type="date" className={inputClass} value={batchForm.date} onChange={(event) => setBatchForm({ ...batchForm, date: event.target.value })} required />
             </label>
             <label className="space-y-2">
-              <span className="text-sm font-semibold text-emerald-900">From</span>
+              <span className="text-sm font-semibold text-emerald-900">{formLabels.sender}</span>
               <select className={inputClass} value={batchForm.senderType} onChange={(event) => setBatchForm({ ...batchForm, senderType: event.target.value })} required>
                 <option value="Student">Student</option>
                 <option value="Faculty">Faculty</option>
               </select>
             </label>
-            <label className="space-y-2">
+            <label className="space-y-2" hidden={!formLabels.recipientEnabled}>
               <span className="text-sm font-semibold text-emerald-900">Recipient contact type</span>
-              <select className={inputClass} value={batchForm.recipientType} onChange={(event) => setBatchForm({ ...batchForm, recipientType: event.target.value, recipient: event.target.value === 'Unassigned' ? '' : batchForm.recipient })} required>
+              <select className={inputClass} value={batchForm.recipientType} onChange={(event) => setBatchForm({ ...batchForm, recipientType: event.target.value, recipient: event.target.value === 'Unassigned' ? '' : batchForm.recipient })} required={formLabels.recipientEnabled} disabled={!formLabels.recipientEnabled}>
                 <option value="Email">Email</option>
                 <option value="Contact">Contact</option>
                 <option value="Unassigned">Unassigned</option>
               </select>
             </label>
-            <label className="space-y-2 sm:col-span-2">
-              <span className="text-sm font-semibold text-emerald-900">{batchForm.recipientType === 'Email' ? 'Recipient email' : 'Recipient contact'}</span>
+            <label className="space-y-2 sm:col-span-2" hidden={!formLabels.recipientEnabled}>
+              <span className="text-sm font-semibold text-emerald-900">{formLabels.recipient} {batchForm.recipientType === 'Email' ? 'email' : 'contact'}</span>
               <input
                 type={batchForm.recipientType === 'Email' ? 'email' : batchForm.recipientType === 'Contact' ? 'tel' : 'text'}
                 inputMode={batchForm.recipientType === 'Contact' ? 'numeric' : undefined}
@@ -906,17 +916,18 @@ function App() {
                 value={batchForm.recipient}
                 onChange={(event) => setBatchForm({ ...batchForm, recipient: batchForm.recipientType === 'Contact' ? contactNumberDigits(event.target.value) : event.target.value })}
                 placeholder={batchForm.recipientType === 'Email' ? 'name@example.com' : batchForm.recipientType === 'Contact' ? 'e.g. 09123456789' : 'No recipient assigned'}
-                disabled={batchForm.recipientType === 'Unassigned'}
-                required={batchForm.recipientType !== 'Unassigned'}
+                disabled={!formLabels.recipientEnabled || batchForm.recipientType === 'Unassigned'}
+                required={formLabels.recipientEnabled && batchForm.recipientType !== 'Unassigned'}
               />
             </label>
             <label className="space-y-2 sm:col-span-2">
               <span className="text-sm font-semibold text-emerald-900">Number of papers</span>
-              <input type="number" inputMode="numeric" min="1" max="9999" className={inputClass} value={batchForm.paperCount} onChange={(event) => setBatchForm({ ...batchForm, paperCount: event.target.value })} required />
+              <input type="number" inputMode="numeric" min="1" max="9999" className={inputClass} value={batchForm.paperCount} onChange={(event) => setBatchForm({ ...batchForm, paperCount: event.target.value })} readOnly={Boolean(editingBatchId && batchItems.find((batch) => batch.id === editingBatchId)?.receivedAt)} required />
+              {editingBatchId && batchItems.find((batch) => batch.id === editingBatchId)?.receivedAt && <span className="block text-xs text-amber-800">The expected count is locked because staff have confirmed receipt.</span>}
             </label>
           </div>
           <label className="mt-4 block space-y-2">
-            <span className="text-sm font-semibold text-emerald-900">Batch remarks</span>
+            <span className="text-sm font-semibold text-emerald-900">{formLabels.remarks}</span>
             <textarea className={inputClass} rows="2" value={batchForm.remarks} onChange={(event) => setBatchForm({ ...batchForm, remarks: event.target.value })} />
           </label>
           <div className="sticky bottom-0 mt-5 flex flex-col gap-3 border-t border-emerald-100 bg-white/95 px-4 pb-4 pt-3 backdrop-blur sm:flex-row sm:justify-end sm:px-0 sm:pb-0">
@@ -1100,7 +1111,10 @@ function App() {
                     <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClasses[batch.status] || 'bg-amber-100 text-amber-700'}`}>{batch.status || 'Pending'}</span>
                   </div>
                 </div>
-                <p className="mt-2 text-sm font-semibold text-emerald-900">{batch.batchType || 'Bulk papers'} · {batch.paperCount} papers</p>
+                <p className="mt-2 text-sm font-semibold text-emerald-900">{batch.batchType || 'Bulk papers'} · {batch.paperCount} expected</p>
+                {batch.receivedAt
+                  ? <p className={`mt-1 text-sm font-medium ${Number(batch.receivedPaperCount) === Number(batch.intakeExpectedCount) ? 'text-emerald-700' : 'text-rose-700'}`}>{batch.receivedPaperCount} physically received · {String(batch.receivedAt).slice(0, 16)}</p>
+                  : <p className="mt-1 text-sm text-amber-700">Awaiting office count confirmation</p>}
                 <p className="mt-2 text-sm text-emerald-700">Recipient: {batch.recipientContactType || 'Unassigned'}{batch.recipient ? ` · ${batch.recipient}` : ''}</p>
                 {batch.remarks && <p className="mt-2 break-words text-sm text-emerald-700">{batch.remarks}</p>}
                 {batch.id && batch.status !== 'Released' && (
@@ -1563,7 +1577,7 @@ function App() {
                         ? recordModal === 'batches'
                           ? editingBatchId ? 'Update the bulk paper details and total paper count.' : 'Enter the bulk paper details and total paper count.'
                           : 'Record the item and borrower. Update its status when it is returned.'
-                        : 'Add the document details. A contact number is optional.'}
+                        : 'Add the document details and the required contact number.'}
                   </p>
                 </div>
               </div>
@@ -1685,7 +1699,7 @@ function App() {
               </div>
 
               <form onSubmit={handleClientStatusLookup} className="rounded-2xl border border-emerald-200 bg-white p-4 sm:p-5">
-                <label htmlFor="clientStatusPhone" className="mb-2 block text-sm font-semibold text-emerald-950">Contact number</label>
+                <label htmlFor="clientStatusPhone" className="mb-2 block text-sm font-semibold text-emerald-950">{formLabels.contactNumber}</label>
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <input
                     id="clientStatusPhone"
@@ -1735,7 +1749,7 @@ function App() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <p className="break-words font-semibold text-emerald-950">{record.subject}</p>
-                            <p className="mt-1 break-words text-xs text-emerald-700">{record.reference} · {record.type}</p>
+                            <p className="mt-1 break-words text-xs text-emerald-700">{record.reference} · {record.type}{Number(record.paperCount) > 0 ? ` · ${record.paperCount} papers` : ''}</p>
                             <p className="mt-1 text-xs text-emerald-600">{record.date}</p>
                           </div>
                           <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[record.status] || 'bg-gray-100 text-gray-700'}`}>

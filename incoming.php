@@ -1,7 +1,10 @@
 <?php
 require_once 'auth.php';
 require_once 'db.php';
+require_once 'mobile_form_settings.php';
 ensure_admin();
+
+$mobileFormLabels = get_mobile_form_labels($conn);
 
 $conn->query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS client_phone VARCHAR(20) DEFAULT NULL');
 $conn->query("ALTER TABLE documents ADD COLUMN IF NOT EXISTS submitter_type VARCHAR(20) NOT NULL DEFAULT 'Other'");
@@ -30,12 +33,12 @@ if (!in_array($statusFilter, $validStatusFilters, true)) {
 if (isset($_POST['save'])) {
     $sender = trim($_POST['sender'] ?? '');
     $submitterType = trim($_POST['submitter_type'] ?? 'Other');
-    $recipient = trim($_POST['recipient'] ?? '');
+    $recipient = $mobileFormLabels['recipientEnabled'] ? trim($_POST['recipient'] ?? '') : '';
     $subject = trim($_POST['subject'] ?? '');
     $remarks = trim($_POST['remarks'] ?? '');
     $clientPhone = contact_number_input($_POST['client_phone'] ?? '');
 
-    if ($sender === '' || $recipient === '' || $subject === '' || !in_array($submitterType, ['Student', 'Faculty', 'Other'], true)) {
+    if ($sender === '' || ($mobileFormLabels['recipientEnabled'] && $recipient === '') || $subject === '' || !in_array($submitterType, ['Student', 'Faculty', 'Other'], true)) {
         $message = show_alert('Sender, recipient, and document type are required.', 'danger');
     } elseif ($clientPhone === null || ($clientPhone !== '' && !is_valid_contact_number($clientPhone))) {
         $message = show_alert('Enter an 11-digit contact number using digits only, or leave it blank.', 'danger');
@@ -56,13 +59,13 @@ if (isset($_POST['save'])) {
 if (isset($_POST['update'])) {
     $id = (int)($_POST['id'] ?? 0);
     $sender = trim($_POST['sender'] ?? '');
-    $recipient = trim($_POST['recipient'] ?? '');
+    $recipient = $mobileFormLabels['recipientEnabled'] ? trim($_POST['recipient'] ?? '') : '';
     $subject = trim($_POST['subject'] ?? '');
     $remarks = trim($_POST['remarks'] ?? '');
     $clientPhone = contact_number_input($_POST['client_phone'] ?? '');
     $submitterType = trim($_POST['submitter_type'] ?? 'Other');
 
-    if ($id > 0 && $sender !== '' && $recipient !== '' && $subject !== '' && in_array($submitterType, ['Student', 'Faculty', 'Other'], true) && $clientPhone !== null && ($clientPhone === '' || is_valid_contact_number($clientPhone))) {
+    if ($id > 0 && $sender !== '' && (!$mobileFormLabels['recipientEnabled'] || $recipient !== '') && $subject !== '' && in_array($submitterType, ['Student', 'Faculty', 'Other'], true) && $clientPhone !== null && ($clientPhone === '' || is_valid_contact_number($clientPhone))) {
         $phoneValue = $clientPhone === '' ? null : $clientPhone;
         $stmt = safe_query($conn, "UPDATE documents SET sender = ?, recipient = ?, client_phone = ?, subject = ?, remarks = ?, submitter_type = ? WHERE doc_id = ? AND type = 'Incoming'", 'ssssssi', [$sender, $recipient, $phoneValue, $subject, $remarks, $submitterType, $id]);
         if ($stmt !== false) {
@@ -309,24 +312,24 @@ if ($stmt !== false) {
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="sender">From</label>
+                        <label class="form-label" for="sender"><?php echo sanitize($mobileFormLabels['sender']); ?></label>
                         <input type="text" id="sender" name="sender" class="form-control" value="<?php echo sanitize($sender); ?>" required>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="recipient">Recipient</label>
-                        <input type="text" id="recipient" name="recipient" class="form-control" value="<?php echo sanitize($recipient); ?>" required>
+                    <div class="mb-3" <?php echo $mobileFormLabels['recipientEnabled'] ? '' : 'hidden'; ?>>
+                        <label class="form-label" for="recipient"><?php echo sanitize($mobileFormLabels['recipient']); ?></label>
+                        <input type="text" id="recipient" name="recipient" class="form-control" value="<?php echo sanitize($recipient); ?>" <?php echo $mobileFormLabels['recipientEnabled'] ? 'required' : 'disabled'; ?>>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="subject">Document type</label>
+                        <label class="form-label" for="subject"><?php echo sanitize($mobileFormLabels['documentType']); ?></label>
                         <input type="text" id="subject" name="subject" class="form-control" value="<?php echo sanitize($subject); ?>" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="client_phone">Client Contact Number <span class="text-muted">(optional)</span></label>
+                        <label class="form-label" for="client_phone"><?php echo sanitize($mobileFormLabels['contactNumber']); ?> <span class="text-muted">(optional)</span></label>
                         <input type="tel" id="client_phone" name="client_phone" class="form-control" value="<?php echo sanitize($clientPhone ?? ''); ?>" inputmode="numeric" pattern="[0-9]{11}" maxlength="11" placeholder="09123456789" title="Enter exactly 11 digits.">
                         <div class="form-text">Enter exactly 11 digits, or leave blank.</div>
                     </div>
                     <div>
-                        <label class="form-label" for="remarks">Remarks <span class="text-muted">(optional)</span></label>
+                        <label class="form-label" for="remarks"><?php echo sanitize($mobileFormLabels['remarks']); ?> <span class="text-muted">(optional)</span></label>
                         <textarea id="remarks" name="remarks" class="form-control" rows="3"><?php echo sanitize($remarks); ?></textarea>
                     </div>
                 </div>
@@ -364,21 +367,21 @@ if ($stmt !== false) {
                             <option value="Other">Other</option>
                         </select>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="editRecipient">Recipient</label>
-                        <input type="text" id="editRecipient" name="recipient" class="form-control" required>
+                    <div class="mb-3" <?php echo $mobileFormLabels['recipientEnabled'] ? '' : 'hidden'; ?>>
+                        <label class="form-label" for="editRecipient"><?php echo sanitize($mobileFormLabels['recipient']); ?></label>
+                        <input type="text" id="editRecipient" name="recipient" class="form-control" <?php echo $mobileFormLabels['recipientEnabled'] ? 'required' : 'disabled'; ?>>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="editClientPhone">Client Contact Number</label>
+                        <label class="form-label" for="editClientPhone"><?php echo sanitize($mobileFormLabels['contactNumber']); ?></label>
                         <input type="tel" id="editClientPhone" name="client_phone" class="form-control" inputmode="numeric" pattern="[0-9]{11}" maxlength="11" placeholder="09123456789" title="Enter exactly 11 digits.">
                         <div class="form-text">Enter exactly 11 digits, or leave blank.</div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="editSubject">Subject</label>
+                        <label class="form-label" for="editSubject"><?php echo sanitize($mobileFormLabels['documentType']); ?></label>
                         <input type="text" id="editSubject" name="subject" class="form-control" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="editRemarks">Remarks</label>
+                        <label class="form-label" for="editRemarks"><?php echo sanitize($mobileFormLabels['remarks']); ?></label>
                         <textarea id="editRemarks" name="remarks" class="form-control" rows="4"></textarea>
                     </div>
                     <div class="d-grid">

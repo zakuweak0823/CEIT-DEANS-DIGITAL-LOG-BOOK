@@ -84,6 +84,11 @@ CREATE TABLE IF NOT EXISTS document_batches (
     tracking_token CHAR(64) DEFAULT NULL,
     paper_count INT UNSIGNED NOT NULL DEFAULT 0,
     is_priority TINYINT(1) NOT NULL DEFAULT 0,
+    received_paper_count INT UNSIGNED DEFAULT NULL,
+    intake_expected_count INT UNSIGNED DEFAULT NULL,
+    intake_notes TEXT,
+    received_at DATETIME DEFAULT NULL,
+    received_by VARCHAR(100) NOT NULL DEFAULT '',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -94,6 +99,11 @@ ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS sender_type VARCHAR(20) NO
 ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS recipient_contact_type VARCHAR(20) NOT NULL DEFAULT 'Unassigned';
 ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS paper_count INT UNSIGNED NOT NULL DEFAULT 0;
 ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS is_priority TINYINT(1) NOT NULL DEFAULT 0;
+ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS received_paper_count INT UNSIGNED DEFAULT NULL;
+ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS intake_expected_count INT UNSIGNED DEFAULT NULL;
+ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS intake_notes TEXT;
+ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS received_at DATETIME DEFAULT NULL;
+ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS received_by VARCHAR(100) NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS batch_papers (
     paper_id INT AUTO_INCREMENT PRIMARY KEY,
