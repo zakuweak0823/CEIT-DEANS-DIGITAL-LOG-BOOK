@@ -56,15 +56,26 @@ PHP API and MySQL database.
 | Area | Capabilities |
 | --- | --- |
 | **Dashboard** | Review document status summaries and see pending incoming documents. |
-| **Incoming documents** | Register submissions, record the submitter's name, issue office-verified QR tracking codes, search records, and prepare documents for release. |
+| **Incoming documents** | Record the submitter's name and submitter type separately; optionally note the submitting department or office; issue office-verified QR tracking codes; search records; and prepare documents for release. |
 | **Outgoing documents** | Track released documents and send client notifications. |
 | **Bulk papers** | Register batches, associate paper-level records, and follow batch status. |
 | **Borrowed items** | Manage item categories, borrowers, due dates, and return status. |
 | **Records and reports** | Search logbook records, inspect document activity, and generate date-filtered reports. |
 | **SMS and notifications** | Configure SMS and email, tune per-browser activity alerts, send client updates, and review SMS logs. |
 | **Admin Assistant** | Get privacy-friendly workflow guidance from a clickable side-peeking launcher and links to admin tools. Optional form assistance previews changes and requires approval before filling fields; it never submits forms. Toggle it in Settings. |
-| **Mobile app** | Submit documents with a required submitter name, receive a reference and status-tracking QR, scan office-issued codes, and access office logbook features. |
-| **Document tracker** | A separate, mobile-friendly public page shows only the status tied to an office-issued, unguessable QR token. |
+| **Mobile app** | Submit documents with a required submitter name and a clearly labeled Student/Faculty submitter type, receive a reference and status-tracking QR, scan office-issued codes, and access office logbook features. |
+| **Document tracker** | A separate, mobile-friendly public page shows only the status tied to an office-issued, unguessable QR token. Its API URL respects the project's folder path, including when installed under XAMPP `htdocs`. |
+
+### Incoming submission fields
+
+- **Name of person submitting** identifies the individual and is required in
+  both mobile and admin incoming-document forms.
+- **Submitter type** records whether the person is a Student, Faculty member,
+  or Other. It is distinct from their name and replaces the ambiguous
+  **From** label in the mobile form and shared form-label settings.
+- **Submitting department or office** is an optional admin-only field for
+  documents delivered on behalf of a department. Leave it blank for an
+  individual submission; it is not a replacement for the submitter's name.
 
 ## Admin workspace options
 
@@ -435,6 +446,7 @@ identifies the Git commit that contains the recorded changes.
 | **V1.11 — Clear mobile camera security guidance** | [`a65ca54`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/a65ca54) | Detects insecure HTTP contexts before requesting camera access and explains that phone `localhost` points to the phone itself. Directs admins to use a trusted HTTPS address or the existing local QR-image upload fallback. |
 | **V1.12 — Local HTTPS for phone QR scanning** | [`5453bb9`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/5453bb9) | Configured this XAMPP computer with a private development CA and an IP-matched Apache certificate, and documented how to install the CA on a phone and open the app over trusted HTTPS. The server and CA private keys remain outside the repository. |
 | **V1.13 — Certificate download in Admin Settings** | [`28d774d`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/28d774d) | Added a download button to Admin Settings for the public local development CA certificate, with a clear unavailable notice if the certificate is not installed on the server. Updated the phone QR-scanning setup instructions to use the button. |
+| **V1.14 — Clear submitter fields and reliable QR tracking** | This patch | Replaced the ambiguous mobile “From” category label with “Submitter type”; made the admin submitting department/office field explicitly optional; fixed tracker API routing for installations in a named project folder; and documented the field meanings and phone tracker troubleshooting. |
 
 Earlier chat iterations included repeated README and footer refinements,
 pending-document bubble improvements and its hide/show setting, admin
@@ -465,6 +477,7 @@ expanded notes.
 | Clean page routes return 404 | Enable Apache `mod_rewrite` and allow `.htaccess` overrides for the project directory. |
 | Another computer cannot open the site | Run `start-office-server.bat` on the host computer, approve its Private-network firewall prompt, and use the network URL it prints. Keep both computers on the same trusted network and leave Apache/MySQL running. |
 | Mobile app cannot reach the API | Keep Apache/MySQL running and verify the Vite proxy or `VITE_API_ENDPOINT`. On Android emulators, use `10.0.2.2` rather than `localhost`. |
+| Document tracker says “Failed to fetch” | Open the QR link on the same HTTPS Apache address and project-folder path used by the office. Confirm Admin Settings → Document status tracking has the correct Tracker base URL, and that Apache/PHP and MySQL are running. Do not use the Vite `:5173` URL as the tracker URL; it serves the mobile app, while the QR status API is served by Apache. |
 | SMS sending fails | Check cURL, Communication Settings, provider credentials, and provider account status. |
 | Android build cannot find a device | Open the Android project in Android Studio, install the required SDK components, and start an emulator or connect a device. |
 

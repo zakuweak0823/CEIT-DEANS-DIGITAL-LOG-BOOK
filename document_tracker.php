@@ -15,7 +15,7 @@ try {
     $storageReady = false;
 }
 $trackingToken = trim((string)($_GET['token'] ?? ''));
-$apiPath = rtrim(str_replace('\\', '/', dirname((string)($_SERVER['SCRIPT_NAME'] ?? '/'))), '/.');
+$apiPath = trim(str_replace('\\', '/', dirname((string)($_SERVER['SCRIPT_NAME'] ?? '/'))), '/.');
 $apiUrl = ($apiPath === '' ? '' : '/' . $apiPath) . '/mobile-api.php';
 ?>
 <!doctype html>

@@ -55,7 +55,7 @@ const statusClasses = {
 };
 
 const defaultFormLabels = {
-  sender: 'From',
+  sender: 'Submitter type',
   documentType: 'Document type',
   contactNumber: 'Client contact number',
   remarks: 'Remarks',

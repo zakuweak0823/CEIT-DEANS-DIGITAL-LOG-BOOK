@@ -267,7 +267,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                     <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                     <div class="row g-3">
                         <div class="col-12 col-md-6">
-                            <label class="form-label fw-semibold" for="formLabelSender">Sender</label>
+                            <label class="form-label fw-semibold" for="formLabelSender">Submitter type</label>
                             <input class="form-control" id="formLabelSender" name="form_labels[sender]" maxlength="60" value="<?php echo sanitize($mobileFormLabels['sender']); ?>" required>
                         </div>
                         <div class="col-12 col-md-6">
@@ -285,9 +285,9 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                         <div class="col-12">
                             <div class="form-check form-switch mb-3">
                                 <input class="form-check-input" type="checkbox" role="switch" id="formSenderEnabled" name="sender_enabled" value="1" <?php echo $mobileFormLabels['senderEnabled'] ? 'checked' : ''; ?>>
-                                <label class="form-check-label fw-semibold" for="formSenderEnabled">Show and require the Sender (“From”) field in mobile document and Bulk Papers forms</label>
+                                <label class="form-check-label fw-semibold" for="formSenderEnabled">Show and require the submitter type in mobile document and Bulk Papers forms</label>
                             </div>
-                            <div class="form-text mb-3">When off, the field is hidden and mobile submissions save a blank sender.</div>
+                            <div class="form-text mb-3">When off, the field is hidden and mobile submissions save the type as Other.</div>
                         </div>
                     </div>
                     <p class="form-text mt-3">Changing a label only changes how the field is named; it does not rename or alter stored records.</p>

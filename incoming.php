@@ -96,8 +96,8 @@ if (isset($_POST['issue_tracking_qr'])) {
     $remarks = trim($_POST['remarks'] ?? '');
     $clientPhone = contact_number_input($_POST['client_phone'] ?? '');
 
-    if ($sender === '' || $subject === '' || $submitterName === '' || strlen($submitterName) > 255 || !in_array($submitterType, ['Student', 'Faculty', 'Other'], true)) {
-        $message = show_alert('Submitter name, sender, and document type are required. The name must be 255 characters or fewer.', 'danger');
+    if ($subject === '' || $submitterName === '' || strlen($submitterName) > 255 || !in_array($submitterType, ['Student', 'Faculty', 'Other'], true)) {
+        $message = show_alert('Submitter name, submitter type, and document type are required. The name must be 255 characters or fewer.', 'danger');
     } elseif ($clientPhone === null || ($clientPhone !== '' && !is_valid_contact_number($clientPhone))) {
         $message = show_alert('Enter an 11-digit contact number using digits only, or leave it blank.', 'danger');
     } else {
@@ -123,7 +123,7 @@ if (isset($_POST['update'])) {
     $clientPhone = contact_number_input($_POST['client_phone'] ?? '');
     $submitterType = trim($_POST['submitter_type'] ?? 'Other');
 
-    if ($id > 0 && $sender !== '' && $submitterName !== '' && strlen($submitterName) <= 255 && $subject !== '' && in_array($submitterType, ['Student', 'Faculty', 'Other'], true) && $clientPhone !== null && ($clientPhone === '' || is_valid_contact_number($clientPhone))) {
+    if ($id > 0 && $submitterName !== '' && strlen($submitterName) <= 255 && $subject !== '' && in_array($submitterType, ['Student', 'Faculty', 'Other'], true) && $clientPhone !== null && ($clientPhone === '' || is_valid_contact_number($clientPhone))) {
         $phoneValue = $clientPhone === '' ? null : $clientPhone;
         $stmt = safe_query($conn, "UPDATE documents SET sender = ?, submitter_name = ?, client_phone = ?, subject = ?, remarks = ?, submitter_type = ? WHERE doc_id = ? AND type = 'Incoming'", 'ssssssi', [$sender, $submitterName, $phoneValue, $subject, $remarks, $submitterType, $id]);
         if ($stmt !== false) {
@@ -135,7 +135,7 @@ if (isset($_POST['update'])) {
     } else {
         $message = show_alert($clientPhone === null || ($clientPhone !== '' && !is_valid_contact_number($clientPhone))
             ? 'Enter an 11-digit contact number using digits only, or leave it blank.'
-            : 'Check the submitter name, sender, document type, and record details.', 'danger');
+            : 'Check the submitter name, submitter type, document type, and record details.', 'danger');
     }
 }
 
@@ -402,8 +402,9 @@ if ($stmt !== false) {
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="sender"><?php echo sanitize($mobileFormLabels['sender']); ?></label>
-                        <input type="text" id="sender" name="sender" class="form-control" value="<?php echo sanitize($sender); ?>" required>
+                        <label class="form-label" for="sender">Submitting department or office <span class="text-muted">(optional)</span></label>
+                        <input type="text" id="sender" name="sender" class="form-control" value="<?php echo sanitize($sender); ?>" maxlength="255">
+                        <div class="form-text">Add this only when the document is submitted on behalf of a department or office.</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="subject"><?php echo sanitize($mobileFormLabels['documentType']); ?></label>
@@ -446,11 +447,11 @@ if ($stmt !== false) {
                         <input type="text" id="editSubmitterName" name="submitter_name" class="form-control" maxlength="255" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="editSender">From</label>
-                        <input type="text" id="editSender" name="sender" class="form-control" required>
+                        <label class="form-label" for="editSender">Submitting department or office <span class="text-muted">(optional)</span></label>
+                        <input type="text" id="editSender" name="sender" class="form-control" maxlength="255">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="editSubmitterType">Submitted by</label>
+                        <label class="form-label" for="editSubmitterType">Submitter type</label>
                         <select id="editSubmitterType" name="submitter_type" class="form-select" required>
                             <option value="Student">Student</option>
                             <option value="Faculty">Faculty</option>

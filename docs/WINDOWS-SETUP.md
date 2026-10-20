@@ -91,6 +91,7 @@ Vite process using port 5173 before starting the LAN server.
 | Clean admin page URLs return 404 | Confirm Apache `mod_rewrite` is enabled and `.htaccess` overrides are allowed. |
 | Phone camera is unavailable | For the Vite mobile app, use `npm run dev:lan` and open its `https://<office-LAN-IP>:5173/` address. Install and trust the office CA certificate on the phone. Run `start-office-server.bat` to configure the Private-network firewall rules; upload a QR image if HTTPS is not available. |
 | `npm run dev:lan` cannot find the LAN certificate | The XAMPP Apache certificate and private key must exist under `C:\xampp\apache\conf\ssl.crt` and `C:\xampp\apache\conf\ssl.key`. Certificates are specific to each host; configure a trusted certificate for a replacement computer. |
+| QR tracker opens but says “Failed to fetch” | Use the office Apache HTTPS address with the project folder, for example `https://<office-LAN-IP>/<project-folder>/document-tracker?...`. In Admin Settings, set the Tracker base URL to `https://<office-LAN-IP>/<project-folder>` without `:5173`; port 5173 is only for the Vite mobile app. Confirm Apache/PHP and MySQL are running. |
 
 For mobile web development and Android builds, continue with the
 [Mobile app section in the main README](README.md#mobile-app).

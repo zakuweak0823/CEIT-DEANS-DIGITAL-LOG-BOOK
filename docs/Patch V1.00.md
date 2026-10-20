@@ -156,6 +156,24 @@ commit.
 - Updated the README instructions to download the certificate from Settings
   before transferring it to a phone.
 
+## V1.14 — Clear submitter fields and reliable QR tracking
+
+**Git commit:** See the V1.14 entry in the README patch history.
+
+- Renamed the Student/Faculty category to **Submitter type** in the mobile
+  form and shared Admin Settings labels, distinguishing it from the required
+  **Name of person submitting**.
+- Clarified the admin-only **Submitting department or office** field as
+  optional for documents delivered on behalf of a department; individual
+  submissions need only the person's name and submitter type.
+- Kept the submitting department optional when editing incoming documents,
+  and stopped requiring the legacy sender value for saving an incoming record.
+- Fixed the standalone tracker to build its status API path correctly when
+  the project is installed in a named XAMPP `htdocs` subfolder, preventing
+  cross-origin fetch failures on phones.
+- Expanded the README and Windows setup troubleshooting with the submitter
+  field distinctions and the separate Apache tracker/Vite mobile URLs.
+
 ## Earlier chat requests included in the project snapshot
 
 These requests were part of the same project conversation. They do not all

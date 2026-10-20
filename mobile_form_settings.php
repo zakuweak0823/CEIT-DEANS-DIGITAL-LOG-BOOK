@@ -2,7 +2,7 @@
 function mobile_form_label_defaults(): array
 {
     return [
-        'sender' => 'From',
+        'sender' => 'Submitter type',
         'documentType' => 'Document type',
         'contactNumber' => 'Client contact number',
         'remarks' => 'Remarks',
@@ -37,6 +37,9 @@ function get_mobile_form_labels($conn): array
         $value = $savedLabels[$key] ?? null;
         if (is_string($value)) {
             $value = trim($value);
+            if ($key === 'sender' && strcasecmp($value, 'From') === 0) {
+                $value = $default;
+            }
             if ($value !== '' && strlen($value) <= 60) {
                 $defaults[$key] = $value;
             }
