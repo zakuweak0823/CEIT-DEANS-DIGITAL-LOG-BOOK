@@ -7,6 +7,65 @@ require_once 'batch_support.php';
 require_once 'document_tracking.php';
 ensure_admin();
 
+if (isset($_GET['download_network_repair']) && $_GET['download_network_repair'] === '1') {
+    $projectRootLiteral = str_replace("'", "''", __DIR__);
+    $repairCommand = <<<'POWERSHELL'
+$ErrorActionPreference = 'Stop'
+$projectRoot = '__PROJECT_ROOT__'
+
+try {
+    & (Join-Path $projectRoot 'tools\ensure-mobile-camera-certificate.ps1')
+    & (Join-Path $projectRoot 'tools\start-office-server.ps1')
+
+    $mobileDirectory = Join-Path $projectRoot 'mobile-ui'
+    $npmCommand = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    if ($null -ne $npmCommand -and (Test-Path -LiteralPath (Join-Path $mobileDirectory 'node_modules\vite'))) {
+        Write-Host 'Starting the mobile app over HTTPS. Keep this window open.'
+        Push-Location $mobileDirectory
+        try {
+            & $npmCommand.Source run dev:lan
+            if ($LASTEXITCODE -ne 0) {
+                throw 'The mobile app did not start. Check the npm output above.'
+            }
+        } finally {
+            Pop-Location
+        }
+    } else {
+        Write-Host ''
+        Write-Host 'The office website and database are ready.'
+        Write-Host 'To start the phone app, install Node.js, run npm install once in mobile-ui, then run npm run dev:lan there.'
+    }
+} catch {
+    Write-Error $_
+    exit 1
+}
+POWERSHELL;
+    $repairCommand = str_replace('__PROJECT_ROOT__', $projectRootLiteral, $repairCommand);
+    if (function_exists('iconv')) {
+        $utf16RepairCommand = iconv('UTF-8', 'UTF-16LE', $repairCommand);
+    } elseif (function_exists('mb_convert_encoding')) {
+        $utf16RepairCommand = mb_convert_encoding($repairCommand, 'UTF-16LE', 'UTF-8');
+    } else {
+        http_response_code(500);
+        exit('Enable PHP iconv or mbstring to download the Windows network setup helper.');
+    }
+    if ($utf16RepairCommand === false) {
+        http_response_code(500);
+        exit('Could not prepare the Windows network repair helper.');
+    }
+    $encodedRepairCommand = base64_encode($utf16RepairCommand);
+    $repairBatch = "@echo off\r\n"
+        . "title CEIT Digital Logbook - Network Setup\r\n"
+        . "powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand {$encodedRepairCommand}\r\n"
+        . "echo.\r\npause\r\n";
+    header('Content-Type: application/octet-stream');
+    header('Content-Disposition: attachment; filename="CEIT-Logbook-Network-Setup.bat"');
+    header('Content-Length: ' . strlen($repairBatch));
+    header('Cache-Control: no-store');
+    echo $repairBatch;
+    exit;
+}
+
 try {
     ensure_document_tracking_schema($conn);
     $documentTrackingSettings = get_document_tracking_settings($conn);
@@ -242,8 +301,11 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                     <label class="form-label fw-semibold" for="document_tracker_base_url">Tracker base URL <span class="fw-normal text-muted">(optional)</span></label>
                     <input class="form-control" type="url" name="document_tracker_base_url" id="document_tracker_base_url" maxlength="255" value="<?php echo sanitize($documentTrackingSettings['configuredBaseUrl']); ?>" placeholder="https://logbook.example.edu/CEIT-DEANS-DIGITAL-LOG-BOOK">
                     <div class="form-text mb-3">This is the Apache address encoded into tracking QR codes, not the Vite mobile-app address. Use the office computer's reachable project URL (HTTPS if configured; otherwise HTTP only on your trusted local network), for example http://192.168.1.20/CEIT-DEANS-DIGITAL-LOG-BOOK. Do not add :5173. Leave blank to use this server's current request address.</div>
+                    <button class="btn btn-outline-secondary btn-sm mb-3" type="button" id="useCurrentTrackerAddress">
+                        <i class="bi bi-link-45deg me-1" aria-hidden="true"></i>Use this computer's current address
+                    </button>
                     <div class="alert alert-info" role="note">
-                        Phone camera scanning uses the mobile app's separate HTTPS address on port 5173. Start it with npm run dev:lan and install/trust its certificate on the phone. “localhost” on a phone means the phone itself.
+                        Open Admin Settings using this computer's Wi-Fi address before using the button above if QR codes need to work on phones. An address containing “localhost” works only on this computer. Phone camera scanning uses the mobile app's separate HTTPS address on port 5173.
                     </div>
                     <button class="btn btn-primary" type="submit" name="save_document_tracking_settings" value="1">
                         <i class="bi bi-check2 me-1" aria-hidden="true"></i>Save tracking settings
@@ -525,6 +587,25 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
     </div>
 
     <div class="col-12">
+        <section class="card shadow-sm" id="network-setup-settings" aria-labelledby="network-setup-settings-title">
+            <div class="card-header bg-white px-3 px-md-4 py-3">
+                <h5 class="mb-1 text-primary" id="network-setup-settings-title">Computer and network setup</h5>
+                <p class="mb-0 small text-muted">Prepare this computer when moving the logbook or changing Wi-Fi networks.</p>
+            </div>
+            <div class="card-body p-3 p-md-4">
+                <p class="mb-3">Download and run the helper on this Windows computer. It creates or refreshes the phone-camera certificate, starts XAMPP MySQL and Apache, adds firewall access only for Private networks, and starts the mobile app when Node.js and its packages are installed.</p>
+                <div class="alert alert-warning" role="note">
+                    Run this only on the computer hosting XAMPP and only while connected to a trusted Wi-Fi network. Approve the Windows administrator prompt for the Private-network firewall rules. After setup, download the public camera certificate below and install/trust it on the phone. Guest Wi-Fi isolation, a Public Windows network profile, phone certificate trust, and router restrictions may still need manual changes.
+                </div>
+                <a class="btn btn-primary" href="settings.php?download_network_repair=1">
+                    <i class="bi bi-wrench-adjustable-circle me-1" aria-hidden="true"></i>Download network setup helper
+                </a>
+                <p class="form-text mt-2 mb-0">The browser cannot run Windows repairs by itself. Save the downloaded file and double-click it on the hosting computer. If mobile dependencies are missing, run <code>npm install</code> once in <code>mobile-ui</code> first.</p>
+            </div>
+        </section>
+    </div>
+
+    <div class="col-12">
         <section class="card shadow-sm" aria-labelledby="mobile-camera-certificate-title">
             <div class="card-header bg-white px-3 px-md-4 py-3">
                 <h5 class="mb-1 text-primary" id="mobile-camera-certificate-title">Mobile camera certificate</h5>
@@ -551,6 +632,16 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
 
 <script>
 (function () {
+    const trackerBaseUrl = document.getElementById('document_tracker_base_url');
+    const useCurrentTrackerAddress = document.getElementById('useCurrentTrackerAddress');
+    if (trackerBaseUrl && useCurrentTrackerAddress) {
+        useCurrentTrackerAddress.addEventListener('click', function () {
+            const baseAddress = new URL('.', window.location.href);
+            trackerBaseUrl.value = baseAddress.origin + baseAddress.pathname.replace(/\/+$/, '');
+            trackerBaseUrl.focus();
+        });
+    }
+
     const storageKey = 'ceit-admin-preferences-v1';
     const defaults = { activityInterval: 15, soundAlerts: true, desktopAlerts: false, pendingBubble: true, assistantEnabled: true, compactMode: false, adminTheme: 'default' };
     const intervalControl = document.getElementById('adminActivityInterval');

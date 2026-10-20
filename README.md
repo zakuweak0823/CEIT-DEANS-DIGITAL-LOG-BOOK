@@ -277,6 +277,10 @@ another computer will work.
 1. On the computer that hosts XAMPP, install Node.js and run `npm install` in
    `mobile-ui`. Start [`start-office-server.bat`](start-office-server.bat)
    and approve its Private-network firewall prompt.
+   Alternatively, use **Admin Settings → Computer and network setup** to
+   download and run the Windows helper; it provisions the certificate, starts
+   XAMPP, configures Private-only firewall rules, and starts Vite when its
+   dependencies are installed.
 2. Start the mobile UI's HTTPS development server:
 
    ```powershell
@@ -319,7 +323,9 @@ being used. A public CA certificate is not a private key, but the matching
 private key must never be shared or committed. This local development
 certificate is not for a public or production server. See the
 [Windows setup guide](docs/WINDOWS-SETUP.md#access-outside-the-local-network)
-for the limits of the local setup.
+for the limits of the local setup. The Settings helper cannot change router
+guest-network isolation or install the CA on a phone; those steps require
+manual action on the trusted network and phone.
 
 ## Mobile app
 

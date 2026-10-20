@@ -192,6 +192,22 @@ commit.
   URL (not Vite port 5173); update this database setting after moving the
   project and importing its records.
 
+## V1.16 — Admin network setup helper
+
+**Git commit:** pending.
+
+- Added an Admin Settings download button for a Windows helper that refreshes
+  LAN certificates, starts XAMPP services, configures firewall access on
+  Private networks only, and starts Vite when its dependencies are installed.
+- Automatically replaces an unavailable CA signing key when the current
+  certificate no longer matches the network, retaining the old public CA
+  file as a backup and warning that phones must trust the replacement CA.
+- Added a one-click way to fill the Tracker base URL from the address used to
+  open Admin Settings, with guidance to use the host's Wi-Fi address for phone
+  access instead of `localhost`.
+- Documented network conditions that still require manual action, including
+  phone CA trust, Public Wi-Fi profiles, and guest-network isolation.
+
 ## Earlier chat requests included in the project snapshot
 
 These requests were part of the same project conversation. They do not all

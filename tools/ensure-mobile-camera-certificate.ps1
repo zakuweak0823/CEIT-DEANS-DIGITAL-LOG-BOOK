@@ -123,6 +123,53 @@ subjectKeyIdentifier = hash
         }
     }
 
+    if (-not $existingCertificateValid -and $hasCaCertificate -and -not $hasCaKey) {
+        $replacementCaConfigPath = Join-Path $temporaryDirectory 'ca.cnf'
+        @'
+[req]
+prompt = no
+distinguished_name = ca_dn
+x509_extensions = ca_ext
+
+[ca_dn]
+CN = CEIT Logbook Local Development CA
+
+[ca_ext]
+basicConstraints = critical, CA:TRUE
+keyUsage = critical, keyCertSign, cRLSign
+subjectKeyIdentifier = hash
+'@ | Set-Content -LiteralPath $replacementCaConfigPath -Encoding ASCII
+
+        $replacementCaCertificatePath = Join-Path $temporaryDirectory 'ceit-logbook-ca.crt'
+        $replacementCaKeyPath = Join-Path $temporaryDirectory 'ceit-logbook-ca.key'
+        Invoke-OpenSsl `
+            -OpenSslPath $openSslPath `
+            -Arguments @(
+                'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-sha256', '-days', '3650',
+                '-keyout', $replacementCaKeyPath, '-out', $replacementCaCertificatePath,
+                '-config', $replacementCaConfigPath
+            ) `
+            -FailureMessage 'Could not replace the unavailable local CA key. Check the XAMPP Apache OpenSSL installation.'
+        $replacementCaPublicKey = & $openSslPath x509 -in $replacementCaCertificatePath -pubkey -noout 2>&1 | Out-String
+        $replacementCaCertificateExitCode = $LASTEXITCODE
+        $replacementCaPrivateKey = & $openSslPath pkey -in $replacementCaKeyPath -pubout 2>&1 | Out-String
+        $replacementCaKeyExitCode = $LASTEXITCODE
+        if ($replacementCaCertificateExitCode -ne 0 -or
+            $replacementCaKeyExitCode -ne 0 -or
+            $replacementCaPublicKey.Trim() -ne $replacementCaPrivateKey.Trim()) {
+            throw 'The replacement local CA certificate and private key did not match.'
+        }
+
+        $previousCaCertificatePath = Join-Path $certificateDirectory (
+            'ceit-logbook-ca.previous-' + (Get-Date -Format 'yyyyMMddHHmmss') + '.crt'
+        )
+        Copy-Item -LiteralPath $caCertificatePath -Destination $previousCaCertificatePath
+        Move-Item -LiteralPath $replacementCaCertificatePath -Destination $caCertificatePath -Force
+        Move-Item -LiteralPath $replacementCaKeyPath -Destination $caKeyPath -Force
+        $hasCaKey = $true
+        Write-Warning 'The previous local CA private key was unavailable, so a new local CA was created. Re-download this computer''s certificate in Admin Settings and install/trust it on phones again.'
+    }
+
     if (-not $existingCertificateValid) {
         if (-not $hasCaKey) {
             throw 'The local server certificate is missing or does not match this computer, and the local CA private key is unavailable. Restore the CA private key from a secure backup or create a new local CA and reinstall it on trusted phones.'

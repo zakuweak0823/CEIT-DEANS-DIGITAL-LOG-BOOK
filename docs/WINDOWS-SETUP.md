@@ -35,6 +35,19 @@ automatically.
    [README](../README.md#2-sign-in-for-the-first-time), then change the
    password.
 
+For an existing installation, Admin Settings now includes **Computer and
+network setup → Download and run network setup helper**. Download it on the
+Windows computer that hosts this project and double-click it there. It
+provisions or refreshes the mobile camera certificate, starts XAMPP MySQL and
+Apache, configures the app's firewall rules for **Private networks only**, and
+starts the mobile Vite app if Node.js and its packages are already installed.
+Approve the Windows administrator prompt only on a computer and network you
+trust. If mobile dependencies are not installed, run `npm install` once in
+`mobile-ui`, then run the helper again. If the old CA signing key was not
+transferred and the certificate needs to change, the helper creates a new CA.
+Download the replacement certificate from Admin Settings and install/trust it
+on your phone again.
+
 The launcher prints a local URL and any detected Private-network addresses.
 To open the admin portal from another computer, use one of those network
 addresses, such as `http://192.168.1.25/DIT-LOGBOOK_RETRY/`. Keep the host
@@ -78,16 +91,20 @@ internet. For remote access, deploy the application to a properly secured
 server with HTTPS.
 
 Phone camera scanning requires a trusted HTTPS connection. Certificates are
-specific to a host, so do not copy the old computer's private keys. For the
-React/Vite mobile app, start the office server first, then run `npm install`
-and `npm run dev:lan` from `mobile-ui` on the new computer. Its setup step
-creates a new local CA and a server certificate matching the new computer's
-LAN IP with XAMPP OpenSSL. Open the Vite HTTPS LAN address it prints (port
-5173), then download the public CA from Admin Settings and install/trust it on
-each phone. Keep the private keys under XAMPP's Apache `conf\ssl.key`; they
-must not be transferred or committed. The launcher allows ports 80, 443, and
-5173 only on Private networks; stop any existing Vite process using port 5173
-before starting the LAN server.
+specific to a host and LAN IP, so do not copy the old computer's private keys.
+Use the Admin Settings network setup helper on the new host; it creates a new
+local CA and matching server certificate with XAMPP OpenSSL. Open the Vite
+HTTPS LAN address it prints (port 5173), then download the public CA from Admin
+Settings and install/trust it on each phone. Keep private keys under XAMPP's
+Apache `conf\ssl.key`; they must not be transferred or committed. The helper
+allows ports 80, 443, and 5173 only on Private networks.
+
+The helper cannot change a router's guest-network/device-isolation settings,
+change a Windows network marked Public, or install a CA certificate on a phone.
+Use a trusted Wi-Fi network with both devices connected, mark that Windows
+network Private if appropriate, and manually install/trust the downloaded CA
+on the phone. Do not expose XAMPP or these development certificates to the
+public internet.
 
 ## Troubleshooting
 
@@ -100,6 +117,7 @@ before starting the LAN server.
 | Clean admin page URLs return 404 | Confirm Apache `mod_rewrite` is enabled and `.htaccess` overrides are allowed. |
 | Phone camera is unavailable | For the Vite mobile app, use `npm run dev:lan` and open its `https://<office-LAN-IP>:5173/` address. Install and trust the office CA certificate on the phone. Run `start-office-server.bat` to configure the Private-network firewall rules; upload a QR image if HTTPS is not available. |
 | `npm run dev:lan` cannot find or create the LAN certificate | Run the command from `mobile-ui` so its `predev:lan` setup runs. Confirm XAMPP is above this project in `htdocs`, `apache\bin\openssl.exe` exists, and your Windows account can write to Apache's `conf\ssl.crt` and `conf\ssl.key` folders. |
+| Phone cannot reach the laptop over Wi-Fi | Confirm both devices use the same trusted Wi-Fi (not guest Wi-Fi), run the Admin Settings network setup helper on the host, and open the exact Wi-Fi address it prints. If Windows marks the Wi-Fi Public, change it to Private only if you trust that network. |
 | npm reports audit or install-script warnings | Those warnings are separate from LAN TLS setup. Do not run `npm audit fix --force` just to start the mobile app; it can change dependency versions. Run `npm install`, then `npm run dev:lan` from `mobile-ui`. |
 | QR tracker opens but says “Failed to fetch” | Use the office Apache LAN address with the project folder, for example `http://<office-LAN-IP>/<project-folder>/document-tracker?...` or HTTPS if Apache HTTPS is configured. In Admin Settings, set the Tracker base URL to that Apache project URL without `:5173`; port 5173 is only for the Vite mobile app. Confirm Apache/PHP and MySQL are running. |
 
