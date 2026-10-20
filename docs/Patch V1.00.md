@@ -194,7 +194,7 @@ commit.
 
 ## V1.16 — Admin network setup helper
 
-**Git commit:** pending.
+**Git commit:** [`69b5916`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/69b5916)
 
 - Added an Admin Settings download button for a Windows helper that refreshes
   LAN certificates, starts XAMPP services, configures firewall access on
