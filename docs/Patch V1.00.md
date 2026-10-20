@@ -176,7 +176,7 @@ commit.
 
 ## V1.15 — Automatic LAN camera certificates
 
-**Git commit:** to be recorded after this patch is committed.
+**Git commit:** [`b1f2fbd`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/b1f2fbd)
 
 - Added a Windows `predev:lan` setup step that finds XAMPP OpenSSL, detects
   the active Private-network IP, and creates a host-specific CA and matching
