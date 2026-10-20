@@ -4,12 +4,64 @@ require_once 'db.php';
 require_once 'mobile_form_settings.php';
 require_once 'mobile_app_settings.php';
 require_once 'batch_support.php';
+require_once 'document_tracking.php';
 ensure_admin();
+
+try {
+    ensure_document_tracking_schema($conn);
+    $documentTrackingSettings = get_document_tracking_settings($conn);
+} catch (Throwable $error) {
+    error_log('Document tracking setup failed in Admin Settings: ' . $error->getMessage());
+    http_response_code(500);
+    exit('Document tracking settings are unavailable. Check the server log and try again.');
+}
 
 $formSettingsNotice = '';
 $formSettingsNoticeType = 'success';
 $formSettingsNoticeScope = 'form';
-if (isset($_POST['save_batch_workflow'])) {
+if (isset($_POST['save_mobile_access'])) {
+    $formSettingsNoticeScope = 'mobile-access';
+    $mobileKioskEnabled = isset($_POST['mobile_kiosk_enabled']) ? '1' : '0';
+    $stmt = safe_query($conn, "INSERT INTO settings (key_name, value) VALUES ('mobile_kiosk_enabled', ?) ON DUPLICATE KEY UPDATE value = ?", 'ss', [$mobileKioskEnabled, $mobileKioskEnabled]);
+    if ($stmt !== false) {
+        mysqli_stmt_close($stmt);
+        $formSettingsNotice = 'Mobile logbook access settings saved.';
+    } else {
+        $formSettingsNotice = 'Mobile logbook access settings could not be saved. Check the server log and try again.';
+        $formSettingsNoticeType = 'danger';
+    }
+} elseif (isset($_POST['save_document_tracking_settings'])) {
+    $formSettingsNoticeScope = 'document-tracking';
+    $documentTrackingEnabled = isset($_POST['document_tracking_enabled']) ? '1' : '0';
+    $trackerBaseUrlInput = $_POST['document_tracker_base_url'] ?? '';
+    $normalizedTrackerBaseUrl = normalize_document_tracker_base_url($trackerBaseUrlInput);
+    if ($normalizedTrackerBaseUrl === null) {
+        $formSettingsNotice = 'Enter a valid HTTP or HTTPS tracker base URL without credentials, query parameters, or fragments.';
+        $formSettingsNoticeType = 'danger';
+    } else {
+        $conn->begin_transaction();
+        $saveFailed = false;
+        foreach ([
+            'document_tracking_enabled' => $documentTrackingEnabled,
+            'document_tracker_base_url' => $normalizedTrackerBaseUrl,
+        ] as $key => $value) {
+            $stmt = safe_query($conn, 'INSERT INTO settings (key_name, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = ?', 'sss', [$key, $value, $value]);
+            if ($stmt === false) {
+                $saveFailed = true;
+                break;
+            }
+            mysqli_stmt_close($stmt);
+        }
+        if ($saveFailed) {
+            $conn->rollback();
+            $formSettingsNotice = 'Document tracking settings could not be saved. Check the server log and try again.';
+            $formSettingsNoticeType = 'danger';
+        } else {
+            $conn->commit();
+            $formSettingsNotice = 'Document tracking settings saved.';
+        }
+    }
+} elseif (isset($_POST['save_batch_workflow'])) {
     $formSettingsNoticeScope = 'workflow';
     $confirmationMode = $_POST['intake_confirmation_mode'] ?? '';
     $qrMode = $_POST['batch_qr_mode'] ?? '';
@@ -34,8 +86,8 @@ if (isset($_POST['save_batch_workflow'])) {
         $submittedLabels = [];
     }
     foreach (mobile_form_label_defaults() as $key => $default) {
-        if ($key === 'recipientEnabled') {
-            $labels[$key] = ($_POST['recipient_enabled'] ?? '') === '1';
+        if ($key === 'senderEnabled') {
+            $labels[$key] = ($_POST['sender_enabled'] ?? '') === '1';
             continue;
         }
         $value = $submittedLabels[$key] ?? '';
@@ -97,6 +149,31 @@ if (isset($_POST['save_batch_workflow'])) {
 $mobileFormLabels = get_mobile_form_labels($conn);
 $mobileAppSettings = get_mobile_app_settings($conn);
 $batchWorkflowSettings = get_batch_workflow_settings($conn);
+try {
+    $documentTrackingSettings = get_document_tracking_settings($conn);
+} catch (Throwable $error) {
+    error_log('Document tracking settings could not be refreshed: ' . $error->getMessage());
+    http_response_code(500);
+    exit('Document tracking settings could not be loaded. Check the server log and try again.');
+}
+$mobileKioskSettingStmt = safe_query($conn, "SELECT value FROM settings WHERE key_name = 'mobile_kiosk_enabled' LIMIT 1");
+if ($mobileKioskSettingStmt === false) {
+    http_response_code(500);
+    exit('Mobile logbook access settings are unavailable. Check the server log and try again.');
+}
+$mobileKioskSetting = mysqli_stmt_get_result($mobileKioskSettingStmt);
+if ($mobileKioskSetting === false) {
+    mysqli_stmt_close($mobileKioskSettingStmt);
+    http_response_code(500);
+    exit('Mobile logbook access settings could not be read. Check the server log and try again.');
+}
+$mobileKioskSettingRow = mysqli_fetch_assoc($mobileKioskSetting);
+mysqli_stmt_close($mobileKioskSettingStmt);
+if ($mobileKioskSettingRow === false) {
+    http_response_code(500);
+    exit('Mobile logbook access settings could not be read. Check the server log and try again.');
+}
+$mobileKioskEnabled = $mobileKioskSettingRow === null || (string)$mobileKioskSettingRow['value'] === '1';
 
 $localCaCertificateName = 'ceit-logbook-local-ca.crt';
 $localCaCertificatePath = __DIR__ . DIRECTORY_SEPARATOR . $localCaCertificateName;
@@ -111,12 +188,69 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3">
             <div>
                 <h2 class="mb-1 text-primary">Admin Settings</h2>
-                <p class="text-muted mb-0">Personalize your workspace and manage how this browser keeps you informed.</p>
+                <p class="text-muted mb-0">Personalize your workspace and control mobile logbook access.</p>
             </div>
             <a class="btn btn-outline-primary" href="notification_settings">
-                <i class="bi bi-bell me-1" aria-hidden="true"></i>System notification settings
+                <i class="bi bi-chat-dots me-1" aria-hidden="true"></i>Communication Settings
             </a>
         </div>
+    </div>
+
+    <div class="col-12">
+        <section class="card shadow-sm" id="mobile-access-settings" aria-labelledby="mobile-access-settings-title">
+            <div class="card-header bg-white px-3 px-md-4 py-3">
+                <h5 class="mb-1 text-primary" id="mobile-access-settings-title">Mobile logbook access</h5>
+                <p class="mb-0 small text-muted">Control whether the mobile logbook can be used without an admin sign-in.</p>
+            </div>
+            <div class="card-body p-3 p-md-4">
+                <?php if ($formSettingsNotice !== '' && $formSettingsNoticeScope === 'mobile-access'): ?>
+                    <div class="alert alert-<?php echo sanitize($formSettingsNoticeType); ?>" role="status"><?php echo sanitize($formSettingsNotice); ?></div>
+                <?php endif; ?>
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" name="mobile_kiosk_enabled" id="mobile_kiosk_enabled" value="1" <?php echo $mobileKioskEnabled ? 'checked' : ''; ?>>
+                        <label class="form-check-label fw-semibold" for="mobile_kiosk_enabled">Enable mobile logbook access without sign-in</label>
+                    </div>
+                    <div class="alert alert-warning mt-3" role="note">
+                        When enabled, anyone who can reach this server can view and change logbook records through the mobile app. Use only on a trusted office device and network, not on public or shared networks.
+                    </div>
+                    <button class="btn btn-primary" type="submit" name="save_mobile_access" value="1">
+                        <i class="bi bi-check2 me-1" aria-hidden="true"></i>Save mobile access
+                    </button>
+                </form>
+            </div>
+        </section>
+    </div>
+
+    <div class="col-12">
+        <section class="card shadow-sm" id="document-tracking-settings" aria-labelledby="document-tracking-settings-title">
+            <div class="card-header bg-white px-3 px-md-4 py-3">
+                <h5 class="mb-1 text-primary" id="document-tracking-settings-title">Document status tracking</h5>
+                <p class="mb-0 small text-muted">Issue QR tracking links for incoming documents and control public status lookups.</p>
+            </div>
+            <div class="card-body p-3 p-md-4">
+                <?php if ($formSettingsNotice !== '' && $formSettingsNoticeScope === 'document-tracking'): ?>
+                    <div class="alert alert-<?php echo sanitize($formSettingsNoticeType); ?>" role="status"><?php echo sanitize($formSettingsNotice); ?></div>
+                <?php endif; ?>
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" role="switch" name="document_tracking_enabled" id="document_tracking_enabled" value="1" <?php echo $documentTrackingSettings['enabled'] ? 'checked' : ''; ?>>
+                        <label class="form-check-label fw-semibold" for="document_tracking_enabled">Enable QR document tracking</label>
+                    </div>
+                    <label class="form-label fw-semibold" for="document_tracker_base_url">Tracker base URL <span class="fw-normal text-muted">(optional)</span></label>
+                    <input class="form-control" type="url" name="document_tracker_base_url" id="document_tracker_base_url" maxlength="255" value="<?php echo sanitize($documentTrackingSettings['configuredBaseUrl']); ?>" placeholder="https://logbook.example.edu/CEIT-DEANS-DIGITAL-LOG-BOOK">
+                    <div class="form-text mb-3">This is the base address encoded into tracking QR codes, not the Vite mobile-app address. For phones, use the office computer's Apache HTTPS URL and project path (for example, https://192.168.1.20/CEIT-DEANS-DIGITAL-LOG-BOOK); do not add :5173. Leave blank to use this server's current request address.</div>
+                    <div class="alert alert-info" role="note">
+                        Phone camera scanning requires trusted HTTPS. Start the mobile UI with npm run dev:lan and open its HTTPS LAN address on the phone; install and trust the office certificate first. “localhost” on a phone means the phone itself.
+                    </div>
+                    <button class="btn btn-primary" type="submit" name="save_document_tracking_settings" value="1">
+                        <i class="bi bi-check2 me-1" aria-hidden="true"></i>Save tracking settings
+                    </button>
+                </form>
+            </div>
+        </section>
     </div>
 
     <div class="col-12">
@@ -137,10 +271,6 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                             <input class="form-control" id="formLabelSender" name="form_labels[sender]" maxlength="60" value="<?php echo sanitize($mobileFormLabels['sender']); ?>" required>
                         </div>
                         <div class="col-12 col-md-6">
-                            <label class="form-label fw-semibold" for="formLabelRecipient">Recipient</label>
-                            <input class="form-control" id="formLabelRecipient" name="form_labels[recipient]" maxlength="60" value="<?php echo sanitize($mobileFormLabels['recipient']); ?>" required>
-                        </div>
-                        <div class="col-12 col-md-6">
                             <label class="form-label fw-semibold" for="formLabelDocumentType">Document type</label>
                             <input class="form-control" id="formLabelDocumentType" name="form_labels[documentType]" maxlength="60" value="<?php echo sanitize($mobileFormLabels['documentType']); ?>" required>
                         </div>
@@ -153,11 +283,11 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                             <input class="form-control" id="formLabelRemarks" name="form_labels[remarks]" maxlength="60" value="<?php echo sanitize($mobileFormLabels['remarks']); ?>" required>
                         </div>
                         <div class="col-12">
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" role="switch" id="formRecipientEnabled" name="recipient_enabled" value="1" <?php echo $mobileFormLabels['recipientEnabled'] ? 'checked' : ''; ?>>
-                                <label class="form-check-label fw-semibold" for="formRecipientEnabled">Show Recipient field in admin and mobile forms</label>
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" role="switch" id="formSenderEnabled" name="sender_enabled" value="1" <?php echo $mobileFormLabels['senderEnabled'] ? 'checked' : ''; ?>>
+                                <label class="form-check-label fw-semibold" for="formSenderEnabled">Show and require the Sender (“From”) field in mobile document and Bulk Papers forms</label>
                             </div>
-                            <div class="form-text">When off, recipient inputs are hidden and documents save with a blank recipient.</div>
+                            <div class="form-text mb-3">When off, the field is hidden and mobile submissions save a blank sender.</div>
                         </div>
                     </div>
                     <p class="form-text mt-3">Changing a label only changes how the field is named; it does not rename or alter stored records.</p>
@@ -381,15 +511,15 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
     <div class="col-12">
         <section class="card shadow-sm" aria-labelledby="system-settings-title">
             <div class="card-header bg-white px-3 px-md-4 py-3">
-                <h5 class="mb-1 text-primary" id="system-settings-title">System configuration</h5>
-                <p class="mb-0 small text-muted">Manage settings that apply across the logbook, mobile app, and notification services.</p>
+                <h5 class="mb-1 text-primary" id="system-settings-title">Communication services</h5>
+                <p class="mb-0 small text-muted">Manage the SMS and email services used by the logbook.</p>
             </div>
             <div class="card-body p-3 p-md-4 d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3">
                 <div>
-                    <strong>SMS, email, and mobile office access</strong>
-                    <p class="small text-muted mb-0">Configure delivery providers, sender details, and mobile kiosk availability.</p>
+                    <strong>SMS and email delivery</strong>
+                    <p class="small text-muted mb-0">Configure messaging providers and sender details.</p>
                 </div>
-                <a class="btn btn-primary flex-shrink-0" href="notification_settings">Open notification settings <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i></a>
+                <a class="btn btn-primary flex-shrink-0" href="notification_settings">Open Communication Settings <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i></a>
             </div>
         </section>
     </div>

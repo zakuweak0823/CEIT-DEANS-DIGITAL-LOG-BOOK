@@ -3,10 +3,19 @@ require_once 'auth.php';
 require_once 'db.php';
 require_once 'sms_service.php';
 require_once 'mobile_form_settings.php';
+require_once 'document_tracking.php';
 ensure_admin();
 
 $mobileFormLabels = get_mobile_form_labels($conn);
 
+try {
+    ensure_document_tracking_schema($conn);
+    $documentTrackingSettings = get_document_tracking_settings($conn);
+} catch (Throwable $error) {
+    error_log('Outgoing document tracking setup failed: ' . $error->getMessage());
+    http_response_code(500);
+    exit('Outgoing document storage is unavailable. Check the server log and try again.');
+}
 $conn->query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS client_phone VARCHAR(20) DEFAULT NULL');
 $conn->query("ALTER TABLE documents ADD COLUMN IF NOT EXISTS submitter_type VARCHAR(20) NOT NULL DEFAULT 'Other'");
 $conn->query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_priority TINYINT(1) NOT NULL DEFAULT 0');
@@ -23,16 +32,15 @@ if (!in_array($statusFilter, ['', 'For Release', 'Released'], true)) {
 }
 if (isset($_POST['update'])) {
     $id = (int)($_POST['id'] ?? 0);
-    $recipient = $mobileFormLabels['recipientEnabled'] ? trim($_POST['recipient'] ?? '') : '';
     $subject = trim($_POST['subject'] ?? '');
     $remarks = trim($_POST['remarks'] ?? '');
     $clientPhone = contact_number_input($_POST['client_phone'] ?? '');
     $documentDate = trim($_POST['document_date'] ?? '');
     $dateObject = DateTime::createFromFormat('!Y-m-d', $documentDate);
 
-    if ($id > 0 && (!$mobileFormLabels['recipientEnabled'] || $recipient !== '') && $subject !== '' && $dateObject && $dateObject->format('Y-m-d') === $documentDate && $clientPhone !== null && ($clientPhone === '' || is_valid_contact_number($clientPhone))) {
+    if ($id > 0 && $subject !== '' && $dateObject && $dateObject->format('Y-m-d') === $documentDate && $clientPhone !== null && ($clientPhone === '' || is_valid_contact_number($clientPhone))) {
         $phoneValue = $clientPhone === '' ? null : $clientPhone;
-        $stmt = safe_query($conn, "UPDATE documents SET recipient = ?, client_phone = ?, subject = ?, remarks = ?, date_created = TIMESTAMP(?, TIME(date_created)) WHERE doc_id = ? AND type = 'Outgoing'", 'sssssi', [$recipient, $phoneValue, $subject, $remarks, $documentDate, $id]);
+        $stmt = safe_query($conn, "UPDATE documents SET client_phone = ?, subject = ?, remarks = ?, date_created = TIMESTAMP(?, TIME(date_created)) WHERE doc_id = ? AND type = 'Outgoing'", 'ssssi', [$phoneValue, $subject, $remarks, $documentDate, $id]);
         if ($stmt !== false) {
             mysqli_stmt_close($stmt);
             $message = show_alert('Outgoing document updated successfully.');
@@ -42,7 +50,7 @@ if (isset($_POST['update'])) {
     } else {
         $message = show_alert($clientPhone === null || ($clientPhone !== '' && !is_valid_contact_number($clientPhone))
             ? 'Enter an 11-digit contact number using digits only, or leave it blank.'
-            : 'Check the recipient, document type, date, and record details.', 'danger');
+            : 'Check the document type, date, and record details.', 'danger');
     }
 }
 
@@ -108,10 +116,10 @@ if (isset($_POST['send_client_sms'])) {
 $documents = [];
 if ($search !== '' && $statusFilter !== '') {
     $searchTerm = "%{$search}%";
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND status = ? AND (sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ?) ORDER BY (status = 'For Release') DESC, date_created DESC", 'sssss', [$statusFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND status = ? AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ?) ORDER BY (status = 'For Release') DESC, date_created DESC", 'ssssss', [$statusFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
 } elseif ($search !== '') {
     $searchTerm = "%{$search}%";
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND (sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ? OR status LIKE ?) ORDER BY (status = 'For Release') DESC, date_created DESC", 'sssss', [$searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ? OR status LIKE ?) ORDER BY (status = 'For Release') DESC, date_created DESC", 'ssssss', [$searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
 } elseif ($statusFilter !== '') {
     $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND status = ? ORDER BY (status = 'For Release') DESC, date_created DESC", 's', [$statusFilter]);
 } else {
@@ -166,6 +174,8 @@ if ($stmt !== false) {
                         <thead class="table-light">
                             <tr>
                                 <th>Date</th>
+                                <th>Reference</th>
+                                <th>Submitted by</th>
                                 <th>Recipient</th>
                                 <th>Document type</th>
                                 <th>Client Contact</th>
@@ -175,11 +185,16 @@ if ($stmt !== false) {
                         </thead>
                         <tbody>
                             <?php if (count($documents) === 0): ?>
-                                <tr><td colspan="6" class="text-center text-muted">No outgoing documents found.</td></tr>
+                                <tr><td colspan="8" class="text-center text-muted">No outgoing documents found.</td></tr>
                             <?php else: ?>
                                 <?php foreach ($documents as $document): ?>
                                     <tr>
                                         <td data-label="Date"><?php echo sanitize(date('Y-m-d', strtotime($document['date_created']))); ?></td>
+                                        <td data-label="Reference">
+                                            <code><?php echo sanitize(document_tracking_reference($document['doc_id'])); ?></code>
+                                            <?php if (!empty($document['tracking_token']) && $documentTrackingSettings['enabled']): ?><div class="small text-success mt-1"><i class="bi bi-qr-code me-1" aria-hidden="true"></i>QR tracking active</div><?php endif; ?>
+                                        </td>
+                                        <td data-label="Submitted by"><?php echo sanitize(trim((string)($document['submitter_name'] ?? '')) !== '' ? $document['submitter_name'] : 'Name not recorded'); ?></td>
                                         <td data-label="Recipient"><?php echo sanitize($document['recipient']); ?></td>
                                         <td data-label="Document type"><?php echo sanitize($document['subject']); ?></td>
                                         <td data-label="Client contact"><?php echo sanitize($document['client_phone'] ?? 'Not provided'); ?></td>
@@ -191,7 +206,7 @@ if ($stmt !== false) {
                                         </td>
                                         <td data-label="Actions">
                                             <div class="table-actions">
-                                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="editDocument(<?php echo (int)$document['doc_id']; ?>, <?php echo htmlspecialchars(json_encode($document['recipient'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['client_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['subject'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['remarks'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode(date('Y-m-d', strtotime($document['date_created'])), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="editDocument(<?php echo (int)$document['doc_id']; ?>, <?php echo htmlspecialchars(json_encode($document['client_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['subject'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['remarks'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode(date('Y-m-d', strtotime($document['date_created'])), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
                                                 <i class="bi bi-pencil"></i> Edit
                                             </button>
                                             <form method="POST" class="d-inline">
@@ -314,10 +329,6 @@ if ($stmt !== false) {
                         <label class="form-label" for="editDate">Date</label>
                         <input type="date" id="editDate" name="document_date" class="form-control" required>
                     </div>
-                    <div class="mb-3" <?php echo $mobileFormLabels['recipientEnabled'] ? '' : 'hidden'; ?>>
-                        <label class="form-label" for="editRecipient"><?php echo sanitize($mobileFormLabels['recipient']); ?></label>
-                        <input type="text" id="editRecipient" name="recipient" class="form-control" <?php echo $mobileFormLabels['recipientEnabled'] ? 'required' : 'disabled'; ?>>
-                    </div>
                     <div class="mb-3">
                         <label class="form-label" for="editClientPhone"><?php echo sanitize($mobileFormLabels['contactNumber']); ?> (optional)</label>
                         <input type="tel" id="editClientPhone" name="client_phone" class="form-control" inputmode="numeric" pattern="[0-9]{11}" maxlength="11" placeholder="09123456789" title="Enter exactly 11 digits.">
@@ -342,10 +353,9 @@ if ($stmt !== false) {
 </div>
 
 <script>
-function editDocument(id, recipient, clientPhone, subject, remarks, date) {
+function editDocument(id, clientPhone, subject, remarks, date) {
     document.getElementById('editId').value = id;
     document.getElementById('editDate').value = date;
-    document.getElementById('editRecipient').value = recipient;
     document.getElementById('editClientPhone').value = clientPhone;
     document.getElementById('editSubject').value = subject;
     document.getElementById('editRemarks').value = remarks;

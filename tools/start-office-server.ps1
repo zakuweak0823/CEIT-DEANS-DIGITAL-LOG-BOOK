@@ -3,7 +3,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$firewallRuleName = 'CEIT Digital Logbook - Apache HTTP (Private)'
+$httpFirewallRuleName = 'CEIT Digital Logbook - Apache HTTP (Private)'
+$httpsFirewallRuleName = 'CEIT Digital Logbook - Apache HTTPS (Private)'
+$mobileFirewallRuleName = 'CEIT Digital Logbook - Mobile Vite (Private)'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 
 function Find-XamppRoot {
@@ -37,9 +39,14 @@ function Test-TcpPort {
 }
 
 function Test-FirewallRule {
-    param([string]$ApachePath)
+    param(
+        [string]$RuleName,
+        [int]$Port,
+        [string]$ApplicationPath,
+        [switch]$MatchApplication
+    )
 
-    $rule = Get-NetFirewallRule -DisplayName $firewallRuleName -ErrorAction SilentlyContinue
+    $rule = Get-NetFirewallRule -DisplayName $RuleName -ErrorAction SilentlyContinue
     if ($null -eq $rule) {
         return $false
     }
@@ -57,9 +64,9 @@ function Test-FirewallRule {
         $applicationFilter = Get-NetFirewallApplicationFilter -AssociatedNetFirewallRule $candidate -ErrorAction SilentlyContinue
         $portFilter = Get-NetFirewallPortFilter -AssociatedNetFirewallRule $candidate -ErrorAction SilentlyContinue
         if (
-            $applicationFilter.Program -eq $ApachePath -and
+            (-not $MatchApplication -or $applicationFilter.Program -eq $ApplicationPath) -and
             $portFilter.Protocol -eq 'TCP' -and
-            $portFilter.LocalPort -contains '80'
+            $portFilter.LocalPort -contains [string]$Port
         ) {
             return $true
         }
@@ -80,10 +87,14 @@ if ($ConfigureFirewall) {
         throw 'Firewall configuration must be run as Administrator.'
     }
 
-    Get-NetFirewallRule -DisplayName $firewallRuleName -ErrorAction SilentlyContinue |
+    Get-NetFirewallRule -DisplayName $httpFirewallRuleName -ErrorAction SilentlyContinue |
+        Remove-NetFirewallRule -ErrorAction SilentlyContinue
+    Get-NetFirewallRule -DisplayName $httpsFirewallRuleName -ErrorAction SilentlyContinue |
+        Remove-NetFirewallRule -ErrorAction SilentlyContinue
+    Get-NetFirewallRule -DisplayName $mobileFirewallRuleName -ErrorAction SilentlyContinue |
         Remove-NetFirewallRule -ErrorAction SilentlyContinue
     New-NetFirewallRule `
-        -DisplayName $firewallRuleName `
+        -DisplayName $httpFirewallRuleName `
         -Description 'Allow this XAMPP Apache server on TCP port 80 only on Private networks.' `
         -Direction Inbound `
         -Action Allow `
@@ -91,12 +102,33 @@ if ($ConfigureFirewall) {
         -LocalPort 80 `
         -Program $apachePath `
         -Profile Private | Out-Null
+    New-NetFirewallRule `
+        -DisplayName $httpsFirewallRuleName `
+        -Description 'Allow this XAMPP Apache server on TCP port 443 only on Private networks.' `
+        -Direction Inbound `
+        -Action Allow `
+        -Protocol TCP `
+        -LocalPort 443 `
+        -Program $apachePath `
+        -Profile Private | Out-Null
+    New-NetFirewallRule `
+        -DisplayName $mobileFirewallRuleName `
+        -Description 'Allow the mobile Vite development server on TCP port 5173 only on Private networks.' `
+        -Direction Inbound `
+        -Action Allow `
+        -Protocol TCP `
+        -LocalPort 5173 `
+        -Profile Private | Out-Null
     exit 0
 }
 
-if (-not (Test-FirewallRule -ApachePath $apachePath)) {
-    Write-Host 'A Private-network-only Apache firewall rule is needed for other computers to connect.'
-    Write-Host 'Windows will ask for administrator approval. The rule allows only this Apache executable on TCP port 80, on Private networks.'
+if (
+    -not (Test-FirewallRule -RuleName $httpFirewallRuleName -Port 80 -ApplicationPath $apachePath -MatchApplication) -or
+    -not (Test-FirewallRule -RuleName $httpsFirewallRuleName -Port 443 -ApplicationPath $apachePath -MatchApplication) -or
+    -not (Test-FirewallRule -RuleName $mobileFirewallRuleName -Port 5173)
+) {
+    Write-Host 'Private-network-only firewall rules are needed for the office site and mobile app.'
+    Write-Host 'Windows will ask for administrator approval. The rules allow Apache on ports 80 and 443, and the mobile app on port 5173, on Private networks only.'
     $scriptPath = $PSCommandPath
     $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" -ConfigureFirewall"
     try {
@@ -105,8 +137,12 @@ if (-not (Test-FirewallRule -ApachePath $apachePath)) {
         throw 'Firewall setup was cancelled or failed. Approve the Windows prompt, then run this launcher again.'
     }
 
-    if (-not (Test-FirewallRule -ApachePath $apachePath)) {
-        throw 'The Apache firewall rule was not created. Run the launcher again and approve the Windows prompt.'
+    if (
+        -not (Test-FirewallRule -RuleName $httpFirewallRuleName -Port 80 -ApplicationPath $apachePath -MatchApplication) -or
+        -not (Test-FirewallRule -RuleName $httpsFirewallRuleName -Port 443 -ApplicationPath $apachePath -MatchApplication) -or
+        -not (Test-FirewallRule -RuleName $mobileFirewallRuleName -Port 5173)
+    ) {
+        throw 'The Private-network firewall rules were not created. Run the launcher again and approve the Windows prompt.'
     }
 }
 
@@ -145,6 +181,7 @@ if (-not (Test-TcpPort -ComputerName '127.0.0.1' -Port 80)) {
 $folderName = Split-Path -Leaf $projectRoot
 $urlPath = [Uri]::EscapeDataString($folderName)
 $localUrl = "http://localhost/$urlPath/"
+$localHttpsUrl = "https://localhost/$urlPath/"
 $lanAddresses = @(
     Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred |
         Where-Object {
@@ -157,8 +194,15 @@ $lanAddresses = @(
 Write-Host ''
 Write-Host 'CEIT Digital Logbook is ready.'
 Write-Host "This computer: $localUrl"
+if (Test-TcpPort -ComputerName '127.0.0.1' -Port 443) {
+    Write-Host "This computer (HTTPS): $localHttpsUrl"
+}
 foreach ($address in $lanAddresses) {
     Write-Host "Other computers on this Private network: http://${address}/$urlPath/"
+    if (Test-TcpPort -ComputerName '127.0.0.1' -Port 443) {
+        Write-Host "Other computers (HTTPS): https://${address}/$urlPath/"
+    }
+    Write-Host "Mobile app (HTTPS): https://${address}:5173/ (start it with npm run dev:lan)"
 }
 if ($lanAddresses.Count -eq 0) {
     Write-Warning 'No Private-network IPv4 address was found. Connect this computer and the other device to the same trusted Wi-Fi/network.'

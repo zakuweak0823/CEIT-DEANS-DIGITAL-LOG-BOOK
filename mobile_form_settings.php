@@ -3,11 +3,10 @@ function mobile_form_label_defaults(): array
 {
     return [
         'sender' => 'From',
-        'recipient' => 'Recipient',
         'documentType' => 'Document type',
         'contactNumber' => 'Client contact number',
         'remarks' => 'Remarks',
-        'recipientEnabled' => true,
+        'senderEnabled' => true,
     ];
 }
 
@@ -31,7 +30,7 @@ function get_mobile_form_labels($conn): array
     }
 
     foreach ($defaults as $key => $default) {
-        if ($key === 'recipientEnabled') {
+        if ($key === 'senderEnabled') {
             $defaults[$key] = ($savedLabels[$key] ?? true) === true;
             continue;
         }
@@ -49,7 +48,7 @@ function get_mobile_form_labels($conn): array
 
 function save_mobile_form_labels($conn, array $labels): bool
 {
-    $labels['recipientEnabled'] = ($labels['recipientEnabled'] ?? true) === true;
+    $labels['senderEnabled'] = ($labels['senderEnabled'] ?? true) === true;
     $value = json_encode($labels, JSON_UNESCAPED_UNICODE);
     if (!is_string($value)) {
         return false;

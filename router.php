@@ -23,10 +23,13 @@ $requestMethod = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 
 // Canonicalize browser navigation, but never redirect POSTs that carry form submissions.
 if (in_array($requestMethod, ['GET', 'HEAD'], true)
-    && preg_match('~/(dashboard|quick_document|incoming|outgoing|batch_papers|batch_tracker|borrowed|item_categories|sms|notification_settings|settings|reports|records|login|logout)\.php$~i', $requestPath, $matches)
+    && preg_match('~/(dashboard|quick_document|incoming|outgoing|batch_papers|batch_tracker|document_tracker|borrowed|item_categories|sms|notification_settings|settings|reports|records|login|logout)\.php$~i', $requestPath, $matches)
 ) {
     $query = (string)($_SERVER['QUERY_STRING'] ?? '');
-    header('Location: ' . substr($requestPath, 0, -4) . ($query !== '' ? '?' . $query : ''), true, 302);
+    $cleanPath = $matches[1] === 'document_tracker'
+        ? preg_replace('/document_tracker\.php$/i', 'document-tracker', $requestPath)
+        : substr($requestPath, 0, -4);
+    header('Location: ' . $cleanPath . ($query !== '' ? '?' . $query : ''), true, 302);
     exit;
 }
 
@@ -34,6 +37,14 @@ if ($requestPath === '/' || $requestPath === '') {
     $page = 'dashboard';
 } else {
     $page = trim($requestPath, '/');
+}
+
+if ($page === 'document-tracker') {
+    $scriptPath = __DIR__ . DIRECTORY_SEPARATOR . 'document_tracker.php';
+    $_SERVER['SCRIPT_FILENAME'] = $scriptPath;
+    $_SERVER['SCRIPT_NAME'] = '/document_tracker.php';
+    require $scriptPath;
+    return true;
 }
 
 if (in_array($page, $adminPages, true)) {

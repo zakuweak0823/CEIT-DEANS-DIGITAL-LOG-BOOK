@@ -530,10 +530,10 @@ if (document.body.classList.contains('admin-body')) {
                 },
                 {
                     match: /\b(notification|sms|email|alert|sound|desktop)\b/i,
-                    text: 'Admin Settings controls this browser’s activity checks and alerts. Notification Settings is for system-wide messaging configuration and SMS logs.',
+                    text: 'Admin Settings controls mobile logbook access and this browser’s activity checks and alerts. Communication Settings is for system-wide SMS and email delivery.',
                     links: [
                         { label: 'Admin Settings', href: 'settings' },
-                        { label: 'Notification Settings', href: 'notification_settings' },
+                        { label: 'Communication Settings', href: 'notification_settings' },
                         { label: 'SMS Logs', href: 'sms' }
                     ]
                 },

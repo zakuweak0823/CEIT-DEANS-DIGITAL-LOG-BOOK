@@ -19,9 +19,11 @@ require_once 'sms_service.php';
 require_once 'batch_support.php';
 require_once 'mobile_form_settings.php';
 require_once 'mobile_app_settings.php';
+require_once 'document_tracking.php';
 
 // Initialize incremental schema additions before serving any mobile action.
 try {
+    ensure_document_tracking_schema($conn);
     $conn->query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS client_phone VARCHAR(20) DEFAULT NULL');
     $conn->query("ALTER TABLE documents ADD COLUMN IF NOT EXISTS submitter_type VARCHAR(20) NOT NULL DEFAULT 'Other'");
     $conn->query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_priority TINYINT(1) NOT NULL DEFAULT 0');
@@ -39,9 +41,68 @@ try {
             REFERENCES users(user_id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 } catch (Throwable $error) {
-    error_log('Mobile API token table setup failed: ' . $error->getMessage());
+    error_log('Mobile API schema setup failed: ' . $error->getMessage());
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Mobile authentication storage is unavailable']);
+    exit;
+}
+
+try {
+    $documentTrackingSettings = get_document_tracking_settings($conn);
+} catch (Throwable $error) {
+    error_log('Document tracking settings could not be loaded: ' . $error->getMessage());
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Document tracking settings are unavailable']);
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'document_tracker_status') {
+    if (!$documentTrackingSettings['enabled']) {
+        http_response_code(503);
+        echo json_encode(['success' => false, 'message' => 'Document tracking is currently unavailable']);
+        exit;
+    }
+    $trackingToken = trim((string)($_GET['token'] ?? ''));
+    if (preg_match('/^[a-f0-9]{64}$/', $trackingToken) !== 1) {
+        http_response_code(404);
+        echo json_encode(['success' => false, 'message' => 'This tracking QR code is invalid or was not issued by this office']);
+        exit;
+    }
+    $stmt = safe_query(
+        $conn,
+        "SELECT doc_id, type, subject, status, DATE_FORMAT(date_created, '%Y-%m-%d') AS date
+         FROM documents WHERE tracking_token = ? LIMIT 1",
+        's',
+        [$trackingToken]
+    );
+    if ($stmt === false) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'Document status could not be loaded']);
+        exit;
+    }
+    $result = mysqli_stmt_get_result($stmt);
+    $document = $result === false ? false : mysqli_fetch_assoc($result);
+    mysqli_stmt_close($stmt);
+    if ($document === false) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'Document status could not be read']);
+        exit;
+    }
+    if ($document === null) {
+        http_response_code(404);
+        echo json_encode(['success' => false, 'message' => 'This tracking QR code is invalid or was not issued by this office']);
+        exit;
+    }
+    echo json_encode([
+        'success' => true,
+        'record' => [
+            'reference' => document_tracking_reference($document['doc_id']),
+            'type' => $document['type'],
+            'subject' => $document['subject'],
+            'status' => $document['status'],
+            'date' => $document['date'],
+        ],
+    ]);
     exit;
 }
 
@@ -70,7 +131,27 @@ try {
     exit;
 }
 
-$officeKioskEnabled = (string)safe_scalar($conn, "SELECT value FROM settings WHERE key_name = 'mobile_kiosk_enabled'") === '1';
+$mobileKioskSettingStmt = safe_query($conn, "SELECT value FROM settings WHERE key_name = 'mobile_kiosk_enabled' LIMIT 1");
+if ($mobileKioskSettingStmt === false) {
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Mobile access settings are unavailable']);
+    exit;
+}
+$mobileKioskSettingResult = mysqli_stmt_get_result($mobileKioskSettingStmt);
+if ($mobileKioskSettingResult === false) {
+    mysqli_stmt_close($mobileKioskSettingStmt);
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Mobile access settings could not be read']);
+    exit;
+}
+$mobileKioskSettingRow = mysqli_fetch_assoc($mobileKioskSettingResult);
+mysqli_stmt_close($mobileKioskSettingStmt);
+if ($mobileKioskSettingRow === false) {
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'Mobile access settings could not be read']);
+    exit;
+}
+$officeKioskEnabled = $mobileKioskSettingRow === null || (string)$mobileKioskSettingRow['value'] === '1';
 
 try {
     ensure_batch_storage($conn);
@@ -170,7 +251,7 @@ if ($authorization !== '' && preg_match('/^Bearer\s+([a-f0-9]{64})$/i', $authori
 }
 if (!$officeKioskEnabled && !$authenticatedUser) {
     http_response_code(401);
-    echo json_encode(['success' => false, 'message' => "Office kiosk access is disabled. Enable 'Open the mobile logbook without sign-in' in office settings."]);
+    echo json_encode(['success' => false, 'message' => "Mobile logbook access is disabled. Enable it in Admin Settings if access without sign-in is required."]);
     exit;
 }
 
@@ -253,7 +334,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
         // Repeat the eligibility checks in the write to prevent stale mobile clients overwriting a newer state.
-        $stmt = safe_query($conn, "UPDATE documents SET type = 'Outgoing', status = 'For Release', sender = ?, recipient = ? WHERE doc_id = ? AND type = 'Incoming' AND status = 'Pending'", 'ssi', [$document['recipient'], $document['sender'], $documentId]);
+        $outgoingSender = trim((string)$document['recipient']) !== ''
+            ? $document['recipient']
+            : "Dean's Office";
+        $stmt = safe_query($conn, "UPDATE documents SET type = 'Outgoing', status = 'For Release', sender = ?, recipient = ? WHERE doc_id = ? AND type = 'Incoming' AND status = 'Pending'", 'ssi', [$outgoingSender, $document['sender'], $documentId]);
         if ($stmt === false || mysqli_stmt_affected_rows($stmt) !== 1) {
             if ($stmt !== false) mysqli_stmt_close($stmt);
             http_response_code(409);
@@ -266,7 +350,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'success' => true,
             'prepared' => true,
             'status' => 'For Release',
-            'sender' => $document['recipient'],
+            'sender' => $outgoingSender,
             'recipient' => $document['sender'],
         ]);
         exit;
@@ -477,31 +561,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $batchType = trim($input['batch_type'] ?? '');
         $isPriority = 0;
         $batchDate = trim($input['batch_date'] ?? '');
-        $senderType = trim($input['sender_type'] ?? '');
-        $recipientContactType = $mobileFormLabels['recipientEnabled'] ? trim($input['recipient_contact_type'] ?? 'Unassigned') : 'Unassigned';
-        $recipient = $mobileFormLabels['recipientEnabled'] ? (contact_number_input($input['recipient'] ?? '') ?? '') : '';
+        $senderType = $mobileFormLabels['senderEnabled'] ? trim($input['sender_type'] ?? '') : '';
+        $recipientContactType = 'Unassigned';
+        $recipient = '';
         $batchRemarks = trim($input['remarks'] ?? '');
         $paperCount = filter_var($input['paper_count'] ?? null, FILTER_VALIDATE_INT);
         $batchId = (int)($input['batch_id'] ?? 0);
         $dateObject = DateTime::createFromFormat('!Y-m-d', $batchDate);
-        $validRecipient = $recipientContactType === 'Unassigned'
-            ? true
-            : ($recipient !== '' && (
-                $recipientContactType === 'Email'
-                    ? filter_var($recipient, FILTER_VALIDATE_EMAIL) !== false
-                    : is_valid_contact_number($recipient)
-            ));
         if (!in_array($documentType, ['Incoming', 'Outgoing'], true) ||
             $batchType === '' || strlen($batchType) > 255 ||
             !$dateObject || $dateObject->format('Y-m-d') !== $batchDate ||
-            !in_array($senderType, ['Student', 'Faculty'], true) ||
-            !in_array($recipientContactType, ['Email', 'Contact', 'Unassigned'], true) ||
-            !$validRecipient || $paperCount === false || $paperCount < 1 || $paperCount > 9999 ||
+            ($mobileFormLabels['senderEnabled'] && !in_array($senderType, ['Student', 'Faculty'], true)) ||
+            $paperCount === false || $paperCount < 1 || $paperCount > 9999 ||
             ($action === 'update_batch' && $batchId <= 0)) {
             http_response_code(400);
-            echo json_encode(['success' => false, 'message' => $recipientContactType === 'Contact' && !is_valid_contact_number($recipient)
-                ? 'Enter an 11-digit recipient contact number using digits only.'
-                : 'Check the batch name, date, submitter, recipient details, and paper count (1–9,999).']);
+            echo json_encode(['success' => false, 'message' => 'Check the batch name, date, submitter, and paper count (1–9,999).']);
             exit;
         }
 
@@ -512,6 +586,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($action === 'add_batch') {
                 $batchCode = 'BP-' . date('Ymd') . '-' . strtoupper(bin2hex(random_bytes(3)));
                 $trackingToken = bin2hex(random_bytes(32));
+                $recipientValue = '';
                 $stmt = safe_query(
                     $conn,
                     'INSERT INTO document_batches (batch_code, document_type, batch_type, status, batch_date, sender, sender_type, recipient, recipient_contact_type, remarks, tracking_token, paper_count, is_priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -534,22 +609,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $isPriority = (int)$existingBatch['is_priority'];
                 $stmt = safe_query(
                     $conn,
-                    'UPDATE document_batches SET document_type = ?, batch_type = ?, batch_date = ?, sender = ?, sender_type = ?, recipient = ?, recipient_contact_type = ?, remarks = ?, paper_count = ? WHERE batch_id = ?',
-                    'ssssssssii',
-                    [$documentType, $batchType, $batchDate, $senderType, $senderType, $recipientValue, $recipientContactType, $batchRemarks, $paperCount, $batchId]
+                    'UPDATE document_batches SET document_type = ?, batch_type = ?, batch_date = ?, sender = ?, sender_type = ?, remarks = ?, paper_count = ? WHERE batch_id = ?',
+                    'ssssssii',
+                    [$documentType, $batchType, $batchDate, $senderType, $senderType, $batchRemarks, $paperCount, $batchId]
                 );
                 if ($stmt === false) throw new RuntimeException('Could not update batch details');
                 mysqli_stmt_close($stmt);
 
-                $legacyRecipient = !$mobileFormLabels['recipientEnabled'] && $recipientValue === ''
-                    ? ''
-                    : ($recipientValue === '' ? 'Unassigned' : $recipientValue);
-                $legacyPhone = $recipientContactType === 'Contact' ? $recipientValue : null;
                 $stmt = safe_query(
                     $conn,
-                    'UPDATE documents d INNER JOIN batch_papers p ON p.doc_id = d.doc_id SET d.type = ?, d.date_created = ?, d.sender = ?, d.recipient = ?, d.client_phone = ?, d.submitter_type = ?, d.status = ?, d.is_priority = ? WHERE p.batch_id = ?',
-                    'sssssssii',
-                    [$documentType, $batchDate, $senderType, $legacyRecipient, $legacyPhone, $senderType, $batchStatus, $isPriority, $batchId]
+                    'UPDATE documents d INNER JOIN batch_papers p ON p.doc_id = d.doc_id SET d.type = ?, d.date_created = ?, d.sender = ?, d.submitter_type = ?, d.status = ?, d.is_priority = ? WHERE p.batch_id = ?',
+                    'sssssii',
+                    [$documentType, $batchDate, $senderType, $senderType, $batchStatus, $isPriority, $batchId]
                 );
                 if ($stmt === false) throw new RuntimeException('Could not update linked paper records');
                 mysqli_stmt_close($stmt);
@@ -584,12 +655,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'add_incoming' || $action === 'quick_submit_incoming') {
         $isQuickSubmit = $action === 'quick_submit_incoming';
-        $sender = trim($input['sender'] ?? '');
-        $recipient = $mobileFormLabels['recipientEnabled'] ? trim($input['recipient'] ?? '') : '';
+        $sender = $mobileFormLabels['senderEnabled'] ? trim($input['sender'] ?? '') : '';
+        $submitterName = is_string($input['submitter_name'] ?? null) ? trim($input['submitter_name']) : '';
+        $recipient = '';
         $subject = trim($input['subject'] ?? '');
         $remarks = trim($input['remarks'] ?? '');
         $clientPhone = contact_number_input($input['client_phone'] ?? '');
-        $submitterType = trim($input['submitter_type'] ?? $sender);
+        $submitterType = $mobileFormLabels['senderEnabled']
+            ? trim($input['submitter_type'] ?? $sender)
+            : 'Other';
         $documentDate = trim($input['date'] ?? '');
         $dateObject = DateTime::createFromFormat('!Y-m-d', $documentDate);
 
@@ -598,12 +672,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ? ($clientPhone === '' || is_valid_contact_number($clientPhone))
                 : is_valid_contact_number($clientPhone)
         );
-        if ($sender && (!$mobileFormLabels['recipientEnabled'] || $recipient) && $subject && $validClientPhone && in_array($submitterType, ['Student', 'Faculty', 'Other'], true) && $dateObject && $dateObject->format('Y-m-d') === $documentDate) {
+        if ((!$mobileFormLabels['senderEnabled'] || $sender !== '') &&
+            $submitterName !== '' && strlen($submitterName) <= 255 &&
+            $subject && $validClientPhone &&
+            in_array($submitterType, ['Student', 'Faculty', 'Other'], true) &&
+            $dateObject && $dateObject->format('Y-m-d') === $documentDate) {
             $phoneValue = $clientPhone === '' ? null : $clientPhone;
             $entrySource = $isQuickSubmit ? 'quick_submit' : 'standard';
             $conn->begin_transaction();
             try {
-                $stmt = safe_query($conn, "INSERT INTO documents(type, sender, recipient, client_phone, subject, remarks, status, date_created, entry_source, submitter_type) VALUES('Incoming', ?, ?, ?, ?, ?, 'Pending', TIMESTAMP(?, CURTIME()), ?, ?)", 'ssssssss', [$sender, $recipient, $phoneValue, $subject, $remarks, $documentDate, $entrySource, $submitterType]);
+                $stmt = safe_query($conn, "INSERT INTO documents(type, sender, submitter_name, recipient, client_phone, subject, remarks, status, date_created, entry_source, submitter_type) VALUES('Incoming', ?, ?, ?, ?, ?, ?, 'Pending', TIMESTAMP(?, CURTIME()), ?, ?)", 'sssssssss', [$sender, $submitterName, $recipient, $phoneValue, $subject, $remarks, $documentDate, $entrySource, $submitterType]);
                 if ($stmt === false) {
                     throw new RuntimeException('Incoming document insert failed');
                 }
@@ -619,14 +697,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new RuntimeException('Mobile submission log insert failed');
                 }
                 mysqli_stmt_close($logStmt);
-                $conn->commit();
                 error_log(sprintf(
                     '[Mobile submission] %s | %s | Incoming document #%d saved',
                     date('Y-m-d H:i:s'),
                     $isQuickSubmit ? 'Quick Submit' : 'Standard Submit',
                     $documentId
                 ));
-                echo json_encode(['success' => true, 'message' => 'Incoming document added', 'id' => $documentId, 'status' => 'Pending']);
+                $trackingToken = null;
+                if ($documentTrackingSettings['enabled']) {
+                    $trackingToken = create_document_tracking_token();
+                    $tokenStmt = safe_query(
+                        $conn,
+                        'UPDATE documents SET tracking_token = ? WHERE doc_id = ? AND tracking_token IS NULL',
+                        'si',
+                        [$trackingToken, $documentId]
+                    );
+                    if ($tokenStmt === false || mysqli_stmt_affected_rows($tokenStmt) !== 1) {
+                        if ($tokenStmt !== false) {
+                            mysqli_stmt_close($tokenStmt);
+                        }
+                        throw new RuntimeException('Document tracking QR could not be issued');
+                    }
+                    mysqli_stmt_close($tokenStmt);
+                }
+                $conn->commit();
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Incoming document added',
+                    'id' => $documentId,
+                    'status' => 'Pending',
+                    'reference' => document_tracking_reference($documentId),
+                    'submitterName' => $submitterName,
+                    'trackerUrl' => $trackingToken === null
+                        ? null
+                        : $documentTrackingSettings['baseUrl'] . '?token=' . rawurlencode($trackingToken),
+                ]);
             } catch (Throwable $error) {
                 $conn->rollback();
                 error_log('Mobile incoming submission failed: ' . $error->getMessage());
@@ -645,7 +750,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'add_outgoing') {
         $sender = trim($input['sender'] ?? '');
-        $recipient = $mobileFormLabels['recipientEnabled'] ? trim($input['recipient'] ?? '') : '';
+        $recipient = '';
         $subject = trim($input['subject'] ?? '');
         $remarks = trim($input['remarks'] ?? '');
         $clientPhone = contact_number_input($input['client_phone'] ?? '');
@@ -653,7 +758,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $dateObject = DateTime::createFromFormat('!Y-m-d', $documentDate);
         $validClientPhone = $clientPhone !== null && ($clientPhone === '' || is_valid_contact_number($clientPhone));
 
-        if ($sender && (!$mobileFormLabels['recipientEnabled'] || $recipient) && $subject && $validClientPhone && $dateObject && $dateObject->format('Y-m-d') === $documentDate) {
+        if ($sender && $subject && $validClientPhone && $dateObject && $dateObject->format('Y-m-d') === $documentDate) {
             $phoneValue = $clientPhone === '' ? null : $clientPhone;
             $stmt = safe_query($conn, "INSERT INTO documents(type, sender, recipient, client_phone, subject, remarks, status, date_created) VALUES('Outgoing', ?, ?, ?, ?, ?, 'For Release', TIMESTAMP(?, CURTIME()))", 'ssssss', [$sender, $recipient, $phoneValue, $subject, $remarks, $documentDate]);
             if ($stmt !== false) {
@@ -790,13 +895,15 @@ $systemOverview = [
 
 $response = [
     'mobileKioskEnabled' => $officeKioskEnabled,
+    'documentTrackerEnabled' => $documentTrackingSettings['enabled'],
+    'documentTrackerBaseUrl' => $documentTrackingSettings['baseUrl'],
     'formLabels' => $mobileFormLabels,
     'mobileSettings' => $mobileAppSettings,
     'dashboard' => $dashboard,
     'smsSummary' => $smsSummary,
     'systemOverview' => $systemOverview,
     'documentStatuses' => fetch_rows($conn, "SELECT status, COUNT(*) AS count FROM documents GROUP BY status ORDER BY status"),
-    'recentDocuments' => fetch_rows($conn, "SELECT doc_id AS id, date_created AS date, type, sender, recipient, client_phone AS clientPhone, subject AS details, remarks, CONCAT(sender, ' / ', recipient) AS fromTo, status, submitter_type AS submitterType, is_priority AS isPriority FROM documents ORDER BY date_created DESC LIMIT 50"),
+    'recentDocuments' => fetch_rows($conn, "SELECT doc_id AS id, CONCAT('DIT-', LPAD(doc_id, 6, '0')) AS reference, date_created AS date, type, sender, submitter_name AS submitterName, recipient, client_phone AS clientPhone, subject AS details, remarks, CONCAT(sender, ' / ', recipient) AS fromTo, status, submitter_type AS submitterType, is_priority AS isPriority FROM documents ORDER BY date_created DESC LIMIT 50"),
     'recentBatches' => fetch_rows($conn, "SELECT b.batch_id AS id, b.batch_code AS batchCode, b.document_type AS documentType, b.batch_type AS batchType, b.status, b.batch_date AS batchDate, b.sender_type AS senderType, b.recipient, b.recipient_contact_type AS recipientContactType, b.remarks, b.paper_count AS paperCount, b.received_paper_count AS receivedPaperCount, b.intake_expected_count AS intakeExpectedCount, b.received_at AS receivedAt, b.is_priority AS isPriority FROM document_batches b ORDER BY b.is_priority DESC, b.batch_date DESC, b.batch_id DESC LIMIT 20"),
     'borrowedItems' => fetch_rows($conn, "SELECT item_id AS id, item_name AS item, borrower, DATE(date_borrowed) AS borrowed, DATE(returned_date) AS returned, CASE WHEN status = 'Returned' THEN 'Returned' ELSE 'Borrowed' END AS status FROM borrowed_items ORDER BY date_borrowed DESC LIMIT 5"),
     'smsLogs' => fetch_rows($conn, "SELECT recipient AS user, message, status, DATE_FORMAT(date_sent, '%h:%i %p') AS time FROM sms_logs ORDER BY date_sent DESC LIMIT 5"),

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import officeLogoUrl from './office-logo.png';
 import confirmToneUrl from './confirm-tone.wav';
 import swipeToneUrl from './swipe.mp3';
+import jsQR from 'jsqr';
+import QRCode from 'qrcode';
 import {
   BiArchiveIn,
   BiArchiveOut,
@@ -54,10 +56,10 @@ const statusClasses = {
 
 const defaultFormLabels = {
   sender: 'From',
-  recipient: 'Recipient',
   documentType: 'Document type',
   contactNumber: 'Client contact number',
   remarks: 'Remarks',
+  senderEnabled: true,
 };
 const defaultMobileSettings = {
   theme: 'classic',
@@ -85,6 +87,38 @@ const readApiResponse = async (response) => {
   }
 };
 
+const verifyOfficialDocumentTrackerQr = async (payload, trackerBaseUrl) => {
+  let scannedUrl;
+  let expectedUrl;
+  try {
+    scannedUrl = new URL(payload);
+    expectedUrl = new URL(trackerBaseUrl);
+  } catch {
+    throw new Error('This QR code is not a valid document tracker link issued by the office.');
+  }
+  const expectedPath = expectedUrl.pathname.replace(/\/+$/, '');
+  if (
+    scannedUrl.origin !== expectedUrl.origin
+    || scannedUrl.pathname.replace(/\/+$/, '') !== expectedPath
+    || scannedUrl.hash !== ''
+    || Array.from(scannedUrl.searchParams.keys()).length !== 1
+  ) {
+    throw new Error('This QR code was not issued by the CEIT Dean’s Office document tracker.');
+  }
+  const token = scannedUrl.searchParams.get('token') || '';
+  if (!/^[a-f0-9]{64}$/.test(token)) {
+    throw new Error('This QR code does not contain a valid office tracking code.');
+  }
+  const verificationUrl = new URL(API_ENDPOINT, window.location.href);
+  verificationUrl.search = new URLSearchParams({ action: 'document_tracker_status', token }).toString();
+  const response = await fetch(verificationUrl, { cache: 'no-store' });
+  const result = await readApiResponse(response);
+  if (!response.ok || !result.success) {
+    throw new Error(result.message || 'This tracking QR code could not be verified by the office.');
+  }
+  return scannedUrl;
+};
+
 function App() {
   const [selectedSection, setSelectedSection] = useState('home');
   const [logbookPopupOpen, setLogbookPopupOpen] = useState(false);
@@ -109,7 +143,11 @@ function App() {
   const [clientStatusSearched, setClientStatusSearched] = useState(false);
   const [clientStatusLoading, setClientStatusLoading] = useState(false);
   const [clientStatusError, setClientStatusError] = useState('');
-  const isAnyModalOpen = isFormModalOpen || clientStatusOpen || logbookPopupOpen || Boolean(submissionSuccess) || Boolean(actionFeedback);
+  const [documentScannerOpen, setDocumentScannerOpen] = useState(false);
+  const [documentScannerStatus, setDocumentScannerStatus] = useState('');
+  const [documentScannerBusy, setDocumentScannerBusy] = useState(false);
+  const scannerVideoRef = useRef(null);
+  const isAnyModalOpen = isFormModalOpen || clientStatusOpen || documentScannerOpen || logbookPopupOpen || Boolean(submissionSuccess) || Boolean(actionFeedback);
   const [releaseDocumentId, setReleaseDocumentId] = useState(null);
   const [releaseBusy, setReleaseBusy] = useState(false);
   const [smsBusyId, setSmsBusyId] = useState(null);
@@ -149,13 +187,13 @@ function App() {
   const [batchItems, setBatchItems] = useState([]);
   const [reportItems, setReportItems] = useState([]);
 
-  const [incomingForm, setIncomingForm] = useState({ date: '', from: 'Student', subject: '', recipient: '', clientPhone: '' });
+  const [incomingForm, setIncomingForm] = useState({ date: '', from: 'Student', submitterName: '', subject: '', clientPhone: '' });
   const [borrowedForm, setBorrowedForm] = useState({ item: '', borrower: '', phone: '' });
   const [borrowedBusyId, setBorrowedBusyId] = useState(null);
   const [borrowedSubmitting, setBorrowedSubmitting] = useState(false);
   const [batchSubmitting, setBatchSubmitting] = useState(false);
   const isFormSubmitting = incomingSubmitting || borrowedSubmitting || batchSubmitting;
-  const [batchForm, setBatchForm] = useState({ type: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', recipientType: 'Unassigned', recipient: '', paperCount: '1', remarks: '' });
+  const [batchForm, setBatchForm] = useState({ type: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', remarks: '' });
   const [editingBatchId, setEditingBatchId] = useState(null);
   const [batchStatusBusyId, setBatchStatusBusyId] = useState(null);
   const [reportForm, setReportForm] = useState({ type: 'Incoming', from: '', to: '' });
@@ -268,8 +306,10 @@ function App() {
         // Map to local state
         setIncomingItems(data.recentDocuments.filter(d => d.type === 'Incoming').map(d => ({
           id: d.id,
+          reference: d.reference,
           date: d.date,
           from: d.fromTo.split(' / ')[0],
+          submitterName: d.submitterName || '',
           submitterType: d.submitterType || 'Other',
           isPriority: Number(d.isPriority) === 1,
           subject: d.details,
@@ -279,6 +319,7 @@ function App() {
         })));
         setOutgoingItems(data.recentDocuments.filter(d => d.type === 'Outgoing').map(d => ({
           id: d.id,
+          reference: d.reference,
           date: d.date,
           to: d.fromTo.split(' / ')[1],
           subject: d.details,
@@ -383,11 +424,156 @@ function App() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!documentScannerOpen) return undefined;
+    let cancelled = false;
+    let stream = null;
+    let frameId = 0;
+    let verificationInProgress = false;
+    let nextScanTime = 0;
+    let lastQrPayload = '';
+    let lastQrAttemptTime = 0;
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+
+    const stopCamera = () => {
+      if (frameId) window.cancelAnimationFrame(frameId);
+      if (stream) stream.getTracks().forEach((track) => track.stop());
+      if (scannerVideoRef.current) scannerVideoRef.current.srcObject = null;
+    };
+
+    const verifyAndOpen = async (payload) => {
+      if (verificationInProgress) return;
+      verificationInProgress = true;
+      setDocumentScannerBusy(true);
+      setDocumentScannerStatus('Verifying this QR code with the office…');
+      try {
+        const trackerUrl = await verifyOfficialDocumentTrackerQr(payload, apiData?.documentTrackerBaseUrl || '');
+        if (!cancelled) {
+          stopCamera();
+          window.location.assign(trackerUrl.href);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setDocumentScannerStatus(error instanceof Error ? error.message : 'The QR code could not be verified.');
+          verificationInProgress = false;
+          setDocumentScannerBusy(false);
+        }
+      }
+    };
+
+    const scanFrame = () => {
+      if (cancelled) return;
+      const video = scannerVideoRef.current;
+      if (video && context && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0 && Date.now() >= nextScanTime) {
+        nextScanTime = Date.now() + 180;
+        const scale = Math.min(1, 720 / video.videoWidth);
+        canvas.width = Math.round(video.videoWidth * scale);
+        canvas.height = Math.round(video.videoHeight * scale);
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const image = context.getImageData(0, 0, canvas.width, canvas.height);
+        const qrCode = jsQR(image.data, image.width, image.height, { inversionAttempts: 'dontInvert' });
+        const now = Date.now();
+        if (qrCode && !verificationInProgress && (qrCode.data !== lastQrPayload || now - lastQrAttemptTime >= 2500)) {
+          lastQrPayload = qrCode.data;
+          lastQrAttemptTime = now;
+          void verifyAndOpen(qrCode.data);
+        }
+      }
+      frameId = window.requestAnimationFrame(scanFrame);
+    };
+
+    const startCamera = async () => {
+      if (!apiData?.documentTrackerEnabled) {
+        setDocumentScannerStatus('Document tracking is turned off by the office.');
+        return;
+      }
+      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+        const secureAddress = new URL(window.location.href);
+        const isLoopbackAddress = ['localhost', '127.0.0.1', '[::1]'].includes(secureAddress.hostname);
+        secureAddress.protocol = 'https:';
+        const phoneAddress = isLoopbackAddress
+          ? 'the office computer’s LAN IP address with HTTPS (not localhost)'
+          : secureAddress.toString();
+        setDocumentScannerStatus(`Camera access is blocked on this HTTP page. On the phone, open ${phoneAddress} after starting the mobile app on the office computer with "npm run dev:lan". If the browser warns that the connection is not private, install and trust the certificate from Admin Settings first.`);
+        return;
+      }
+      if (!context) {
+        setDocumentScannerStatus('This browser cannot initialize the QR scanner. Upload a clear QR image instead.');
+        return;
+      }
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: { facingMode: { ideal: 'environment' } },
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        if (scannerVideoRef.current) {
+          scannerVideoRef.current.srcObject = stream;
+          await scannerVideoRef.current.play();
+          setDocumentScannerStatus('Camera ready. Point it at a QR code issued by the office.');
+          frameId = window.requestAnimationFrame(scanFrame);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Document tracking camera could not be started:', error);
+          setDocumentScannerStatus('Camera access was denied or is unavailable. Allow camera access, or upload a QR image below.');
+        }
+      }
+    };
+
+    void startCamera();
+    return () => {
+      cancelled = true;
+      stopCamera();
+    };
+  }, [apiData?.documentTrackerBaseUrl, apiData?.documentTrackerEnabled, documentScannerOpen]);
+
   const openClientStatusModal = () => {
     setClientStatusOpen(true);
     setClientStatusError('');
     setClientStatusItems([]);
     setClientStatusSearched(false);
+  };
+
+  const handleDocumentTrackerQrImage = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      setDocumentScannerStatus('Choose a QR image no larger than 10 MB.');
+      return;
+    }
+    if (typeof createImageBitmap !== 'function') {
+      setDocumentScannerStatus('This browser cannot read uploaded images. Use the camera scanner on a secure connection.');
+      return;
+    }
+    setDocumentScannerBusy(true);
+    setDocumentScannerStatus('Reading the QR image…');
+    let imageBitmap;
+    try {
+      imageBitmap = await createImageBitmap(file);
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(1, 1600 / Math.max(imageBitmap.width, imageBitmap.height));
+      canvas.width = Math.round(imageBitmap.width * scale);
+      canvas.height = Math.round(imageBitmap.height * scale);
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (!context) throw new Error('This browser could not prepare the QR image.');
+      context.drawImage(imageBitmap, 0, 0);
+      const image = context.getImageData(0, 0, canvas.width, canvas.height);
+      const qrCode = jsQR(image.data, image.width, image.height, { inversionAttempts: 'attemptBoth' });
+      if (!qrCode) throw new Error('No readable QR code was found in that image.');
+      const trackerUrl = await verifyOfficialDocumentTrackerQr(qrCode.data, apiData?.documentTrackerBaseUrl || '');
+      window.location.assign(trackerUrl.href);
+    } catch (error) {
+      setDocumentScannerStatus(error instanceof Error ? error.message : 'The QR image could not be read.');
+      setDocumentScannerBusy(false);
+    } finally {
+      imageBitmap?.close();
+    }
   };
 
   const launchLogbookAction = (action) => {
@@ -414,7 +600,7 @@ function App() {
   const openRecordModal = (formType) => {
     if (formType === 'batches') {
       setEditingBatchId(null);
-      setBatchForm({ type: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', recipientType: 'Unassigned', recipient: '', paperCount: '1', remarks: '' });
+      setBatchForm({ type: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', remarks: '' });
     }
     setRecordModal(formType);
   };
@@ -423,6 +609,14 @@ function App() {
   const handleSubmitIncoming = async (event) => {
     event.preventDefault();
     if (incomingSubmitting) return;
+    if (!incomingForm.submitterName.trim()) {
+      showActionFeedback({ title: 'Enter the submitter’s name', description: 'A name is required so office staff can distinguish who submitted documents of the same type.', tone: 'warning' });
+      return;
+    }
+    if (incomingForm.submitterName.trim().length > 255) {
+      showActionFeedback({ title: 'Submitter name is too long', description: 'Enter a name using no more than 255 characters.', tone: 'warning' });
+      return;
+    }
     if (incomingModalMode === 'standard' && !isValidContactNumber(incomingForm.clientPhone)) {
       showActionFeedback({ title: 'Check the contact number', description: 'Enter the required 11-digit contact number using numbers only.', tone: 'warning' });
       return;
@@ -435,9 +629,9 @@ function App() {
         body: JSON.stringify({
           action: incomingModalMode === 'quick' ? 'quick_submit_incoming' : 'add_incoming',
           date: incomingForm.date,
-          sender: incomingForm.from,
-          submitter_type: incomingForm.from,
-          recipient: formLabels.recipientEnabled ? incomingForm.recipient : '',
+          sender: formLabels.senderEnabled ? incomingForm.from : '',
+          submitter_type: formLabels.senderEnabled ? incomingForm.from : 'Other',
+          submitter_name: incomingForm.submitterName.trim(),
           client_phone: incomingModalMode === 'standard' ? incomingForm.clientPhone : '',
           subject: incomingForm.subject,
           remarks: '',
@@ -450,15 +644,30 @@ function App() {
       }
       if (result.success) {
         if (mobileSettings.confirmationSound) playConfirmTone();
+        let trackerQrImage = '';
+        let trackerQrError = '';
+        if (result.trackerUrl) {
+          try {
+            trackerQrImage = await QRCode.toDataURL(result.trackerUrl, {
+              width: 256,
+              margin: 2,
+              errorCorrectionLevel: 'Q',
+              color: { dark: '#064e3b', light: '#ffffff' },
+            });
+          } catch (error) {
+            console.error('Document tracking QR could not be generated:', error);
+            trackerQrError = 'The document was saved, but its QR image could not be generated. Show the reference to office staff to reprint the QR.';
+          }
+        }
         const clientPhone = incomingModalMode === 'standard' ? incomingForm.clientPhone : '';
         const incomingStatus = 'Pending';
-        setIncomingItems((prev) => [{ id: result.id, date: incomingForm.date, from: incomingForm.from, subject: incomingForm.subject, recipient: incomingForm.recipient, clientPhone, status: incomingStatus }, ...prev]);
+        setIncomingItems((prev) => [{ id: result.id, reference: result.reference, date: incomingForm.date, from: formLabels.senderEnabled ? incomingForm.from : '', submitterName: incomingForm.submitterName.trim(), subject: incomingForm.subject, recipient: '', clientPhone, status: incomingStatus }, ...prev]);
         setReportItems((prev) => [
-          { id: result.id, date: incomingForm.date, type: 'Incoming', from: incomingForm.from, subject: incomingForm.subject, status: incomingStatus },
+          { id: result.id, date: incomingForm.date, type: 'Incoming', from: formLabels.senderEnabled ? incomingForm.from : '', subject: incomingForm.subject, status: incomingStatus },
           ...prev,
         ]);
         incrementDocumentStatusCount(incomingStatus);
-        setIncomingForm({ date: incomingForm.date, from: 'Student', subject: '', recipient: '', clientPhone: '' });
+        setIncomingForm({ date: incomingForm.date, from: 'Student', submitterName: '', subject: '', clientPhone: '' });
         closePopup(() => {
           setActiveForm(null);
           setIncomingModalMode(null);
@@ -466,11 +675,15 @@ function App() {
             title: incomingModalMode === 'quick' ? 'Quick submission received' : 'Document submitted',
             description: 'Your document is now recorded and awaiting office review.',
             details: [
+              { label: 'Submitted by', value: incomingForm.submitterName.trim() },
               { label: formLabels.documentType, value: incomingForm.subject },
-              { label: formLabels.recipient, value: incomingForm.recipient },
               { label: 'Status', value: result.status || incomingStatus },
             ],
-            reference: result.id ? `Reference #${result.id}` : '',
+            reference: result.reference || (result.id ? `Reference #${result.id}` : ''),
+            trackerUrl: result.trackerUrl || '',
+            trackerQrImage,
+            trackerQrError,
+            trackerDisabled: !result.trackerUrl,
           });
         });
       } else {
@@ -717,21 +930,10 @@ function App() {
       return;
     }
     const paperCount = Number(batchForm.paperCount);
-    const recipientType = formLabels.recipientEnabled ? batchForm.recipientType : 'Unassigned';
-    const recipient = !formLabels.recipientEnabled || recipientType === 'Unassigned' ? '' : batchForm.recipient.trim();
     if (!Number.isInteger(paperCount) || paperCount < 1 || paperCount > 9999) {
       showActionFeedback({ title: 'Check the paper count', description: 'Enter a paper count between 1 and 9,999.', tone: 'warning' });
       return;
     }
-    if (formLabels.recipientEnabled && recipientType === 'Email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
-      showActionFeedback({ title: 'Check the recipient email', description: 'Enter a valid recipient email address.', tone: 'warning' });
-      return;
-    }
-    if (formLabels.recipientEnabled && recipientType === 'Contact' && !isValidContactNumber(recipient)) {
-      showActionFeedback({ title: 'Check the recipient contact', description: 'Enter exactly 11 digits using numbers only.', tone: 'warning' });
-      return;
-    }
-
     setBatchSubmitting(true);
     try {
       const response = await apiFetch({
@@ -743,9 +945,7 @@ function App() {
           document_type: batchForm.documentType,
           batch_type: batchType,
           batch_date: batchForm.date,
-          sender_type: batchForm.senderType,
-          recipient_contact_type: recipientType,
-          recipient,
+          sender_type: formLabels.senderEnabled ? batchForm.senderType : '',
           remarks: batchForm.remarks,
           paper_count: paperCount,
         }),
@@ -756,7 +956,7 @@ function App() {
       let successNotice;
       if (editingBatchId) {
         setBatchItems((items) => items.map((batch) => batch.id === editingBatchId
-          ? { ...batch, documentType: batchForm.documentType, batchType, batchDate: batchForm.date, senderType: batchForm.senderType, recipientContactType: batchForm.recipientType, recipient, paperCount, remarks: batchForm.remarks }
+          ? { ...batch, documentType: batchForm.documentType, batchType, batchDate: batchForm.date, senderType: batchForm.senderType, paperCount, remarks: batchForm.remarks }
           : batch));
         successNotice = {
           title: 'Bulk paper details updated',
@@ -782,7 +982,7 @@ function App() {
         };
       }
       closePopup(() => {
-        setBatchForm({ type: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', recipientType: 'Unassigned', recipient: '', paperCount: '1', remarks: '' });
+        setBatchForm({ type: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', remarks: '' });
         setEditingBatchId(null);
         setActiveForm(null);
         setRecordModal(null);
@@ -837,7 +1037,11 @@ function App() {
               <span className="text-sm font-semibold text-emerald-900">Date</span>
               <input type="date" className={inputClass} value={incomingForm.date} onChange={(event) => setIncomingForm({ ...incomingForm, date: event.target.value })} required />
             </label>
-            <fieldset className="min-w-0 space-y-2">
+            <label className="space-y-2 sm:col-span-2">
+              <span className="text-sm font-semibold text-emerald-900">Name of person submitting</span>
+              <input type="text" maxLength={255} autoComplete="name" className={inputClass} value={incomingForm.submitterName} onChange={(event) => setIncomingForm({ ...incomingForm, submitterName: event.target.value })} placeholder="Enter your full name" required />
+            </label>
+            <fieldset className="min-w-0 space-y-2" hidden={!formLabels.senderEnabled}>
               <legend className="text-sm font-semibold text-emerald-900">{formLabels.sender}</legend>
               <div className="grid grid-cols-2 gap-2">
                 {['Student', 'Faculty'].map((senderType) => {
@@ -851,7 +1055,8 @@ function App() {
                         checked={selected}
                         onChange={() => setIncomingForm({ ...incomingForm, from: senderType })}
                         className="h-4 w-4 shrink-0 accent-emerald-800"
-                        required
+                        required={formLabels.senderEnabled}
+                        disabled={!formLabels.senderEnabled}
                       />
                       <span>{senderType}</span>
                     </label>
@@ -862,10 +1067,6 @@ function App() {
             <label className="space-y-2">
               <span className="text-sm font-semibold text-emerald-900">{formLabels.documentType}</span>
               <input type="text" className={inputClass} value={incomingForm.subject} onChange={(event) => setIncomingForm({ ...incomingForm, subject: event.target.value })} placeholder={`Enter ${formLabels.documentType.toLowerCase()}`} required />
-            </label>
-            <label className="space-y-2" hidden={!formLabels.recipientEnabled}>
-              <span className="text-sm font-semibold text-emerald-900">{formLabels.recipient}</span>
-              <input type="text" className={inputClass} value={incomingForm.recipient} onChange={(event) => setIncomingForm({ ...incomingForm, recipient: event.target.value })} placeholder="Staff or office" required={formLabels.recipientEnabled} disabled={!formLabels.recipientEnabled} />
             </label>
             {formType === 'standard' && (
               <label className="space-y-2 sm:col-span-2">
@@ -899,36 +1100,12 @@ function App() {
               <span className="text-sm font-semibold text-emerald-900">Date</span>
               <input type="date" className={inputClass} value={batchForm.date} onChange={(event) => setBatchForm({ ...batchForm, date: event.target.value })} required />
             </label>
-            <label className="space-y-2">
+            <label className="space-y-2" hidden={!formLabels.senderEnabled}>
               <span className="text-sm font-semibold text-emerald-900">{formLabels.sender}</span>
-              <select className={inputClass} value={batchForm.senderType} onChange={(event) => setBatchForm({ ...batchForm, senderType: event.target.value })} required>
+              <select className={inputClass} value={batchForm.senderType} onChange={(event) => setBatchForm({ ...batchForm, senderType: event.target.value })} required={formLabels.senderEnabled} disabled={!formLabels.senderEnabled}>
                 <option value="Student">Student</option>
                 <option value="Faculty">Faculty</option>
               </select>
-            </label>
-            <label className="space-y-2" hidden={!formLabels.recipientEnabled}>
-              <span className="text-sm font-semibold text-emerald-900">Recipient contact type</span>
-              <select className={inputClass} value={batchForm.recipientType} onChange={(event) => setBatchForm({ ...batchForm, recipientType: event.target.value, recipient: event.target.value === 'Unassigned' ? '' : batchForm.recipient })} required={formLabels.recipientEnabled} disabled={!formLabels.recipientEnabled}>
-                <option value="Email">Email</option>
-                <option value="Contact">Contact</option>
-                <option value="Unassigned">Unassigned</option>
-              </select>
-            </label>
-            <label className="space-y-2 sm:col-span-2" hidden={!formLabels.recipientEnabled}>
-              <span className="text-sm font-semibold text-emerald-900">{formLabels.recipient} {batchForm.recipientType === 'Email' ? 'email' : 'contact'}</span>
-              <input
-                type={batchForm.recipientType === 'Email' ? 'email' : batchForm.recipientType === 'Contact' ? 'tel' : 'text'}
-                inputMode={batchForm.recipientType === 'Contact' ? 'numeric' : undefined}
-                pattern={batchForm.recipientType === 'Contact' ? '[0-9]{11}' : undefined}
-                maxLength={batchForm.recipientType === 'Contact' ? undefined : 255}
-                title={batchForm.recipientType === 'Contact' ? 'Enter exactly 11 digits.' : undefined}
-                className={inputClass}
-                value={batchForm.recipient}
-                onChange={(event) => setBatchForm({ ...batchForm, recipient: batchForm.recipientType === 'Contact' ? contactNumberDigits(event.target.value) : event.target.value })}
-                placeholder={batchForm.recipientType === 'Email' ? 'name@example.com' : batchForm.recipientType === 'Contact' ? 'e.g. 09123456789' : 'No recipient assigned'}
-                disabled={!formLabels.recipientEnabled || batchForm.recipientType === 'Unassigned'}
-                required={formLabels.recipientEnabled && batchForm.recipientType !== 'Unassigned'}
-              />
             </label>
             <label className="space-y-2 sm:col-span-2">
               <span className="text-sm font-semibold text-emerald-900">Number of papers</span>
@@ -997,15 +1174,20 @@ function App() {
 
           <div className="space-y-2">
             {incomingItems.length === 0 ? <p className="rounded-2xl border border-emerald-200 bg-white p-5 text-center text-sm text-emerald-700">No incoming documents yet.</p> : incomingItems.map((item) => (
-              <article key={`${item.date}-${item.subject}-${item.recipient}`} className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
+              <article key={item.id || `${item.date}-${item.subject}-${item.recipient}`} className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="break-words text-center font-semibold text-emerald-950">{item.subject}</p>
-                    <p className="mt-1 text-center text-sm text-emerald-700">From {item.from} · To {item.recipient}</p>
+                    <p className="mt-1 text-center text-sm font-medium text-emerald-800">Submitted by {item.submitterName || 'Name not recorded'}</p>
+                    <p className="mt-1 text-center text-sm text-emerald-700">
+                      {item.from ? `From ${item.from}` : ''}
+                      {item.from && item.recipient ? ' · ' : ''}
+                      {item.recipient ? `To ${item.recipient}` : ''}
+                    </p>
                   </div>
                   <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[item.status] || 'bg-gray-100 text-gray-700'}`}>{item.status}</span>
                 </div>
-                <p className="mt-3 text-center text-xs text-emerald-600">Submitted {String(item.date).slice(0, 10)}</p>
+                <p className="mt-3 text-center text-xs text-emerald-600">{item.reference ? `${item.reference} · ` : ''}Submitted {String(item.date).slice(0, 10)}</p>
                 {item.id && item.status === 'Pending' && <button type="button" className="mt-3 rounded-lg border border-emerald-700 px-3 py-2 text-xs font-semibold text-emerald-800 disabled:cursor-wait disabled:opacity-50" disabled={releaseBusy || !isOnline} onClick={() => handlePrepareIncoming(item)}>{releaseBusy && releaseDocumentId === item.id ? 'Preparing…' : 'Prepare for release'}</button>}
               </article>
             ))}
@@ -1114,7 +1296,10 @@ function App() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="font-semibold text-emerald-950">{batch.batchCode}</p>
-                    <p className="mt-1 text-sm text-emerald-700">{batch.batchDate} · From {batch.senderType || batch.sender}</p>
+                    <p className="mt-1 text-sm text-emerald-700">
+                      {batch.batchDate}
+                      {(batch.senderType || batch.sender) ? ` · From ${batch.senderType || batch.sender}` : ''}
+                    </p>
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     {Number(batch.isPriority) === 1 && <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">Priority</span>}
@@ -1150,8 +1335,6 @@ function App() {
                         documentType: batch.documentType || 'Incoming',
                         date: String(batch.batchDate || '').slice(0, 10),
                         senderType: batch.senderType || 'Student',
-                        recipientType: batch.recipientContactType || 'Unassigned',
-                        recipient: batch.recipientContactType === 'Unassigned' ? '' : (batch.recipient || ''),
                         paperCount: String(batch.paperCount || 1),
                         remarks: batch.remarks || '',
                       });
@@ -1418,7 +1601,7 @@ function App() {
                 </div>
                 <div className="quick-guide-list">
                   {[
-                    { icon: BiArchiveIn, title: 'Submit document', detail: 'Record an incoming document with recipient details.' },
+                    { icon: BiArchiveIn, title: 'Submit document', detail: 'Record an incoming document for office review.' },
                     { icon: BiFile, title: 'Quick submit', detail: 'Log one document without a contact number.' },
                     { icon: BiLayer, title: 'Bulk Papers', detail: 'Register multiple papers together in one submission.' },
                     { icon: BiBox, title: 'Borrow item', detail: 'Record borrowed items and track their return.' },
@@ -1474,7 +1657,7 @@ function App() {
                   { key: 'quick', label: 'Quick submit', detail: 'Get your document into the logbook in just a few steps.', icon: BiFile },
                   { key: 'batch', label: 'Bulk Papers', detail: 'Register multiple papers together in one submission.', icon: BiLayer },
                   { key: 'borrow', label: 'Borrow item', detail: 'Record who has the item and mark it returned when it comes back.', icon: BiBox },
-                  { key: 'status', label: 'Check status', detail: 'Look up submitted documents by contact number.', icon: BiArchiveOut },
+                  { key: 'status', label: 'Check status', detail: 'Scan an office QR code or search by contact number.', icon: BiArchiveOut },
                 ].map((item) => {
                   const Icon = item.icon;
                   return (
@@ -1640,6 +1823,23 @@ function App() {
               {submissionSuccess.reference && (
                 <p className="mt-3 text-center text-xs font-medium text-emerald-700">{submissionSuccess.reference}</p>
               )}
+              {submissionSuccess.trackerQrImage && (
+                <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-center">
+                  <img src={submissionSuccess.trackerQrImage} alt={`Tracking QR code for ${submissionSuccess.reference}`} className="mx-auto h-48 w-48 rounded-xl bg-white p-2" />
+                  <p className="mt-3 text-sm font-semibold text-emerald-950">Scan this office-issued QR code to track the document status.</p>
+                  <a href={submissionSuccess.trackerUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex min-h-10 items-center rounded-xl px-3 text-sm font-semibold text-emerald-800 underline">
+                    Open the status tracker
+                  </a>
+                </div>
+              )}
+              {submissionSuccess.trackerQrError && (
+                <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">{submissionSuccess.trackerQrError}</p>
+              )}
+              {submissionSuccess.trackerDisabled && (
+                <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
+                  The document was saved, but QR tracking is currently turned off by the office. Keep this reference: {submissionSuccess.reference}.
+                </p>
+              )}
               <button
                 type="button"
                 onClick={() => closePopup(() => setSubmissionSuccess(null))}
@@ -1696,7 +1896,7 @@ function App() {
                 <div className="flex-1 text-center">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-600">Document tracking</p>
                   <h2 id="client-status-modal-title" className="mt-1 text-center text-xl font-bold text-emerald-950 sm:text-2xl">Check document status</h2>
-                  <p className="mt-1 text-center text-sm leading-relaxed text-emerald-700">Enter the contact number provided when the document was submitted.</p>
+                  <p className="mt-1 text-center text-sm leading-relaxed text-emerald-700">Scan the office-issued QR code, or use the contact number provided when the document was submitted.</p>
                 </div>
                 <button
                   type="button"
@@ -1731,6 +1931,22 @@ function App() {
                 </div>
                 <p className="mt-2 text-xs text-emerald-600">Use the same 11-digit number you gave to the office.</p>
               </form>
+
+              <div className="mt-3 rounded-2xl border border-emerald-200 bg-white p-4">
+                <p className="text-sm text-emerald-800">Have an office-issued tracking QR code?</p>
+                <button
+                  type="button"
+                  disabled={!apiData?.documentTrackerEnabled || !isOnline}
+                  onClick={() => {
+                    setClientStatusOpen(false);
+                    setDocumentScannerStatus('');
+                    setDocumentScannerOpen(true);
+                  }}
+                  className="mt-3 min-h-11 w-full rounded-xl bg-emerald-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {apiData?.documentTrackerEnabled ? 'Scan tracking QR code' : 'QR tracking is turned off'}
+                </button>
+              </div>
 
               {clientStatusLoading && (
                 <div className="mt-4 flex items-center gap-3 rounded-2xl border border-emerald-200 bg-white p-4 text-sm font-medium text-emerald-800" role="status">
@@ -1776,6 +1992,40 @@ function App() {
                   Close
                 </button>
               </div>
+            </section>
+          </div>
+        )}
+        {documentScannerOpen && (
+          <div
+            className="mobile-modal-backdrop-enter fixed inset-0 z-[80] flex items-end justify-center bg-emerald-950/55 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+            onClick={() => setDocumentScannerOpen(false)}
+          >
+            <section
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="document-scanner-title"
+              className="max-h-[92dvh] w-full overflow-y-auto rounded-t-[2rem] bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-w-lg sm:rounded-[2rem] sm:p-7"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-600">Document tracking</p>
+                  <h2 id="document-scanner-title" className="mt-1 text-xl font-bold text-emerald-950">Scan office QR code</h2>
+                  <p className="mt-1 text-sm leading-relaxed text-emerald-700">Only QR codes registered by the CEIT Dean’s Office can open a document record.</p>
+                </div>
+                <button type="button" aria-label="Close QR scanner" onClick={() => setDocumentScannerOpen(false)} className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-full border border-emerald-200 text-lg font-semibold text-emerald-800">×</button>
+              </div>
+              <div className="mt-4 overflow-hidden rounded-2xl bg-emerald-950">
+                <video ref={scannerVideoRef} className="aspect-[4/3] w-full object-cover" autoPlay muted playsInline aria-label="Camera preview for document tracking QR scanner" />
+              </div>
+              <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900" role="status" aria-live="polite">
+                {documentScannerBusy ? <><span className="loading-spinner mr-2" aria-hidden="true" />{documentScannerStatus}</> : documentScannerStatus || 'Allow camera access and point it at the tracking QR code.'}
+              </p>
+              <label className="mt-4 block rounded-2xl border border-dashed border-emerald-300 bg-white p-4 text-sm font-semibold text-emerald-900">
+                Or choose a QR image
+                <input type="file" accept="image/*" capture="environment" onChange={handleDocumentTrackerQrImage} disabled={documentScannerBusy || !apiData?.documentTrackerEnabled} className="mt-2 block w-full text-sm font-normal text-emerald-700" />
+              </label>
+              <p className="mt-3 text-xs leading-relaxed text-emerald-700">For camera access over Wi-Fi, start the mobile app on the office computer with <strong>npm run dev:lan</strong>, then open its HTTPS LAN address on your phone. Trust the office certificate first if prompted.</p>
             </section>
           </div>
         )}

@@ -27,8 +27,8 @@ $batchType = trim($_POST['batch_type'] ?? '');
 $batchPriority = isset($_POST['is_priority']) ? 1 : 0;
 $batchDate = $_POST['batch_date'] ?? date('Y-m-d');
 $senderType = $_POST['sender_type'] ?? 'Student';
-$recipientContactType = $mobileFormLabels['recipientEnabled'] ? ($_POST['recipient_contact_type'] ?? 'Unassigned') : 'Unassigned';
-$recipient = $mobileFormLabels['recipientEnabled'] ? (contact_number_input($_POST['recipient'] ?? '') ?? '') : '';
+$recipientContactType = 'Unassigned';
+$recipient = '';
 $paperCount = (int)($_POST['paper_count'] ?? 1);
 $batchRemarks = trim($_POST['remarks'] ?? '');
 $search = trim($_GET['search'] ?? '');
@@ -378,20 +378,10 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $dateObject = DateTime::createFromFormat('!Y-m-d', $batchDate);
         $validDocumentType = in_array($documentType, ['Incoming', 'Outgoing'], true);
         $validSenderType = in_array($senderType, ['Student', 'Faculty'], true);
-        $validRecipientType = in_array($recipientContactType, ['Email', 'Contact', 'Unassigned'], true);
-        $validRecipient = $recipientContactType === 'Unassigned'
-            ? true
-            : ($recipient !== '' && (
-                $recipientContactType === 'Email'
-                    ? filter_var($recipient, FILTER_VALIDATE_EMAIL) !== false
-                    : is_valid_contact_number($recipient)
-            ));
         if (!$validDocumentType || $batchType === '' || strlen($batchType) > 255 ||
             !$dateObject || $dateObject->format('Y-m-d') !== $batchDate ||
-            !$validSenderType || !$validRecipientType || !$validRecipient || $paperCount < 1 || $paperCount > 9999) {
-            $message = show_alert($recipientContactType === 'Contact' && $recipient !== '' && !is_valid_contact_number($recipient)
-                ? 'Enter an 11-digit recipient contact number using digits only.'
-                : 'Check the batch name, date, submitter, recipient details, and paper count (1–9,999).', 'danger');
+            !$validSenderType || $paperCount < 1 || $paperCount > 9999) {
+            $message = show_alert('Check the batch name, date, submitter, and paper count (1–9,999).', 'danger');
             $showBatchModal = true;
         } elseif ($batchId > 0) {
             try {
@@ -409,28 +399,23 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new RuntimeException('The expected paper count cannot be changed after staff confirm receipt.');
                 }
                 $batchStatus = $existingBatch['status'];
-                $recipientValue = $recipientContactType === 'Unassigned' ? '' : $recipient;
                 $stmt = safe_query(
                     $conn,
-                    'UPDATE document_batches SET document_type = ?, batch_type = ?, batch_date = ?, sender = ?, sender_type = ?, recipient = ?, recipient_contact_type = ?, remarks = ?, paper_count = ?, is_priority = ? WHERE batch_id = ?',
-                    'ssssssssiii',
-                    [$documentType, $batchType, $batchDate, $senderType, $senderType, $recipientValue, $recipientContactType, $batchRemarks, $paperCount, $batchPriority, $batchId]
+                    'UPDATE document_batches SET document_type = ?, batch_type = ?, batch_date = ?, sender = ?, sender_type = ?, remarks = ?, paper_count = ?, is_priority = ? WHERE batch_id = ?',
+                    'ssssssiii',
+                    [$documentType, $batchType, $batchDate, $senderType, $senderType, $batchRemarks, $paperCount, $batchPriority, $batchId]
                 );
                 if ($stmt === false || mysqli_stmt_affected_rows($stmt) < 0) {
                     if ($stmt !== false) mysqli_stmt_close($stmt);
                     throw new RuntimeException('Could not update batch details.');
                 }
                 mysqli_stmt_close($stmt);
-                $legacyRecipient = !$mobileFormLabels['recipientEnabled'] && $recipientValue === ''
-                    ? ''
-                    : ($recipientValue === '' ? 'Unassigned' : $recipientValue);
-                $legacyPhone = $recipientContactType === 'Contact' ? $recipientValue : null;
                 // Keep legacy document fields synchronized because existing reports and screens query documents.
                 $stmt = safe_query(
                     $conn,
-                    'UPDATE documents d INNER JOIN batch_papers p ON p.doc_id = d.doc_id SET d.type = ?, d.date_created = ?, d.sender = ?, d.recipient = ?, d.client_phone = ?, d.submitter_type = ?, d.status = ?, d.is_priority = ? WHERE p.batch_id = ?',
-                    'sssssssii',
-                    [$documentType, $batchDate, $senderType, $legacyRecipient, $legacyPhone, $senderType, $batchStatus, $batchPriority, $batchId]
+                    'UPDATE documents d INNER JOIN batch_papers p ON p.doc_id = d.doc_id SET d.type = ?, d.date_created = ?, d.sender = ?, d.submitter_type = ?, d.status = ?, d.is_priority = ? WHERE p.batch_id = ?',
+                    'sssssii',
+                    [$documentType, $batchDate, $senderType, $senderType, $batchStatus, $batchPriority, $batchId]
                 );
                 if ($stmt === false) {
                     throw new RuntimeException('Could not update linked paper records.');
@@ -452,7 +437,7 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $conn->begin_transaction();
                 $batchCode = 'BP-' . date('Ymd') . '-' . strtoupper(bin2hex(random_bytes(3)));
                 $trackingToken = bin2hex(random_bytes(32));
-                $recipientValue = $recipientContactType === 'Unassigned' ? '' : $recipient;
+                $recipientValue = '';
                 $stmt = safe_query(
                     $conn,
                     'INSERT INTO document_batches (batch_code, document_type, batch_type, status, batch_date, sender, sender_type, recipient, recipient_contact_type, remarks, tracking_token, paper_count, is_priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -699,22 +684,6 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                             <option value="Student" <?php echo $senderType === 'Student' ? 'selected' : ''; ?>>Student</option>
                             <option value="Faculty" <?php echo $senderType === 'Faculty' ? 'selected' : ''; ?>>Faculty</option>
                         </select>
-                    </div>
-                    </div>
-                    <div class="col-12 col-md-6" <?php echo $mobileFormLabels['recipientEnabled'] ? '' : 'hidden'; ?>>
-                    <div class="mb-3">
-                        <label class="form-label" for="batchRecipientType">Recipient contact type</label>
-                        <select class="form-select" id="batchRecipientType" name="recipient_contact_type" required <?php echo $mobileFormLabels['recipientEnabled'] ? '' : 'disabled'; ?>>
-                            <option value="Email" <?php echo $recipientContactType === 'Email' ? 'selected' : ''; ?>>Email</option>
-                            <option value="Contact" <?php echo $recipientContactType === 'Contact' ? 'selected' : ''; ?>>Contact</option>
-                            <option value="Unassigned" <?php echo $recipientContactType === 'Unassigned' ? 'selected' : ''; ?>>Unassigned</option>
-                        </select>
-                    </div>
-                    </div>
-                    <div class="col-12 col-md-6" <?php echo $mobileFormLabels['recipientEnabled'] ? '' : 'hidden'; ?>>
-                    <div class="mb-3">
-                        <label class="form-label" for="batchRecipient" data-base-label="<?php echo sanitize($mobileFormLabels['recipient']); ?>"><?php echo sanitize($mobileFormLabels['recipient']); ?></label>
-                        <input class="form-control" type="text" id="batchRecipient" name="recipient" maxlength="255" value="<?php echo sanitize($recipient); ?>" placeholder="Select email or contact type" readonly <?php echo $mobileFormLabels['recipientEnabled'] ? '' : 'disabled'; ?>>
                     </div>
                     </div>
                     <div class="col-12">
@@ -1241,11 +1210,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const batchModal = document.getElementById('create-batch');
     const batchForm = batchModal.querySelector('form');
     const isEmbeddedBatchAction = document.body.classList.contains('admin-embedded-body');
-    const recipientType = document.getElementById('batchRecipientType');
-    const recipientInput = document.getElementById('batchRecipient');
-    const recipientLabel = document.querySelector('label[for="batchRecipient"]');
-    const baseRecipientLabel = recipientLabel.dataset.baseLabel || recipientLabel.textContent.trim();
-    const recipientEnabled = <?php echo $mobileFormLabels['recipientEnabled'] ? 'true' : 'false'; ?>;
     const batchIdInput = document.getElementById('editBatchId');
     const batchTypeInput = document.getElementById('batchType');
     const batchPriorityInput = document.getElementById('batchPriority');
@@ -1254,48 +1218,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const title = document.getElementById('createBatchTitle');
     const saveButton = document.getElementById('saveBatchButton');
 
-    function updateRecipientField(clearUnassignedValue) {
-        if (!recipientEnabled) {
-            recipientType.value = 'Unassigned';
-            recipientInput.value = '';
-            recipientInput.required = false;
-            recipientInput.readOnly = true;
-            return;
-        }
-        const type = recipientType.value;
-        if (type === 'Unassigned') {
-            recipientLabel.textContent = baseRecipientLabel;
-            recipientInput.type = 'text';
-            recipientInput.placeholder = 'No recipient assigned';
-            recipientInput.required = false;
-            recipientInput.readOnly = true;
-            if (clearUnassignedValue) recipientInput.value = '';
-            return;
-        }
-        recipientLabel.textContent = `${baseRecipientLabel} ${type === 'Email' ? 'email' : 'contact number'}`;
-        recipientInput.type = type === 'Email' ? 'email' : 'tel';
-        recipientInput.placeholder = type === 'Email' ? 'name@example.com' : 'e.g. 09123456789';
-        recipientInput.required = true;
-        recipientInput.readOnly = false;
-        if (type === 'Contact') {
-            recipientInput.inputMode = 'numeric';
-            recipientInput.maxLength = 11;
-            recipientInput.pattern = '[0-9]{11}';
-            recipientInput.title = 'Enter exactly 11 digits.';
-        } else {
-            recipientInput.removeAttribute('inputmode');
-            recipientInput.removeAttribute('pattern');
-            recipientInput.removeAttribute('title');
-            recipientInput.maxLength = 255;
-        }
-    }
-
-    recipientInput.addEventListener('input', function () {
-        if (recipientType.value === 'Contact') {
-            recipientInput.value = recipientInput.value.replace(/\D/g, '').slice(0, 11);
-        }
-    });
-    recipientType.addEventListener('change', function () { updateRecipientField(true); });
     batchModal.addEventListener('show.bs.modal', function (event) {
         const trigger = event.relatedTarget;
         if (trigger && trigger.classList.contains('edit-batch')) {
@@ -1305,8 +1227,6 @@ document.addEventListener('DOMContentLoaded', function () {
             batchPriorityInput.checked = trigger.dataset.isPriority === '1';
             document.getElementById('batchDate').value = trigger.dataset.batchDate || '';
             document.getElementById('batchSenderType').value = trigger.dataset.senderType || 'Student';
-            recipientType.value = trigger.dataset.recipientType || 'Unassigned';
-            recipientInput.value = trigger.dataset.recipient || '';
             document.getElementById('batchPaperCount').value = trigger.dataset.paperCount || '1';
             batchPaperCountInput.readOnly = Boolean(trigger.dataset.receivedAt);
             batchPaperCountLockedHelp.hidden = !batchPaperCountInput.readOnly;
@@ -1330,23 +1250,18 @@ document.addEventListener('DOMContentLoaded', function () {
             batchPriorityInput.checked = false;
             document.getElementById('batchDate').value = '<?php echo date('Y-m-d'); ?>';
             document.getElementById('batchSenderType').value = 'Student';
-            recipientType.value = 'Unassigned';
             document.getElementById('batchPaperCount').value = '1';
             title.textContent = 'Create Bulk Papers';
             saveButton.innerHTML = '<i class="bi bi-archive me-1" aria-hidden="true"></i>Save Bulk Papers';
         }
-        updateRecipientField(false);
     });
     batchModal.addEventListener('hidden.bs.modal', function () {
         batchIdInput.value = '';
         title.textContent = 'Create Bulk Papers';
         saveButton.innerHTML = '<i class="bi bi-archive me-1" aria-hidden="true"></i>Save Bulk Papers';
-        updateRecipientField(false);
     });
 
-    if (isEmbeddedBatchAction) {
-        updateRecipientField(false);
-    } else if (batchModal.dataset.openOnLoad === 'true' || window.location.hash === '#create-batch') {
+    if (!isEmbeddedBatchAction && (batchModal.dataset.openOnLoad === 'true' || window.location.hash === '#create-batch')) {
         new bootstrap.Modal(batchModal).show();
     }
 

@@ -7,7 +7,6 @@ $message = '';
 
 if (isset($_POST['save_settings'])) {
     $sms_enabled = isset($_POST['sms_enabled']) ? 1 : 0;
-    $mobile_kiosk_enabled = isset($_POST['mobile_kiosk_enabled']) ? 1 : 0;
     $email_enabled = isset($_POST['email_enabled']) ? 1 : 0;
     $email_host = trim($_POST['email_host'] ?? '');
     $email_port = trim($_POST['email_port'] ?? '');
@@ -34,7 +33,6 @@ if (isset($_POST['save_settings'])) {
     // Keep the PhilSMS token out of the upsert when its field is blank, preserving the saved token.
     if ($message === '') {
         $settingsData = [
-            'mobile_kiosk_enabled' => $mobile_kiosk_enabled,
             'sms_enabled' => $sms_enabled,
             'email_enabled' => $email_enabled,
             'email_host' => $email_host,
@@ -77,7 +75,6 @@ if ($stmt !== false) {
 }
 
 $sms_enabled = $settings['sms_enabled'] ?? 0;
-$mobile_kiosk_enabled = $settings['mobile_kiosk_enabled'] ?? 0;
 $email_enabled = $settings['email_enabled'] ?? 0;
 $email_host = $settings['email_host'] ?? '';
 $email_port = $settings['email_port'] ?? '587';
@@ -101,8 +98,8 @@ if ($philsms_sender_id === '') {
     <div class="col-12">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3">
             <div>
-                <h2 class="mb-1 text-primary">Notification Settings</h2>
-                <p class="text-muted mb-0">Manage kiosk access and message delivery from one page.</p>
+                <h2 class="mb-1 text-primary">Communication Settings</h2>
+                <p class="text-muted mb-0">Configure SMS and email delivery for the logbook.</p>
             </div>
         </div>
     </div>
@@ -114,24 +111,12 @@ if ($philsms_sender_id === '') {
     <div class="col-12">
         <form method="POST" class="card shadow-sm">
             <div class="card-header bg-white px-3 px-md-4 py-3">
-                <h5 class="mb-1 text-primary">System Configuration</h5>
-                <p class="mb-0 small text-muted">Changes apply across the mobile and admin logbook.</p>
+                <h5 class="mb-1 text-primary">Messaging Configuration</h5>
+                <p class="mb-0 small text-muted">Configure the communication services used by the logbook.</p>
             </div>
             <div class="card-body p-3 p-md-4">
                     <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
-                    <h5 class="card-title text-primary mb-4">General Settings</h5>
-                    <h5 class="card-title text-primary mb-3">Mobile Office Access</h5>
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" name="mobile_kiosk_enabled" id="mobile_kiosk_enabled" <?php echo $mobile_kiosk_enabled ? 'checked' : ''; ?>>
-                        <label class="form-check-label fw-semibold" for="mobile_kiosk_enabled">Open the mobile logbook without sign-in</label>
-                    </div>
-                    <div class="alert alert-warning mt-3 mb-0" role="note">
-                        Use only on a trusted Dean's Office device and network. When enabled, anyone who can reach this API can view and change logbook records from the mobile app. Leave off on public or shared networks.
-                    </div>
-
-                    <hr class="my-4">
-
-                    <h5 class="card-title text-primary mb-4">SMS Notifications</h5>
+                    <h5 class="card-title text-primary mb-4">SMS Delivery</h5>
                     <div class="row g-3">
                         <div class="col-12">
                             <div class="form-check">
@@ -177,7 +162,7 @@ if ($philsms_sender_id === '') {
 
                     <hr class="my-4">
 
-                    <h5 class="card-title text-primary mb-4">Email Notifications</h5>
+                    <h5 class="card-title text-primary mb-4">Email Delivery</h5>
                     <div class="row g-3">
                         <div class="col-12">
                             <div class="form-check">

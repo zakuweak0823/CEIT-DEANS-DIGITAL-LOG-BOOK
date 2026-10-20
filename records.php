@@ -18,6 +18,26 @@ mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 ?>
 <?php include 'header.php'; ?>
+<style>
+.records-search-form {
+    flex: 0 1 22rem;
+    align-items: center;
+}
+.records-search-form .form-control,
+.records-search-form .btn {
+    height: 2.875rem;
+}
+.records-search-form .form-control {
+    flex: 1 1 0;
+    min-width: 0;
+}
+.records-search-form .btn {
+    flex: 0 0 auto;
+    min-width: 5.25rem;
+    white-space: nowrap;
+    overflow-wrap: normal;
+}
+</style>
 <div class="row justify-content-center">
     <div class="col-12">
         <div class="card shadow-sm mb-4">
@@ -26,7 +46,7 @@ $result = mysqli_stmt_get_result($stmt);
                     <h2 class="card-title mb-2 text-primary">Document Records</h2>
                     <p class="text-muted mb-0">Browse incoming and outgoing documents with search support.</p>
                 </div>
-                <form method="GET" class="d-flex gap-2">
+                <form method="GET" class="d-flex gap-2 records-search-form">
                     <input type="search" name="search" class="form-control" placeholder="Search documents" value="<?php echo sanitize($search); ?>">
                     <button type="submit" class="btn btn-primary">Search</button>
                 </form>

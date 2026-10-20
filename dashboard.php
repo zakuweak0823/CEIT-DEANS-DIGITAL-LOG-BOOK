@@ -10,7 +10,6 @@ if (($_GET['quick_action'] ?? '') === 'add_incoming') {
 
     $sender = trim($_POST['sender'] ?? '');
     $submitterType = trim($_POST['submitter_type'] ?? 'Other');
-    $recipient = trim($_POST['recipient'] ?? '');
     $subject = trim($_POST['subject'] ?? '');
     $remarks = trim($_POST['remarks'] ?? '');
     $clientPhone = contact_number_input($_POST['client_phone'] ?? '');
@@ -18,15 +17,15 @@ if (($_GET['quick_action'] ?? '') === 'add_incoming') {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
         http_response_code(405);
         echo json_encode(['success' => false, 'message' => 'Use the form to add an incoming document.']);
-    } elseif ($sender === '' || $recipient === '' || $subject === '' || !in_array($submitterType, ['Student', 'Faculty', 'Other'], true)) {
+    } elseif ($sender === '' || $subject === '' || !in_array($submitterType, ['Student', 'Faculty', 'Other'], true)) {
         http_response_code(422);
-        echo json_encode(['success' => false, 'message' => 'Sender, recipient, and document type are required.']);
+        echo json_encode(['success' => false, 'message' => 'Sender and document type are required.']);
     } elseif ($clientPhone === null || ($clientPhone !== '' && !is_valid_contact_number($clientPhone))) {
         http_response_code(422);
         echo json_encode(['success' => false, 'message' => 'Enter an 11-digit contact number using digits only, or leave it blank.']);
     } else {
         $phoneValue = $clientPhone === '' ? null : $clientPhone;
-        $stmt = safe_query($conn, "INSERT INTO documents(type, sender, recipient, client_phone, subject, remarks, status, submitter_type) VALUES('Incoming', ?, ?, ?, ?, ?, 'Pending', ?)", 'ssssss', [$sender, $recipient, $phoneValue, $subject, $remarks, $submitterType]);
+        $stmt = safe_query($conn, "INSERT INTO documents(type, sender, recipient, client_phone, subject, remarks, status, submitter_type) VALUES('Incoming', ?, '', ?, ?, ?, 'Pending', ?)", 'sssss', [$sender, $phoneValue, $subject, $remarks, $submitterType]);
         if ($stmt === false) {
             error_log('Dashboard quick action failed to save incoming document.');
             http_response_code(500);
@@ -569,10 +568,6 @@ for ($i = 5; $i >= 0; $i--) {
                     <div class="mb-3">
                         <label class="form-label" for="dashboardIncomingSender">From</label>
                         <input type="text" id="dashboardIncomingSender" name="sender" class="form-control" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="dashboardIncomingRecipient">Recipient</label>
-                        <input type="text" id="dashboardIncomingRecipient" name="recipient" class="form-control" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="dashboardIncomingSubject">Document type</label>

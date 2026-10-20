@@ -56,14 +56,15 @@ PHP API and MySQL database.
 | Area | Capabilities |
 | --- | --- |
 | **Dashboard** | Review document status summaries and see pending incoming documents. |
-| **Incoming documents** | Register submissions, search records, review details, and prepare documents for release. |
+| **Incoming documents** | Register submissions, record the submitter's name, issue office-verified QR tracking codes, search records, and prepare documents for release. |
 | **Outgoing documents** | Track released documents and send client notifications. |
 | **Bulk papers** | Register batches, associate paper-level records, and follow batch status. |
 | **Borrowed items** | Manage item categories, borrowers, due dates, and return status. |
 | **Records and reports** | Search logbook records, inspect document activity, and generate date-filtered reports. |
 | **SMS and notifications** | Configure SMS and email, tune per-browser activity alerts, send client updates, and review SMS logs. |
 | **Admin Assistant** | Get privacy-friendly workflow guidance from a clickable side-peeking launcher and links to admin tools. Optional form assistance previews changes and requires approval before filling fields; it never submits forms. Toggle it in Settings. |
-| **Mobile app** | Kiosk for the public to submit documents, check status, and access office logbook features. |
+| **Mobile app** | Submit documents with a required submitter name, receive a reference and status-tracking QR, scan office-issued codes, and access office logbook features. |
+| **Document tracker** | A separate, mobile-friendly public page shows only the status tied to an office-issued, unguessable QR token. |
 
 ## Admin workspace options
 
@@ -198,7 +199,7 @@ The application upgrades the seeded plaintext password to a password hash
 when it is first used. Change the default password immediately after signing
 in, and never reuse it on a deployed system.
 
-### 3. Configure notifications (optional)
+### 3. Configure workspace and communication settings (optional)
 
 Open **Settings** from the administrator dropdown to personalize live activity
 monitoring, alerts, and the floating pending-documents shortcut for the current
@@ -206,8 +207,12 @@ browser, or turn on **Compact Mode** from the administrator dropdown.
 Compact Mode switches the entire admin portal to a mobile-style layout with
 four primary shortcuts and a bottom **More** menu for the remaining admin
 sections, stacked content, card-based record lists, and a full-width
-workspace—even on a desktop. Open **Notification Settings** to
-configure system-wide SMS, email, or mobile office access. Activity
+workspace—even on a desktop. Open **Communication Settings** to
+configure system-wide SMS and email delivery. Mobile logbook access is managed
+separately under **Admin Settings**. It is enabled by default only when no
+access preference has been saved; turn it off for public or shared networks.
+When enabled, anyone who can reach the server can view and change logbook
+records through the mobile app. Activity
 preferences are saved in the current browser; desktop alerts are optional
 and require browser permission. Provider credentials belong in the application
 settings or server environment—not in Git-tracked files or database exports.
@@ -267,8 +272,30 @@ another computer will work.
    → CA certificate** (menu names vary by device). On iPhone, install the
    downloaded profile in **Settings**, then enable full trust for it under
    **Settings → General → About → Certificate Trust Settings**.
-3. Open the host's configured HTTPS address in the phone's browser, sign in,
-   and use the QR scanner. Allow camera access when prompted.
+3. Start the office server with [`start-office-server.bat`](start-office-server.bat)
+   and approve the Private-network firewall prompt. In a terminal, start the
+   mobile UI's HTTPS development server:
+
+   ```powershell
+   cd mobile-ui
+   npm run dev:lan
+   ```
+
+   Open the `https://<office-LAN-IP>:5173/` address shown by Vite on the phone,
+   allow camera access, and use the QR scanner. Do not use the `http://`
+   address or `localhost` on the phone. The Vite HTTPS server uses this
+   computer's XAMPP LAN certificate; it is available only when the XAMPP
+   certificate and private-key files are installed on this computer.
+
+In **Admin Settings → Document status tracking**, set the **Tracker base URL**
+to the exact HTTPS address and project-folder path that the phone can open,
+for example `https://192.168.1.20/CEIT-DEANS-DIGITAL-LOG-BOOK`. Leave it blank
+only when the address used to reach the API is also the correct address for the
+tracker. Update this value if the host IP, project folder, or future domain
+changes. The camera scanner accepts only links on this configured tracker
+address and verifies each token with the office before opening it. QR tracking
+can be disabled in the same Admin Settings section; disabling it blocks
+existing QR links as well as new ones.
 
 If the browser still reports an untrusted connection, confirm the CA is
 installed and fully trusted, and that the certificate matches the address
@@ -281,7 +308,11 @@ for the limits of the local setup.
 ## Mobile app
 
 The main mobile client is the React/Vite app in `mobile-ui/`, with Capacitor
-providing its Android project. The separate `mobile-ui/expo-wrapper/` is an
+providing its Android project. Use `npm run dev` for local browser work, or
+`npm run dev:lan` to serve the development app over HTTPS to phones on the
+same Private network. The LAN command uses the XAMPP LAN certificate and
+requires the phone to trust its issuing CA. The separate
+`mobile-ui/expo-wrapper/` is an
 optional Expo wrapper with its own dependencies; the steps below use the
 primary Vite/Capacitor app.
 
@@ -300,6 +331,14 @@ Open the Vite URL shown in the terminal (usually
 [http://localhost:5173](http://localhost:5173)). Keep Apache and MySQL running:
 the Vite development server proxies `/api` requests to the PHP app under
 the project's actual `htdocs` folder name.
+
+To use the camera from a phone on the same trusted Wi-Fi/network, start the
+server with `npm run dev:lan` instead. This serves Vite on HTTPS at port 5173;
+run [`start-office-server.bat`](start-office-server.bat) first so its
+Private-network firewall rule is present. Install and trust the local CA
+certificate on the phone as described in [Scan QR codes from a phone on local
+XAMPP](#scan-qr-codes-from-a-phone-on-local-xampp). Stop any existing Vite
+server using port 5173 before starting the LAN server.
 
 ### Build the web client
 
@@ -426,7 +465,7 @@ expanded notes.
 | Clean page routes return 404 | Enable Apache `mod_rewrite` and allow `.htaccess` overrides for the project directory. |
 | Another computer cannot open the site | Run `start-office-server.bat` on the host computer, approve its Private-network firewall prompt, and use the network URL it prints. Keep both computers on the same trusted network and leave Apache/MySQL running. |
 | Mobile app cannot reach the API | Keep Apache/MySQL running and verify the Vite proxy or `VITE_API_ENDPOINT`. On Android emulators, use `10.0.2.2` rather than `localhost`. |
-| SMS sending fails | Check cURL, notification settings, provider credentials, and provider account status. |
+| SMS sending fails | Check cURL, Communication Settings, provider credentials, and provider account status. |
 | Android build cannot find a device | Open the Android project in Android Studio, install the required SDK components, and start an emulator or connect a device. |
 
 ---

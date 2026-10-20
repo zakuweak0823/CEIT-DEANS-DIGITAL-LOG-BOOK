@@ -74,7 +74,11 @@ server with HTTPS.
 Phone camera scanning requires a trusted HTTPS connection. The local
 development certificate is specific to its original host and should not be
 copied as a production certificate. Configure trusted HTTPS for the new host;
-until then, use the QR image-upload option.
+until then, use the QR image-upload option. For the React/Vite mobile app,
+start the office server first, then run `npm run dev:lan` from `mobile-ui`.
+Open the HTTPS LAN address Vite prints (port 5173) on the phone. The launcher
+allows ports 80, 443, and 5173 only on Private networks; stop any existing
+Vite process using port 5173 before starting the LAN server.
 
 ## Troubleshooting
 
@@ -85,7 +89,8 @@ until then, use the QR image-upload option.
 | Database connection error | Start MySQL; confirm the imported database is named `dit_logbook` and check `db.php` credentials. |
 | Another computer cannot connect | Run the launcher on the host, approve the firewall prompt, make sure both computers share the same trusted Private network, and use the printed network URL. |
 | Clean admin page URLs return 404 | Confirm Apache `mod_rewrite` is enabled and `.htaccess` overrides are allowed. |
-| Phone camera is unavailable | Open the site over HTTPS with a certificate trusted by the phone, or upload a QR image instead. |
+| Phone camera is unavailable | For the Vite mobile app, use `npm run dev:lan` and open its `https://<office-LAN-IP>:5173/` address. Install and trust the office CA certificate on the phone. Run `start-office-server.bat` to configure the Private-network firewall rules; upload a QR image if HTTPS is not available. |
+| `npm run dev:lan` cannot find the LAN certificate | The XAMPP Apache certificate and private key must exist under `C:\xampp\apache\conf\ssl.crt` and `C:\xampp\apache\conf\ssl.key`. Certificates are specific to each host; configure a trusted certificate for a replacement computer. |
 
 For mobile web development and Android builds, continue with the
 [Mobile app section in the main README](README.md#mobile-app).

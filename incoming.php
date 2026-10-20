@@ -2,15 +2,29 @@
 require_once 'auth.php';
 require_once 'db.php';
 require_once 'mobile_form_settings.php';
+require_once 'document_tracking.php';
 ensure_admin();
 
 $mobileFormLabels = get_mobile_form_labels($conn);
-
-$conn->query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS client_phone VARCHAR(20) DEFAULT NULL');
-$conn->query("ALTER TABLE documents ADD COLUMN IF NOT EXISTS submitter_type VARCHAR(20) NOT NULL DEFAULT 'Other'");
-$conn->query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_priority TINYINT(1) NOT NULL DEFAULT 0');
-$conn->query("UPDATE documents SET submitter_type = sender WHERE submitter_type = 'Other' AND sender IN ('Student', 'Faculty')");
-$conn->query("UPDATE documents SET status = 'Pending' WHERE type = 'Incoming' AND status = 'Received'");
+try {
+    ensure_document_tracking_schema($conn);
+    $documentTrackingSettings = get_document_tracking_settings($conn);
+    foreach ([
+        'ALTER TABLE documents ADD COLUMN IF NOT EXISTS client_phone VARCHAR(20) DEFAULT NULL',
+        "ALTER TABLE documents ADD COLUMN IF NOT EXISTS submitter_type VARCHAR(20) NOT NULL DEFAULT 'Other'",
+        'ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_priority TINYINT(1) NOT NULL DEFAULT 0',
+        "UPDATE documents SET submitter_type = sender WHERE submitter_type = 'Other' AND sender IN ('Student', 'Faculty')",
+        "UPDATE documents SET status = 'Pending' WHERE type = 'Incoming' AND status = 'Received'",
+    ] as $schemaSql) {
+        if ($conn->query($schemaSql) === false) {
+            throw new RuntimeException($conn->error);
+        }
+    }
+} catch (Throwable $error) {
+    error_log('Incoming document tracking setup failed: ' . $error->getMessage());
+    http_response_code(500);
+    exit('Incoming document storage is unavailable. Check the server log and try again.');
+}
 
 $message = '';
 $releaseOutcome = null;
@@ -18,6 +32,7 @@ $setReleaseOutcome = static function ($title, $detail, $type = 'info') use (&$re
     $releaseOutcome = ['title' => $title, 'detail' => $detail, 'type' => $type];
 };
 $sender = '';
+$submitterName = '';
 $submitterType = 'Other';
 $recipient = '';
 $subject = '';
@@ -30,25 +45,68 @@ if (!in_array($statusFilter, $validStatusFilters, true)) {
     $statusFilter = '';
 }
 
-if (isset($_POST['save'])) {
+if (isset($_POST['issue_tracking_qr'])) {
+    $documentId = (int)($_POST['tracking_doc_id'] ?? 0);
+    if (!$documentTrackingSettings['enabled']) {
+        $message = show_alert('Document tracking is turned off in Admin Settings.', 'warning');
+    } elseif ($documentId <= 0) {
+        $message = show_alert('Select a valid incoming document.', 'danger');
+    } else {
+        $conn->begin_transaction();
+        try {
+            $stmt = safe_query($conn, "SELECT tracking_token FROM documents WHERE doc_id = ? AND type = 'Incoming' FOR UPDATE", 'i', [$documentId]);
+            if ($stmt === false) {
+                throw new RuntimeException('Could not load the selected document.');
+            }
+            $result = mysqli_stmt_get_result($stmt);
+            $document = $result === false ? false : mysqli_fetch_assoc($result);
+            mysqli_stmt_close($stmt);
+            if ($document === false) {
+                throw new RuntimeException('Could not read the selected document.');
+            }
+            if ($document === null) {
+                throw new DomainException('Incoming document was not found.');
+            }
+            if ($document['tracking_token'] === null || $document['tracking_token'] === '') {
+                $trackingToken = create_document_tracking_token();
+                $stmt = safe_query($conn, 'UPDATE documents SET tracking_token = ? WHERE doc_id = ? AND tracking_token IS NULL', 'si', [$trackingToken, $documentId]);
+                if ($stmt === false || mysqli_stmt_affected_rows($stmt) !== 1) {
+                    if ($stmt !== false) mysqli_stmt_close($stmt);
+                    throw new RuntimeException('Could not issue a tracking QR code.');
+                }
+                mysqli_stmt_close($stmt);
+            }
+            $conn->commit();
+            $message = show_alert('The office-issued document tracking QR is ready in the table.', 'success');
+        } catch (DomainException $error) {
+            $conn->rollback();
+            $message = show_alert($error->getMessage(), 'danger');
+        } catch (Throwable $error) {
+            $conn->rollback();
+            error_log('Incoming document tracking QR issuance failed: ' . $error->getMessage());
+            $message = show_alert('The tracking QR could not be issued. Check the server log and try again.', 'danger');
+        }
+    }
+} elseif (isset($_POST['save'])) {
     $sender = trim($_POST['sender'] ?? '');
+    $submitterName = trim($_POST['submitter_name'] ?? '');
     $submitterType = trim($_POST['submitter_type'] ?? 'Other');
-    $recipient = $mobileFormLabels['recipientEnabled'] ? trim($_POST['recipient'] ?? '') : '';
+    $recipient = '';
     $subject = trim($_POST['subject'] ?? '');
     $remarks = trim($_POST['remarks'] ?? '');
     $clientPhone = contact_number_input($_POST['client_phone'] ?? '');
 
-    if ($sender === '' || ($mobileFormLabels['recipientEnabled'] && $recipient === '') || $subject === '' || !in_array($submitterType, ['Student', 'Faculty', 'Other'], true)) {
-        $message = show_alert('Sender, recipient, and document type are required.', 'danger');
+    if ($sender === '' || $subject === '' || $submitterName === '' || strlen($submitterName) > 255 || !in_array($submitterType, ['Student', 'Faculty', 'Other'], true)) {
+        $message = show_alert('Submitter name, sender, and document type are required. The name must be 255 characters or fewer.', 'danger');
     } elseif ($clientPhone === null || ($clientPhone !== '' && !is_valid_contact_number($clientPhone))) {
         $message = show_alert('Enter an 11-digit contact number using digits only, or leave it blank.', 'danger');
     } else {
         $phoneValue = $clientPhone === '' ? null : $clientPhone;
-        $stmt = safe_query($conn, "INSERT INTO documents(type, sender, recipient, client_phone, subject, remarks, status, submitter_type) VALUES('Incoming', ?, ?, ?, ?, ?, 'Pending', ?)", 'ssssss', [$sender, $recipient, $phoneValue, $subject, $remarks, $submitterType]);
+        $stmt = safe_query($conn, "INSERT INTO documents(type, sender, submitter_name, recipient, client_phone, subject, remarks, status, submitter_type) VALUES('Incoming', ?, ?, ?, ?, ?, ?, 'Pending', ?)", 'sssssss', [$sender, $submitterName, $recipient, $phoneValue, $subject, $remarks, $submitterType]);
         if ($stmt !== false) {
             mysqli_stmt_close($stmt);
             $message = show_alert('Incoming document saved successfully.');
-            $sender = $recipient = $subject = $remarks = $clientPhone = '';
+            $sender = $submitterName = $recipient = $subject = $remarks = $clientPhone = '';
             $submitterType = 'Other';
         } else {
             $message = show_alert('Failed to save incoming document.', 'danger');
@@ -59,15 +117,15 @@ if (isset($_POST['save'])) {
 if (isset($_POST['update'])) {
     $id = (int)($_POST['id'] ?? 0);
     $sender = trim($_POST['sender'] ?? '');
-    $recipient = $mobileFormLabels['recipientEnabled'] ? trim($_POST['recipient'] ?? '') : '';
+    $submitterName = trim($_POST['submitter_name'] ?? '');
     $subject = trim($_POST['subject'] ?? '');
     $remarks = trim($_POST['remarks'] ?? '');
     $clientPhone = contact_number_input($_POST['client_phone'] ?? '');
     $submitterType = trim($_POST['submitter_type'] ?? 'Other');
 
-    if ($id > 0 && $sender !== '' && (!$mobileFormLabels['recipientEnabled'] || $recipient !== '') && $subject !== '' && in_array($submitterType, ['Student', 'Faculty', 'Other'], true) && $clientPhone !== null && ($clientPhone === '' || is_valid_contact_number($clientPhone))) {
+    if ($id > 0 && $sender !== '' && $submitterName !== '' && strlen($submitterName) <= 255 && $subject !== '' && in_array($submitterType, ['Student', 'Faculty', 'Other'], true) && $clientPhone !== null && ($clientPhone === '' || is_valid_contact_number($clientPhone))) {
         $phoneValue = $clientPhone === '' ? null : $clientPhone;
-        $stmt = safe_query($conn, "UPDATE documents SET sender = ?, recipient = ?, client_phone = ?, subject = ?, remarks = ?, submitter_type = ? WHERE doc_id = ? AND type = 'Incoming'", 'ssssssi', [$sender, $recipient, $phoneValue, $subject, $remarks, $submitterType, $id]);
+        $stmt = safe_query($conn, "UPDATE documents SET sender = ?, submitter_name = ?, client_phone = ?, subject = ?, remarks = ?, submitter_type = ? WHERE doc_id = ? AND type = 'Incoming'", 'ssssssi', [$sender, $submitterName, $phoneValue, $subject, $remarks, $submitterType, $id]);
         if ($stmt !== false) {
             mysqli_stmt_close($stmt);
             $message = show_alert('Incoming document updated successfully.');
@@ -77,7 +135,7 @@ if (isset($_POST['update'])) {
     } else {
         $message = show_alert($clientPhone === null || ($clientPhone !== '' && !is_valid_contact_number($clientPhone))
             ? 'Enter an 11-digit contact number using digits only, or leave it blank.'
-            : 'Check the sender, recipient, document type, and record details.', 'danger');
+            : 'Check the submitter name, sender, document type, and record details.', 'danger');
     }
 }
 
@@ -103,7 +161,10 @@ if (isset($_POST['prepare_release'])) {
         } else {
             // Moving an incoming item to outgoing reverses who sent and receives it.
             // The status predicate also protects against a concurrent update after the read.
-            $stmt = safe_query($conn, "UPDATE documents SET type = 'Outgoing', status = 'For Release', sender = ?, recipient = ? WHERE doc_id = ? AND type = 'Incoming' AND status = 'Pending'", 'ssi', [$releaseDocument['recipient'], $releaseDocument['sender'], $id]);
+            $outgoingSender = trim((string)$releaseDocument['recipient']) !== ''
+                ? $releaseDocument['recipient']
+                : "Dean's Office";
+            $stmt = safe_query($conn, "UPDATE documents SET type = 'Outgoing', status = 'For Release', sender = ?, recipient = ? WHERE doc_id = ? AND type = 'Incoming' AND status = 'Pending'", 'ssi', [$outgoingSender, $releaseDocument['sender'], $id]);
             if ($stmt === false || mysqli_stmt_affected_rows($stmt) !== 1) {
                 if ($stmt !== false) mysqli_stmt_close($stmt);
                 $message = show_alert('The document could not be prepared. Refresh the page and try again.', 'danger');
@@ -111,7 +172,7 @@ if (isset($_POST['prepare_release'])) {
             } else {
                 mysqli_stmt_close($stmt);
                 $message = show_alert('Document moved to Outgoing as For Release.');
-                $setReleaseOutcome('Document prepared for release', 'The document is now in Outgoing with status “For Release”. The original recipient is now listed as the outgoing sender, and the original sender is listed as the recipient.', 'success');
+                $setReleaseOutcome('Document prepared for release', 'The document is now in Outgoing with status “For Release”. Its previous recipient is used as the outgoing sender, or Dean’s Office if no recipient was saved; the original sender remains the recipient.', 'success');
             }
         }
     }
@@ -138,16 +199,16 @@ if (!in_array($submitterFilter, ['All', 'Faculty', 'Student', 'Other'], true)) {
 $documents = [];
 if ($search !== '' && $statusFilter !== '' && $submitterFilter !== 'All') {
     $searchTerm = "%{$search}%";
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND status = ? AND submitter_type = ? AND (sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ?) ORDER BY is_priority DESC, date_created DESC", 'ssssss', [$statusFilter, $submitterFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND status = ? AND submitter_type = ? AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ?) ORDER BY is_priority DESC, date_created DESC", 'sssssss', [$statusFilter, $submitterFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
 } elseif ($search !== '' && $statusFilter !== '') {
     $searchTerm = "%{$search}%";
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND status = ? AND (sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ?) ORDER BY is_priority DESC, date_created DESC", 'sssss', [$statusFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND status = ? AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ?) ORDER BY is_priority DESC, date_created DESC", 'ssssss', [$statusFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
 } elseif ($search !== '' && $submitterFilter !== 'All') {
     $searchTerm = "%{$search}%";
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND submitter_type = ? AND (sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ? OR status LIKE ?) ORDER BY is_priority DESC, date_created DESC", 'ssssss', [$submitterFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND submitter_type = ? AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ? OR status LIKE ?) ORDER BY is_priority DESC, date_created DESC", 'sssssss', [$submitterFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
 } elseif ($search !== '') {
     $searchTerm = "%{$search}%";
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND (sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ? OR status LIKE ?) ORDER BY is_priority DESC, date_created DESC", 'sssss', [$searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ? OR status LIKE ?) ORDER BY is_priority DESC, date_created DESC", 'ssssss', [$searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
 } elseif ($statusFilter !== '' && $submitterFilter !== 'All') {
     $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND status = ? AND submitter_type = ? ORDER BY is_priority DESC, date_created DESC", 'ss', [$statusFilter, $submitterFilter]);
 } elseif ($statusFilter !== '') {
@@ -174,7 +235,7 @@ if ($stmt !== false) {
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3">
             <div>
                 <h2 class="mb-1 text-primary">Incoming Documents</h2>
-                <p class="text-muted mb-0">Review incoming submissions and track each document status.</p>
+                <p class="text-muted mb-0">Review incoming submissions, identify who submitted them, and issue QR tracking codes.</p>
             </div>
             <div class="d-flex flex-wrap gap-2">
             <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#incomingForm">
@@ -224,6 +285,7 @@ if ($stmt !== false) {
                             <tr>
                                 <th>Date Submitted</th>
                                 <th>Submitted By</th>
+                                <th>Reference / QR Tracking</th>
                                 <th>Subject</th>
                                 <th>Recipient</th>
                                 <th>Client Contact</th>
@@ -233,7 +295,7 @@ if ($stmt !== false) {
                         </thead>
                         <tbody>
                             <?php if (count($documents) === 0): ?>
-                                <tr><td colspan="7" class="text-center text-muted">No incoming documents found.</td></tr>
+                                <tr><td colspan="8" class="text-center text-muted">No incoming documents found.</td></tr>
                             <?php else: ?>
                                 <?php foreach ($documents as $document): ?>
                                     <tr>
@@ -243,6 +305,28 @@ if ($stmt !== false) {
                                                 <span class="badge text-bg-light border"><?php echo sanitize($document['submitter_type']); ?></span>
                                                 <?php if ($document['submitter_type'] === 'Faculty' && (int)$document['is_priority'] === 1): ?>
                                                     <span class="badge text-bg-warning"><i class="bi bi-star-fill me-1" aria-hidden="true"></i>Priority</span>
+                                                <?php endif; ?>
+                                            </div>
+                                            <div class="mt-1 fw-semibold"><?php echo sanitize(trim((string)($document['submitter_name'] ?? '')) !== '' ? $document['submitter_name'] : 'Name not recorded'); ?></div>
+                                        </td>
+                                        <td>
+                                            <code><?php echo sanitize(document_tracking_reference($document['doc_id'])); ?></code>
+                                            <div class="mt-2">
+                                                <?php if (!$documentTrackingSettings['enabled']): ?>
+                                                    <span class="small text-muted">Tracking is off</span>
+                                                <?php elseif (!empty($document['tracking_token'])): ?>
+                                                    <?php $documentTrackerUrl = $documentTrackingSettings['baseUrl'] . '?token=' . rawurlencode($document['tracking_token']); ?>
+                                                    <button type="button" class="btn btn-sm btn-outline-success" onclick="showDocumentTrackingQr(<?php echo htmlspecialchars(json_encode($documentTrackerUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode(document_tracking_reference($document['doc_id']), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                                        <i class="bi bi-qr-code me-1" aria-hidden="true"></i>Show QR
+                                                    </button>
+                                                <?php else: ?>
+                                                    <form method="POST" class="d-inline">
+                                                        <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                                                        <input type="hidden" name="tracking_doc_id" value="<?php echo (int)$document['doc_id']; ?>">
+                                                        <button type="submit" name="issue_tracking_qr" value="1" class="btn btn-sm btn-outline-success">
+                                                            <i class="bi bi-qr-code me-1" aria-hidden="true"></i>Issue QR
+                                                        </button>
+                                                    </form>
                                                 <?php endif; ?>
                                             </div>
                                         </td>
@@ -256,7 +340,7 @@ if ($stmt !== false) {
                                         </td>
                                         <td>
                                             <div class="table-actions">
-                                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="editDocument(<?php echo (int)$document['doc_id']; ?>, <?php echo htmlspecialchars(json_encode($document['sender'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['recipient'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['client_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['subject'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['remarks'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['submitter_type'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="editDocument(<?php echo (int)$document['doc_id']; ?>, <?php echo htmlspecialchars(json_encode($document['sender'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['submitter_name'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['client_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['subject'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['remarks'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['submitter_type'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
                                                 <i class="bi bi-pencil"></i> Edit
                                             </button>
                                             <?php if ($document['submitter_type'] === 'Faculty'): ?>
@@ -306,7 +390,11 @@ if ($stmt !== false) {
                 <div class="modal-body">
                     <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                     <div class="mb-3">
-                        <label class="form-label" for="submitter_type">Submitted by</label>
+                        <label class="form-label" for="submitter_name">Name of person submitting</label>
+                        <input type="text" id="submitter_name" name="submitter_name" class="form-control" maxlength="255" value="<?php echo sanitize($submitterName); ?>" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="submitter_type">Submitter type</label>
                         <select id="submitter_type" name="submitter_type" class="form-select" required>
                             <option value="Student" <?php echo $submitterType === 'Student' ? 'selected' : ''; ?>>Student</option>
                             <option value="Faculty" <?php echo $submitterType === 'Faculty' ? 'selected' : ''; ?>>Faculty</option>
@@ -316,10 +404,6 @@ if ($stmt !== false) {
                     <div class="mb-3">
                         <label class="form-label" for="sender"><?php echo sanitize($mobileFormLabels['sender']); ?></label>
                         <input type="text" id="sender" name="sender" class="form-control" value="<?php echo sanitize($sender); ?>" required>
-                    </div>
-                    <div class="mb-3" <?php echo $mobileFormLabels['recipientEnabled'] ? '' : 'hidden'; ?>>
-                        <label class="form-label" for="recipient"><?php echo sanitize($mobileFormLabels['recipient']); ?></label>
-                        <input type="text" id="recipient" name="recipient" class="form-control" value="<?php echo sanitize($recipient); ?>" <?php echo $mobileFormLabels['recipientEnabled'] ? 'required' : 'disabled'; ?>>
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="subject"><?php echo sanitize($mobileFormLabels['documentType']); ?></label>
@@ -358,6 +442,10 @@ if ($stmt !== false) {
                     <input type="hidden" name="action" value="update">
                     <input type="hidden" name="id" id="editId">
                     <div class="mb-3">
+                        <label class="form-label" for="editSubmitterName">Name of person submitting</label>
+                        <input type="text" id="editSubmitterName" name="submitter_name" class="form-control" maxlength="255" required>
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label" for="editSender">From</label>
                         <input type="text" id="editSender" name="sender" class="form-control" required>
                     </div>
@@ -368,10 +456,6 @@ if ($stmt !== false) {
                             <option value="Faculty">Faculty</option>
                             <option value="Other">Other</option>
                         </select>
-                    </div>
-                    <div class="mb-3" <?php echo $mobileFormLabels['recipientEnabled'] ? '' : 'hidden'; ?>>
-                        <label class="form-label" for="editRecipient"><?php echo sanitize($mobileFormLabels['recipient']); ?></label>
-                        <input type="text" id="editRecipient" name="recipient" class="form-control" <?php echo $mobileFormLabels['recipientEnabled'] ? 'required' : 'disabled'; ?>>
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="editClientPhone"><?php echo sanitize($mobileFormLabels['contactNumber']); ?></label>
@@ -390,6 +474,30 @@ if ($stmt !== false) {
                         <button type="submit" name="update" class="btn btn-primary">Update</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="documentTrackingQrModal" tabindex="-1" aria-labelledby="documentTrackingQrTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title text-primary" id="documentTrackingQrTitle">Document tracking QR</h5>
+                    <p class="small text-muted mb-0" id="documentTrackingQrReference"></p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <p class="small text-secondary">This office-issued QR opens the dedicated document status tracker.</p>
+                <canvas id="documentTrackingQrCanvas" class="img-fluid mx-auto" aria-label="Document status tracking QR code"></canvas>
+                <div id="documentTrackingQrError" class="alert alert-danger mt-3" role="alert" hidden></div>
+                <a id="documentTrackingQrLink" class="small d-block mt-3" target="_blank" rel="noopener noreferrer"></a>
+            </div>
+            <div class="modal-footer">
+                <a id="downloadDocumentTrackingQr" class="btn btn-primary disabled" aria-disabled="true" download="document-tracking.png"><i class="bi bi-download me-1" aria-hidden="true"></i>Download QR</a>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -463,16 +571,49 @@ if ($stmt !== false) {
     </div>
 <?php endif; ?>
 
+<script src="assets/js/qr-tools.bundle.js"></script>
 <script>
-function editDocument(id, sender, recipient, clientPhone, subject, remarks, submitterType) {
+function editDocument(id, sender, submitterName, clientPhone, subject, remarks, submitterType) {
     document.getElementById('editId').value = id;
     document.getElementById('editSender').value = sender;
-    document.getElementById('editRecipient').value = recipient;
+    document.getElementById('editSubmitterName').value = submitterName;
     document.getElementById('editClientPhone').value = clientPhone;
     document.getElementById('editSubject').value = subject;
     document.getElementById('editRemarks').value = remarks;
     document.getElementById('editSubmitterType').value = submitterType;
     new bootstrap.Modal(document.getElementById('editModal')).show();
+}
+
+function showDocumentTrackingQr(trackerUrl, reference) {
+    const canvas = document.getElementById('documentTrackingQrCanvas');
+    const error = document.getElementById('documentTrackingQrError');
+    const link = document.getElementById('documentTrackingQrLink');
+    const download = document.getElementById('downloadDocumentTrackingQr');
+    document.getElementById('documentTrackingQrReference').textContent = reference;
+    link.href = trackerUrl;
+    link.textContent = trackerUrl;
+    error.hidden = true;
+    download.classList.add('disabled');
+    download.setAttribute('aria-disabled', 'true');
+    download.removeAttribute('href');
+    download.download = reference.toLowerCase() + '-tracking-qr.png';
+
+    if (!window.QRCode || typeof window.QRCode.toCanvas !== 'function') {
+        error.textContent = 'The QR generator could not be loaded. Refresh the page and try again.';
+        error.hidden = false;
+    } else {
+        window.QRCode.toCanvas(canvas, trackerUrl, { width: 480, margin: 2, errorCorrectionLevel: 'H', color: { dark: '#064e3b', light: '#ffffff' } }, function (generationError) {
+            if (generationError) {
+                error.textContent = 'Could not generate the document tracking QR code.';
+                error.hidden = false;
+                return;
+            }
+            download.href = canvas.toDataURL('image/png');
+            download.classList.remove('disabled');
+            download.setAttribute('aria-disabled', 'false');
+        });
+    }
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('documentTrackingQrModal')).show();
 }
 
 document.addEventListener('DOMContentLoaded', function () {

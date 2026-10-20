@@ -94,30 +94,62 @@ function reportTitle(string $type): string
 .report-page .report-table th {
     white-space: nowrap;
 }
+.report-page .report-print-header {
+    display: none;
+}
 @media print {
+    html,
+    body.admin-body {
+        width: 100% !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        color: #000 !important;
+        background: #fff !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
     body.admin-body,
     .admin-layout,
-    .main-panel {
+    .main-panel,
+    .admin-content {
         height: auto !important;
         min-height: 0 !important;
         overflow: visible !important;
     }
+    .admin-layout,
+    .main-panel {
+        display: block !important;
+        width: 100% !important;
+    }
     .sidebar,
     .topbar,
     .admin-footer,
+    .admin-assistant,
+    .admin-login-transition,
     .report-controls,
     .report-actions,
     .report-filter,
+    .report-summary,
     .pending-documents-float {
         display: none !important;
     }
     .admin-content {
         overflow: visible !important;
-        padding: 0 !important;
+        width: 100% !important;
+        flex: none !important;
+        padding: 0.38in 0.42in 0.44in !important;
+        background: #fff !important;
     }
-    .report-page > .col-12:not(:last-child) .card {
-        box-shadow: none !important;
-        break-inside: avoid;
+    .report-page {
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        --bs-gutter-x: 0;
+        --bs-gutter-y: 0;
+    }
+    .report-page > .col-12 {
+        padding: 0 !important;
     }
     .report-page .report-filter-card {
         display: none !important;
@@ -125,8 +157,255 @@ function reportTitle(string $type): string
     .report-page .report-table-wrap {
         overflow: visible !important;
     }
+    .report-page > .col-12:last-child,
+    .report-page > .col-12:last-child > .card,
+    .report-page > .col-12:last-child > .card > .card-body {
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+    }
+    .report-page .report-document-card,
+    .report-page .report-document-card > .card-body,
+    .report-page .report-table-wrap {
+        color: #000 !important;
+        background: #fff !important;
+    }
+    .report-page .report-screen-heading,
+    .report-page #reportResultCount {
+        display: none !important;
+    }
     .report-page .report-table {
+        display: table !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        border-collapse: collapse !important;
+        table-layout: fixed !important;
+        font-size: 8pt;
+    }
+    .report-page .report-table col.report-col-date {
+        width: 18%;
+    }
+    .report-page .report-table--documents col.report-col-party {
+        width: 15%;
+    }
+    .report-page .report-table--documents col.report-col-subject {
+        width: 38%;
+    }
+    .report-page .report-table--documents col.report-col-status {
+        width: 14%;
+    }
+    .report-page .report-table--sms col.report-col-recipient {
+        width: 23%;
+    }
+    .report-page .report-table--sms col.report-col-message {
+        width: 43%;
+    }
+    .report-page .report-table--sms col.report-col-status {
+        width: 16%;
+    }
+    .report-page .report-table--borrowed col.report-col-item {
+        width: 29%;
+    }
+    .report-page .report-table--borrowed col.report-col-borrower {
+        width: 25%;
+    }
+    .report-page .report-table--borrowed col.report-col-date {
+        width: 22%;
+    }
+    .report-page .report-table--borrowed col.report-col-status {
+        width: 24%;
+    }
+    .report-page .report-print-header {
+        display: block !important;
+        margin: 0 0 0.12in;
+        padding: 0 0 0.08in;
+        border-bottom: 2px solid #14633d;
+    }
+    .report-page .report-letterhead {
+        display: grid;
+        grid-template-columns: 0.68in minmax(0, max-content);
+        align-items: center;
+        gap: 0.12in;
+        width: fit-content;
+        max-width: 100%;
+        min-height: 0.68in;
+        margin: 0 auto;
+        text-align: center;
+    }
+    .report-page .report-letterhead-mark {
+        width: 0.68in;
+        height: 0.68in;
+        object-fit: contain;
+    }
+    .report-page .report-letterhead-copy {
+        text-align: center;
+    }
+    .report-page .report-letterhead-copy p {
+        margin: 0;
+        color: #000 !important;
+        font: 8pt/1.16 Arial, sans-serif;
+    }
+    .report-page .report-letterhead-copy .report-university-name {
+        margin: 0.01in 0;
+        color: #000 !important;
+        font-size: 11.5pt;
+        font-weight: 700;
+        letter-spacing: 0.025em;
+    }
+    .report-page .report-letterhead-copy .report-college-name {
+        margin-top: 0.035in;
+        font-size: 7pt;
+        font-weight: 700;
+        letter-spacing: 0.015em;
+    }
+    .report-page .report-print-title {
+        margin: 0.11in 0 0.07in;
+        color: #000 !important;
+        font: 700 15pt/1.1 Arial, sans-serif;
+        text-align: center;
+    }
+    .report-page .report-print-meta {
+        display: grid;
+        grid-template-columns: 1.8fr 1.15fr 1fr;
+        gap: 0.12in;
+        margin: 0;
+        padding: 0.08in 0.1in;
+        border: 1px solid #b7c2bb;
+        background: #fff !important;
+    }
+    .report-page .report-print-meta div {
+        min-width: 0;
+    }
+    .report-page .report-print-meta dt {
+        margin: 0 0 0.025in;
+        color: #000 !important;
+        font: 700 7.5pt/1.2 Arial, sans-serif;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+    }
+    .report-page .report-print-meta dd {
+        margin: 0;
+        color: #000 !important;
+        font: 9.5pt/1.25 Arial, sans-serif;
+        font-weight: 600;
+    }
+    .report-page .report-table td {
         font-size: 9pt;
+        line-height: 1.3;
+    }
+    .report-page .report-table .report-date-cell {
+        text-align: center !important;
+        white-space: nowrap;
+    }
+    .report-page .report-date-part {
+        display: block;
+    }
+    .report-page .report-table thead {
+        display: table-header-group !important;
+    }
+    .report-page .report-table tbody {
+        display: table-row-group !important;
+    }
+    .report-page .report-table tr {
+        display: table-row !important;
+        overflow: visible !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+    }
+    .report-page .report-table th,
+    .report-page .report-table td {
+        display: table-cell !important;
+        min-width: 0 !important;
+        padding: 0.075in 0.08in !important;
+        border: 1px solid #aab9b0 !important;
+        color: #000 !important;
+        background: #fff !important;
+        vertical-align: middle !important;
+        text-align: left !important;
+        overflow-wrap: anywhere;
+        word-break: normal;
+        grid-template-columns: none !important;
+        gap: 0 !important;
+    }
+    .report-page .report-table td::before,
+    .report-page .report-table th::before {
+        display: none !important;
+        content: none !important;
+    }
+    .report-page .report-table th {
+        color: #000 !important;
+        background: #f0f0f0 !important;
+        font-size: 7.5pt;
+        font-weight: 700;
+        letter-spacing: 0.035em;
+        text-transform: uppercase;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    .report-page .report-table th:first-child {
+        white-space: normal;
+        text-align: center !important;
+    }
+    .report-page .report-table--sms td:nth-child(2) {
+        white-space: nowrap;
+    }
+    .report-page .report-table--documents th:first-child,
+    .report-page .report-table--documents td:first-child,
+    .report-page .report-table--documents th:last-child,
+    .report-page .report-table--documents td:last-child,
+    .report-page .report-table--sms th:first-child,
+    .report-page .report-table--sms td:first-child,
+    .report-page .report-table--sms th:last-child,
+    .report-page .report-table--sms td:last-child,
+    .report-page .report-table--borrowed th:nth-child(3),
+    .report-page .report-table--borrowed td:nth-child(3),
+    .report-page .report-table--borrowed th:last-child,
+    .report-page .report-table--borrowed td:last-child {
+        text-align: center !important;
+    }
+    .report-page .report-table--sms th:nth-child(2),
+    .report-page .report-table--sms td:nth-child(2) {
+        text-align: center !important;
+    }
+    .report-page .report-table tbody tr {
+        break-inside: avoid;
+    }
+    .report-page .report-table tr[hidden],
+    .report-page #reportNoMatches {
+        display: none !important;
+    }
+    .report-page .badge {
+        border: 0 !important;
+        color: #000 !important;
+        background: transparent !important;
+        padding: 0 !important;
+        font-size: inherit;
+    }
+    .report-page .report-print-footer {
+        display: flex !important;
+        justify-content: space-between;
+        gap: 0.2in;
+        margin-top: 0.1in;
+        padding-top: 0.05in;
+        border-top: 1px solid #aab9b0;
+        color: #000 !important;
+        font: 7.5pt/1.3 Arial, sans-serif;
+    }
+    .report-page .report-message {
+        overflow-wrap: anywhere;
+    }
+    .report-page .report-table .badge {
+        white-space: normal;
+    }
+    @page {
+        size: A4 portrait;
+        margin: 0;
     }
 }
 </style>
@@ -176,7 +455,7 @@ function reportTitle(string $type): string
         </div>
     </div>
     <?php if ($reportGenerated && count($preview) > 0): ?>
-    <div class="col-12">
+    <div class="col-12 report-summary">
         <div class="row g-3">
             <div class="col-sm-6 col-xl-4">
                 <div class="card shadow-sm report-stat h-100"><div class="card-body">
@@ -199,7 +478,7 @@ function reportTitle(string $type): string
                     <div class="small text-muted">Distinct statuses in this report</div>
                 </div></div>
             </div>
-            <div class="col-lg-7">
+            <div class="col-lg-7 report-chart">
                 <div class="card shadow-sm h-100">
                     <div class="card-body">
                         <h3 class="h6 text-primary mb-3">Daily activity</h3>
@@ -207,7 +486,7 @@ function reportTitle(string $type): string
                     </div>
                 </div>
             </div>
-            <div class="col-lg-5">
+            <div class="col-lg-5 report-chart">
                 <div class="card shadow-sm h-100">
                     <div class="card-body">
                         <h3 class="h6 text-primary mb-3">Status breakdown</h3>
@@ -230,17 +509,45 @@ function reportTitle(string $type): string
     </div>
     <?php endif; ?>
     <div class="col-12">
-        <div class="card shadow-sm">
+        <div class="card shadow-sm report-document-card">
             <div class="card-body">
-                <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3">
+                <?php if ($reportGenerated): ?>
+                <header class="report-print-header">
+                    <div class="report-letterhead">
+                        <img class="report-letterhead-mark" src="mobile-ui/src/office-logo.png" alt="Cavite State University seal">
+                        <div class="report-letterhead-copy">
+                            <p>Republic of the Philippines</p>
+                            <p class="report-university-name">CAVITE STATE UNIVERSITY</p>
+                            <p>Don Severino de las Alas Campus, Indang, Cavite</p>
+                            <p class="report-college-name">COLLEGE OF ENGINEERING AND INFORMATION TECHNOLOGY</p>
+                        </div>
+                    </div>
+                    <h1 class="report-print-title"><?php echo sanitize(reportTitle($reportType)); ?></h1>
+                    <dl class="report-print-meta">
+                        <div>
+                            <dt>Reporting period</dt>
+                            <dd><?php echo sanitize(date('M j, Y', strtotime($from))); ?> – <?php echo sanitize(date('M j, Y', strtotime($to))); ?></dd>
+                        </div>
+                        <div>
+                            <dt>Record count</dt>
+                            <dd id="reportPrintRecordCount"><?php echo number_format(count($preview)); ?></dd>
+                        </div>
+                        <div>
+                            <dt>Prepared by</dt>
+                            <dd><?php echo sanitize((string)($_SESSION['admin'] ?? 'Administrator')); ?></dd>
+                        </div>
+                    </dl>
+                </header>
+                <?php endif; ?>
+                <div class="report-screen-heading d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3">
                     <div>
                         <h2 class="h5 card-title mb-1 text-primary"><?php echo sanitize(reportTitle($reportType)); ?></h2>
                         <p class="text-muted mb-0"><?php echo sanitize($from); ?> to <?php echo sanitize($to); ?><?php if ($reportGenerated): ?> <span class="ms-1">· <?php echo number_format(count($preview)); ?> record(s)</span><?php endif; ?></p>
                     </div>
                     <div class="d-flex flex-wrap gap-2 report-actions">
                         <?php if ($reportGenerated && count($preview) > 0): ?>
-                            <button type="button" class="btn btn-outline-secondary" onclick="window.print()"><i class="bi bi-printer me-1" aria-hidden="true"></i>Print</button>
-                            <button type="button" class="btn btn-outline-primary" id="exportReport" title="Export the records currently shown by your filters"><i class="bi bi-download me-1" aria-hidden="true"></i>Export visible CSV</button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="printReport()"><i class="bi bi-printer me-1" aria-hidden="true"></i>Print / Save as PDF</button>
+                            <button type="button" class="btn btn-primary" id="exportExcel" title="Download a formatted Excel workbook with readable column widths"><i class="bi bi-file-earmark-spreadsheet me-1" aria-hidden="true"></i>Export Excel</button>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -265,23 +572,46 @@ function reportTitle(string $type): string
                 </div>
                 <?php endif; ?>
                 <div class="table-responsive report-table-wrap">
-                    <table id="reportTable" class="table table-hover align-middle mb-0 report-table">
+                    <table id="reportTable" class="table table-hover align-middle mb-0 report-table <?php echo $reportType === 'SMS Logs' ? 'report-table--sms' : ($reportType === 'Borrowed Items' ? 'report-table--borrowed' : 'report-table--documents'); ?>">
+                        <?php if ($reportType === 'Borrowed Items'): ?>
+                            <colgroup>
+                                <col class="report-col-item">
+                                <col class="report-col-borrower">
+                                <col class="report-col-date">
+                                <col class="report-col-status">
+                            </colgroup>
+                        <?php elseif ($reportType === 'SMS Logs'): ?>
+                            <colgroup>
+                                <col class="report-col-date">
+                                <col class="report-col-recipient">
+                                <col class="report-col-message">
+                                <col class="report-col-status">
+                            </colgroup>
+                        <?php else: ?>
+                            <colgroup>
+                                <col class="report-col-date">
+                                <col class="report-col-party">
+                                <col class="report-col-party">
+                                <col class="report-col-subject">
+                                <col class="report-col-status">
+                            </colgroup>
+                        <?php endif; ?>
                         <thead class="table-light">
                             <tr>
                                 <?php if ($reportType === 'Borrowed Items'): ?>
                                     <th>Item</th>
                                     <th>Borrower</th>
-                                    <th>Date Borrowed</th>
+                                    <th>Date borrowed</th>
                                     <th>Status</th>
                                 <?php elseif ($reportType === 'SMS Logs'): ?>
-                                    <th>Date Sent</th>
+                                    <th>Date and time</th>
                                     <th>Recipient</th>
                                     <th>Message</th>
                                     <th>Status</th>
                                 <?php else: ?>
-                                    <th>Date</th>
-                                    <th>From</th>
-                                    <th>To</th>
+                                    <th>Date and time</th>
+                                    <th>Sender</th>
+                                    <th>Recipient</th>
                                     <th>Subject</th>
                                     <th>Status</th>
                                 <?php endif; ?>
@@ -298,15 +628,21 @@ function reportTitle(string $type): string
                                         <?php if ($reportType === 'Borrowed Items'): ?>
                                             <td><?php echo sanitize((string)$row['item_name']); ?></td>
                                             <td><?php echo sanitize((string)$row['borrower']); ?></td>
-                                            <td><?php echo sanitize((string)$row['date_borrowed']); ?></td>
+                                            <td data-csv-value="<?php echo sanitize((string)$row['date_borrowed']); ?>"><?php echo sanitize(date('M j, Y', strtotime((string)$row['date_borrowed']))); ?></td>
                                             <td><span class="badge text-bg-<?php echo $row['status'] === 'Returned' ? 'success' : 'warning'; ?>"><?php echo sanitize((string)$row['status']); ?></span></td>
                                         <?php elseif ($reportType === 'SMS Logs'): ?>
-                                            <td><?php echo sanitize((string)$row['date_sent']); ?></td>
+                                            <td class="report-date-cell" data-csv-value="<?php echo sanitize((string)$row['date_sent']); ?>">
+                                                <span class="report-date-part"><?php echo sanitize(date('M j, Y', strtotime((string)$row['date_sent']))); ?></span>
+                                                <span class="report-date-part"><?php echo sanitize(date('g:i A', strtotime((string)$row['date_sent']))); ?></span>
+                                            </td>
                                             <td><?php echo sanitize((string)$row['recipient']); ?></td>
                                             <td class="report-message"><?php echo sanitize((string)$row['message']); ?></td>
                                             <td><span class="badge text-bg-<?php echo $row['status'] === 'Failed' ? 'danger' : ($row['status'] === 'Pending' ? 'warning' : 'success'); ?>"><?php echo sanitize((string)$row['status']); ?></span></td>
                                         <?php else: ?>
-                                            <td><?php echo sanitize((string)$row['date_created']); ?></td>
+                                            <td class="report-date-cell" data-csv-value="<?php echo sanitize((string)$row['date_created']); ?>">
+                                                <span class="report-date-part"><?php echo sanitize(date('M j, Y', strtotime((string)$row['date_created']))); ?></span>
+                                                <span class="report-date-part"><?php echo sanitize(date('g:i A', strtotime((string)$row['date_created']))); ?></span>
+                                            </td>
                                             <td><?php echo sanitize((string)$row['sender']); ?></td>
                                             <td><?php echo sanitize((string)$row['recipient']); ?></td>
                                             <td><?php echo sanitize((string)$row['subject']); ?></td>
@@ -324,10 +660,17 @@ function reportTitle(string $type): string
                 <?php if ($reportGenerated && count($preview) > 0): ?>
                     <div class="small text-muted mt-3" id="reportResultCount" aria-live="polite"></div>
                 <?php endif; ?>
+                <?php if ($reportGenerated && count($preview) > 0): ?>
+                    <footer class="report-print-footer">
+                        <span>CEIT Dean’s Office Digital Logbook</span>
+                        <span>Generated <?php echo sanitize(date('F j, Y · g:i A')); ?></span>
+                    </footer>
+                <?php endif; ?>
             </div>
         </div>
     </div>
 </div>
+<script src="assets/js/report_excel_export.js"></script>
 <script>
 <?php if ($reportGenerated && count($preview) > 0): ?>
 const reportChartLabels = <?php echo json_encode(array_keys($dailyCounts), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
@@ -364,6 +707,33 @@ const reportSearch = document.getElementById('reportSearch');
 const statusFilter = document.getElementById('statusFilter');
 const reportNoMatches = document.getElementById('reportNoMatches');
 const reportResultCount = document.getElementById('reportResultCount');
+const reportPrintRecordCount = document.getElementById('reportPrintRecordCount');
+const reportExportTitle = <?php echo json_encode(reportTitle($reportType), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
+const reportExportRange = <?php echo json_encode($from . ' to ' . $to, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
+const reportExportGeneratedAt = <?php echo json_encode(date('Y-m-d H:i:s'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>;
+const originalDocumentTitle = document.title;
+const reportPdfFilename = reportExportTitle + ' - ' + reportExportRange;
+let reportPrintTitleApplied = false;
+
+function applyReportPrintTitle() {
+    if (reportPrintTitleApplied) return;
+    document.title = reportPdfFilename;
+    reportPrintTitleApplied = true;
+}
+
+function restoreReportPrintTitle() {
+    if (!reportPrintTitleApplied) return;
+    document.title = originalDocumentTitle;
+    reportPrintTitleApplied = false;
+}
+
+function printReport() {
+    applyReportPrintTitle();
+    window.print();
+}
+
+window.addEventListener('beforeprint', applyReportPrintTitle);
+window.addEventListener('afterprint', restoreReportPrintTitle);
 
 function filterReportRows() {
     const query = reportSearch.value.trim().toLocaleLowerCase();
@@ -378,33 +748,40 @@ function filterReportRows() {
     });
     reportNoMatches.hidden = visibleCount > 0;
     reportResultCount.textContent = 'Showing ' + visibleCount.toLocaleString() + ' of ' + reportRows.length.toLocaleString() + ' records';
+    reportPrintRecordCount.textContent = visibleCount.toLocaleString();
 }
 reportSearch.addEventListener('input', filterReportRows);
 statusFilter.addEventListener('change', filterReportRows);
 filterReportRows();
 
-document.getElementById('exportReport').addEventListener('click', function () {
+document.getElementById('exportExcel').addEventListener('click', function () {
     const table = document.getElementById('reportTable');
-    const rows = Array.from(table.querySelectorAll('thead tr, tbody tr[data-status]')).filter(function (row) {
-        return row.matches('thead tr') || !row.hidden;
+    const visibleRows = Array.from(table.querySelectorAll('tbody tr[data-status]')).filter(function (row) {
+        return !row.hidden;
     });
-    const csv = rows.map(function (row) {
-        return Array.from(row.querySelectorAll('th, td')).map(function (cell) {
-            let value = cell.innerText.replace(/\r?\n/g, ' ').trim();
-            if (/^[\s]*[=+\-@]/.test(value)) value = "'" + value;
-            return '"' + value.replace(/"/g, '""') + '"';
-        }).join(',');
-    }).join('\r\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = '<?php echo sanitize(strtolower(preg_replace('/[^a-z0-9]+/i', '-', $reportType))); ?>-<?php echo sanitize($from); ?>-to-<?php echo sanitize($to); ?>.csv';
-    link.style.display = 'none';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    const headers = Array.from(table.querySelectorAll('thead th')).map(function (cell) {
+        return cell.innerText.replace(/\r?\n/g, ' ').trim();
+    });
+    const rows = visibleRows.map(function (row) {
+        return Array.from(row.querySelectorAll('td')).map(function (cell) {
+            return (cell.dataset.csvValue || cell.innerText).replace(/\r?\n/g, ' ').trim();
+        });
+    });
+    const columnWidths = <?php echo json_encode(
+        $reportType === 'SMS Logs' ? [23, 20, 70, 18] : ($reportType === 'Borrowed Items' ? [34, 28, 20, 18] : [23, 24, 24, 48, 18]),
+        JSON_THROW_ON_ERROR
+    ); ?>;
+
+    window.downloadReportWorkbook({
+        title: reportExportTitle,
+        period: reportExportRange,
+        generatedAt: reportExportGeneratedAt,
+        recordCount: visibleRows.length,
+        headers: headers,
+        rows: rows,
+        columnWidths: columnWidths,
+        filename: reportExportTitle + ' - ' + reportExportRange + '.xlsx'
+    });
 });
 <?php endif; ?>
 

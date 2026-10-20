@@ -263,12 +263,12 @@ function send_logged_sms($conn, $recipient, $message, $existingSmsId = null)
     $smsEnabled = safe_scalar($conn, "SELECT value FROM settings WHERE key_name = 'sms_enabled' LIMIT 1");
     if (empty($smsEnabled)) {
         persist_sms_attempt($conn, $recipient, $message, 'Failed', null, $existingSmsId);
-        return ['success' => false, 'status' => 'Failed', 'message' => 'SMS notifications are disabled in Notification Settings.'];
+        return ['success' => false, 'status' => 'Failed', 'message' => 'SMS delivery is disabled in Communication Settings.'];
     }
     $apiToken = get_philsms_api_token($conn);
     if ($apiToken === '') {
         persist_sms_attempt($conn, $recipient, $message, 'Failed', null, $existingSmsId);
-        return ['success' => false, 'status' => 'Failed', 'message' => 'No PhilSMS API token is configured in Notification Settings.'];
+        return ['success' => false, 'status' => 'Failed', 'message' => 'No PhilSMS API token is configured in Communication Settings.'];
     }
 
     $apiResult = philsms_api_request('POST', $apiToken, [
