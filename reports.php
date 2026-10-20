@@ -228,40 +228,47 @@ function reportTitle(string $type): string
     }
     .report-page .report-letterhead {
         display: grid;
-        grid-template-columns: 0.68in minmax(0, max-content);
+        grid-template-columns: minmax(0, 1fr) 0.65in 0.05in max-content 0.05in 0.65in minmax(0, 1fr);
         align-items: center;
-        gap: 0.12in;
-        width: fit-content;
+        width: 100%;
         max-width: 100%;
-        min-height: 0.68in;
+        min-height: 0.78in;
         margin: 0 auto;
         text-align: center;
     }
     .report-page .report-letterhead-mark {
-        width: 0.68in;
-        height: 0.68in;
+        grid-column: 2;
+        width: 0.65in;
+        height: 0.65in;
         object-fit: contain;
     }
     .report-page .report-letterhead-copy {
+        grid-column: 4;
         text-align: center;
+    }
+    .report-page .report-letterhead::after {
+        content: "";
+        grid-column: 6;
     }
     .report-page .report-letterhead-copy p {
         margin: 0;
         color: #000 !important;
-        font: 8pt/1.16 Arial, sans-serif;
+        font: 9pt/1.2 Arial, sans-serif;
     }
     .report-page .report-letterhead-copy .report-university-name {
         margin: 0.01in 0;
         color: #000 !important;
-        font-size: 11.5pt;
+        font-size: 14pt;
         font-weight: 700;
         letter-spacing: 0.025em;
     }
     .report-page .report-letterhead-copy .report-college-name {
-        margin-top: 0.035in;
-        font-size: 7pt;
+        position: relative;
+        top: 0.08in;
+        margin-top: 0.04in;
+        font-size: 9pt;
         font-weight: 700;
-        letter-spacing: 0.015em;
+        letter-spacing: 0.01em;
     }
     .report-page .report-print-title {
         margin: 0.11in 0 0.07in;
@@ -271,7 +278,7 @@ function reportTitle(string $type): string
     }
     .report-page .report-print-meta {
         display: grid;
-        grid-template-columns: 1.8fr 1.15fr 1fr;
+        grid-template-columns: minmax(0, 1.8fr) minmax(1in, 1fr);
         gap: 0.12in;
         margin: 0;
         padding: 0.08in 0.1in;
@@ -390,12 +397,19 @@ function reportTitle(string $type): string
     .report-page .report-print-footer {
         display: flex !important;
         justify-content: space-between;
+        align-items: flex-start;
         gap: 0.2in;
         margin-top: 0.1in;
         padding-top: 0.05in;
         border-top: 1px solid #aab9b0;
         color: #000 !important;
         font: 7.5pt/1.3 Arial, sans-serif;
+    }
+    .report-page .report-print-footer-meta {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        text-align: right;
     }
     .report-page .report-message {
         overflow-wrap: anywhere;
@@ -532,10 +546,6 @@ function reportTitle(string $type): string
                             <dt>Record count</dt>
                             <dd id="reportPrintRecordCount"><?php echo number_format(count($preview)); ?></dd>
                         </div>
-                        <div>
-                            <dt>Prepared by</dt>
-                            <dd><?php echo sanitize((string)($_SESSION['admin'] ?? 'Administrator')); ?></dd>
-                        </div>
                     </dl>
                 </header>
                 <?php endif; ?>
@@ -663,7 +673,10 @@ function reportTitle(string $type): string
                 <?php if ($reportGenerated && count($preview) > 0): ?>
                     <footer class="report-print-footer">
                         <span>CEIT Dean’s Office Digital Logbook</span>
-                        <span>Generated <?php echo sanitize(date('F j, Y · g:i A')); ?></span>
+                        <span class="report-print-footer-meta">
+                            <span>Generated <?php echo sanitize(date('F j, Y · g:i A')); ?></span>
+                            <span>Prepared by: <?php echo sanitize((string)($_SESSION['admin'] ?? 'Administrator')); ?></span>
+                        </span>
                     </footer>
                 <?php endif; ?>
             </div>

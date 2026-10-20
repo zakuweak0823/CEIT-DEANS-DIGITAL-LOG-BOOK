@@ -481,7 +481,7 @@ if ($stmt !== false) {
 </div>
 
 <div class="modal fade" id="documentTrackingQrModal" tabindex="-1" aria-labelledby="documentTrackingQrTitle" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered qr-code-modal">
         <div class="modal-content border-0 shadow">
             <div class="modal-header">
                 <div>
@@ -492,7 +492,9 @@ if ($stmt !== false) {
             </div>
             <div class="modal-body text-center">
                 <p class="small text-secondary">This office-issued QR opens the dedicated document status tracker.</p>
-                <canvas id="documentTrackingQrCanvas" class="img-fluid mx-auto" aria-label="Document status tracking QR code"></canvas>
+                <div class="qr-code-frame">
+                    <canvas id="documentTrackingQrCanvas" aria-label="Document status tracking QR code"></canvas>
+                </div>
                 <div id="documentTrackingQrError" class="alert alert-danger mt-3" role="alert" hidden></div>
                 <a id="documentTrackingQrLink" class="small d-block mt-3" target="_blank" rel="noopener noreferrer"></a>
             </div>

@@ -180,7 +180,7 @@ if (document.body.classList.contains('admin-body')) {
     let latestObservedDocumentId = Number.isSafeInteger(latestDocumentAttribute) ? latestDocumentAttribute : 0;
     let hasDocumentActivityBaseline = document.body.dataset.documentActivityReady === 'true';
     const adminPreferenceStorageKey = 'ceit-admin-preferences-v1';
-    const defaultAdminPreferences = { activityInterval: 15, soundAlerts: true, desktopAlerts: false, pendingBubble: true, assistantEnabled: true, compactMode: false, adminTheme: 'default' };
+    const defaultAdminPreferences = { activityInterval: 15, soundAlerts: true, desktopAlerts: false, submissionToast: true, assistantEnabled: true, compactMode: false, adminTheme: 'default' };
     const readAdminPreferences = function () {
         try {
             const saved = JSON.parse(window.localStorage.getItem(adminPreferenceStorageKey) || '{}');
@@ -188,7 +188,7 @@ if (document.body.classList.contains('admin-body')) {
                 activityInterval: [15, 30, 60].includes(Number(saved.activityInterval)) ? Number(saved.activityInterval) : defaultAdminPreferences.activityInterval,
                 soundAlerts: typeof saved.soundAlerts === 'boolean' ? saved.soundAlerts : defaultAdminPreferences.soundAlerts,
                 desktopAlerts: saved.desktopAlerts === true,
-                pendingBubble: saved.pendingBubble !== false,
+                submissionToast: typeof saved.submissionToast === 'boolean' ? saved.submissionToast : saved.pendingBubble !== false,
                 assistantEnabled: saved.assistantEnabled !== false,
                 compactMode: saved.compactMode === true,
                 adminTheme: ['civic', 'glass'].includes(saved.adminTheme) ? saved.adminTheme : defaultAdminPreferences.adminTheme
@@ -202,8 +202,34 @@ if (document.body.classList.contains('admin-body')) {
     let pendingNotificationTone = false;
     let notificationCheckInProgress = false;
     let documentActivityIntervalId = 0;
+    const submissionToast = document.getElementById('adminSubmissionToast');
+    let submissionToastTimer = 0;
     const notificationTone = new Audio(new URL('assets/audio/notif_tone.mp3', window.location.href).href);
     notificationTone.preload = 'auto';
+
+    const hideSubmissionToast = function () {
+        if (!submissionToast) return;
+        window.clearTimeout(submissionToastTimer);
+        submissionToast.classList.remove('is-visible');
+        submissionToastTimer = window.setTimeout(function () {
+            submissionToast.hidden = true;
+        }, 180);
+    };
+
+    const showSubmissionToast = function () {
+        if (!submissionToast || !adminPreferences.submissionToast || document.hidden) return;
+        window.clearTimeout(submissionToastTimer);
+        submissionToast.hidden = false;
+        window.requestAnimationFrame(function () {
+            submissionToast.classList.add('is-visible');
+        });
+        submissionToastTimer = window.setTimeout(hideSubmissionToast, 9000);
+    };
+
+    if (submissionToast) {
+        const closeButton = submissionToast.querySelector('.admin-submission-toast-close');
+        if (closeButton) closeButton.addEventListener('click', hideSubmissionToast);
+    }
 
     const playAdminNotificationTone = function () {
         if (!adminPreferences.soundAlerts) return;
@@ -217,6 +243,7 @@ if (document.body.classList.contains('admin-body')) {
     };
 
     const notifyAdminOfNewDocument = function () {
+        showSubmissionToast();
         if (adminPreferences.soundAlerts) playAdminNotificationTone();
         if (!adminPreferences.desktopAlerts || !document.hidden || !('Notification' in window) || Notification.permission !== 'granted') return;
         try {
@@ -284,7 +311,7 @@ if (document.body.classList.contains('admin-body')) {
                 activityInterval: [15, 30, 60].includes(Number(preferences.activityInterval)) ? Number(preferences.activityInterval) : defaultAdminPreferences.activityInterval,
                 soundAlerts: typeof preferences.soundAlerts === 'boolean' ? preferences.soundAlerts : defaultAdminPreferences.soundAlerts,
                 desktopAlerts: preferences.desktopAlerts === true,
-                pendingBubble: preferences.pendingBubble !== false,
+                submissionToast: typeof preferences.submissionToast === 'boolean' ? preferences.submissionToast : preferences.pendingBubble !== false,
                 assistantEnabled: preferences.assistantEnabled !== false,
                 compactMode: preferences.compactMode === true,
                 adminTheme: ['civic', 'glass'].includes(preferences.adminTheme) ? preferences.adminTheme : defaultAdminPreferences.adminTheme
@@ -295,11 +322,7 @@ if (document.body.classList.contains('admin-body')) {
         document.body.classList.toggle('admin-theme-civic', adminPreferences.adminTheme === 'civic');
         document.body.classList.toggle('admin-theme-glass', adminPreferences.adminTheme === 'glass');
         if (!adminPreferences.soundAlerts) pendingNotificationTone = false;
-        const pendingShortcut = document.querySelector('.pending-documents-float');
-        if (pendingShortcut) {
-            pendingShortcut.hidden = !adminPreferences.pendingBubble;
-            pendingShortcut.setAttribute('aria-hidden', String(!adminPreferences.pendingBubble));
-        }
+        if (!adminPreferences.submissionToast) hideSubmissionToast();
         scheduleDocumentActivityChecks();
     };
 
@@ -324,126 +347,10 @@ if (document.body.classList.contains('admin-body')) {
     }, { capture: true });
 
     applyAdminPreferences();
-    const pendingShortcut = document.querySelector('.pending-documents-float');
-    if (pendingShortcut) {
-        const dragHandle = pendingShortcut.querySelector('[data-pending-drag-handle]');
-        const margin = 8;
-        let pointerDrag = null;
-        let suppressShortcutClick = false;
-        let clearSuppressedClickTimer = 0;
-
-        const setShortcutPosition = function (left, top) {
-            const bounds = pendingShortcut.getBoundingClientRect();
-            const maxLeft = Math.max(margin, window.innerWidth - bounds.width - margin);
-            const maxTop = Math.max(margin, window.innerHeight - bounds.height - margin);
-            const safeLeft = Math.min(Math.max(left, margin), maxLeft);
-            const safeTop = Math.min(Math.max(top, margin), maxTop);
-            const rightSpace = window.innerWidth - safeLeft - bounds.width - margin;
-            const leftSpace = safeLeft + bounds.width - margin;
-            const expandRight = rightSpace >= leftSpace;
-            const availableSpace = Math.max(bounds.width, expandRight ? rightSpace : leftSpace);
-
-            pendingShortcut.style.left = safeLeft + 'px';
-            pendingShortcut.style.top = safeTop + 'px';
-            pendingShortcut.style.right = 'auto';
-            pendingShortcut.style.bottom = 'auto';
-            pendingShortcut.style.setProperty('--pending-expanded-width', Math.min(240, availableSpace) + 'px');
-            pendingShortcut.classList.toggle('pending-documents-expand-right', expandRight);
-        };
-
-        const initialBounds = pendingShortcut.getBoundingClientRect();
-        setShortcutPosition(initialBounds.left, initialBounds.top);
-
-        dragHandle.addEventListener('pointerdown', function (event) {
-            if (event.button !== 0 || !event.isPrimary) return;
-            const bounds = pendingShortcut.getBoundingClientRect();
-            pointerDrag = {
-                pointerId: event.pointerId,
-                startX: event.clientX,
-                startY: event.clientY,
-                left: bounds.left,
-                top: bounds.top,
-                moved: false
-            };
-            dragHandle.setPointerCapture(event.pointerId);
-            event.preventDefault();
-        });
-
-        dragHandle.addEventListener('pointermove', function (event) {
-            if (!pointerDrag || event.pointerId !== pointerDrag.pointerId) return;
-            const deltaX = event.clientX - pointerDrag.startX;
-            const deltaY = event.clientY - pointerDrag.startY;
-            if (!pointerDrag.moved && Math.hypot(deltaX, deltaY) < 5) return;
-            pointerDrag.moved = true;
-            pendingShortcut.classList.add('is-dragging');
-            setShortcutPosition(pointerDrag.left + deltaX, pointerDrag.top + deltaY);
-        });
-
-        const finishShortcutDrag = function (event) {
-            if (!pointerDrag || event.pointerId !== pointerDrag.pointerId) return;
-            if (pointerDrag.moved) {
-                suppressShortcutClick = true;
-                window.clearTimeout(clearSuppressedClickTimer);
-                clearSuppressedClickTimer = window.setTimeout(function () {
-                    suppressShortcutClick = false;
-                }, 1000);
-            }
-            pointerDrag = null;
-            pendingShortcut.classList.remove('is-dragging');
-        };
-        dragHandle.addEventListener('pointerup', finishShortcutDrag);
-        dragHandle.addEventListener('pointercancel', finishShortcutDrag);
-
-        pendingShortcut.addEventListener('click', function (event) {
-            if (
-                event.defaultPrevented ||
-                event.button !== 0 ||
-                event.metaKey ||
-                event.ctrlKey ||
-                event.shiftKey ||
-                event.altKey ||
-                pendingShortcut.target === '_blank' ||
-                window.matchMedia('(prefers-reduced-motion: reduce)').matches
-            ) return;
-
-            event.preventDefault();
-            pendingShortcut.classList.add('is-navigating');
-            window.setTimeout(function () {
-                window.location.assign(pendingShortcut.href);
-            }, 180);
-        });
-
-        pendingShortcut.addEventListener('keydown', function (event) {
-            const step = event.shiftKey ? 48 : 16;
-            const moves = {
-                ArrowUp: [0, -step],
-                ArrowDown: [0, step],
-                ArrowLeft: [-step, 0],
-                ArrowRight: [step, 0]
-            };
-            if (!moves[event.key]) return;
-            event.preventDefault();
-            const bounds = pendingShortcut.getBoundingClientRect();
-            setShortcutPosition(bounds.left + moves[event.key][0], bounds.top + moves[event.key][1]);
-        });
-
-        document.addEventListener('click', function (event) {
-            if (!suppressShortcutClick) return;
-            if (!(event.target instanceof Element) || !event.target.closest('.pending-documents-float')) return;
-            event.preventDefault();
-            event.stopImmediatePropagation();
-        }, true);
-
-        window.addEventListener('resize', function () {
-            const bounds = pendingShortcut.getBoundingClientRect();
-            setShortcutPosition(bounds.left, bounds.top);
-        });
-    }
-
     // Add accessible mobile labels from the table headers without changing desktop markup.
     document.querySelectorAll('.admin-content .table-responsive table').forEach(function (table) {
         if (document.body.classList.contains('admin-compact') && table.closest('.batch-history-table')) return;
-        if (!document.body.classList.contains('admin-compact') && table.closest('.d-none, .d-md-block')) return;
+        if (!document.body.classList.contains('admin-compact') && table.closest('.d-none, .d-xl-block')) return;
         const headerRow = table.tHead && table.tHead.rows.length ? table.tHead.rows[0] : null;
         if (!headerRow) return;
 

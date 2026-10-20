@@ -484,10 +484,10 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                         <hr class="my-0">
                         <p class="form-label fw-semibold mb-2">Workspace shortcuts</p>
                         <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" role="switch" id="adminPendingBubble">
-                            <label class="form-check-label" for="adminPendingBubble">Show the floating pending-documents bubble</label>
+                            <input class="form-check-input" type="checkbox" role="switch" id="adminSubmissionToast">
+                            <label class="form-check-label" for="adminSubmissionToast">Show a top alert for new submissions</label>
                         </div>
-                        <div class="form-text">Turn it off to hide the draggable shortcut. Pending documents remain available from the navigation menu.</div>
+                        <div class="form-text">A brief alert appears at the top when a new document record is submitted. Pending documents remain available from the navigation menu.</div>
                         <div class="form-check form-switch mt-3">
                             <input class="form-check-input" type="checkbox" role="switch" id="adminAssistantEnabled">
                             <label class="form-check-label" for="adminAssistantEnabled">Show the side-peeking Admin Assistant</label>
@@ -632,19 +632,19 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
     }
 
     const storageKey = 'ceit-admin-preferences-v1';
-    const defaults = { activityInterval: 15, soundAlerts: true, desktopAlerts: false, pendingBubble: true, assistantEnabled: true, compactMode: false, adminTheme: 'default' };
+    const defaults = { activityInterval: 15, soundAlerts: true, desktopAlerts: false, submissionToast: true, assistantEnabled: true, compactMode: false, adminTheme: 'default' };
     const intervalControl = document.getElementById('adminActivityInterval');
     const soundControl = document.getElementById('adminSoundAlerts');
     const desktopControl = document.getElementById('adminDesktopAlerts');
     const desktopHelp = document.getElementById('adminDesktopAlertHelp');
-    const pendingBubbleControl = document.getElementById('adminPendingBubble');
+    const submissionToastControl = document.getElementById('adminSubmissionToast');
     const assistantEnabledControl = document.getElementById('adminAssistantEnabled');
     const compactModeControl = document.getElementById('adminCompactMode');
     const compactModeStatus = document.getElementById('settingsCompactModeStatus');
     const themeControls = Array.from(document.querySelectorAll('input[name="adminTheme"]'));
     const status = document.getElementById('adminPreferencesStatus');
     const resetButton = document.getElementById('resetAdminPreferences');
-    if (!intervalControl || !soundControl || !desktopControl || !desktopHelp || !pendingBubbleControl || !assistantEnabledControl || !compactModeControl || !status || !resetButton) return;
+    if (!intervalControl || !soundControl || !desktopControl || !desktopHelp || !submissionToastControl || !assistantEnabledControl || !compactModeControl || !status || !resetButton) return;
 
     let storageAvailable = true;
     const readPreferences = function () {
@@ -654,7 +654,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                 activityInterval: [15, 30, 60].includes(Number(saved.activityInterval)) ? Number(saved.activityInterval) : defaults.activityInterval,
                 soundAlerts: typeof saved.soundAlerts === 'boolean' ? saved.soundAlerts : defaults.soundAlerts,
                 desktopAlerts: saved.desktopAlerts === true,
-                pendingBubble: saved.pendingBubble !== false,
+                submissionToast: typeof saved.submissionToast === 'boolean' ? saved.submissionToast : saved.pendingBubble !== false,
                 assistantEnabled: saved.assistantEnabled !== false,
                 compactMode: saved.compactMode === true,
                 adminTheme: ['civic', 'glass'].includes(saved.adminTheme) ? saved.adminTheme : defaults.adminTheme
@@ -672,7 +672,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
         const notificationsSupported = 'Notification' in window;
         desktopControl.disabled = !notificationsSupported || Notification.permission === 'denied';
         desktopControl.checked = notificationsSupported && Notification.permission === 'granted' && preferences.desktopAlerts;
-        pendingBubbleControl.checked = preferences.pendingBubble;
+        submissionToastControl.checked = preferences.submissionToast;
         assistantEnabledControl.checked = preferences.assistantEnabled;
         compactModeControl.checked = preferences.compactMode;
         themeControls.forEach(function (control) {
@@ -734,8 +734,8 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
             renderPreferences();
         }
     });
-    pendingBubbleControl.addEventListener('change', function () {
-        preferences.pendingBubble = pendingBubbleControl.checked;
+    submissionToastControl.addEventListener('change', function () {
+        preferences.submissionToast = submissionToastControl.checked;
         savePreferences();
     });
     assistantEnabledControl.addEventListener('change', function () {

@@ -302,7 +302,7 @@ if ($stmt !== false) {
 </div>
 
 <div class="modal fade" id="documentTrackingQrModal" tabindex="-1" aria-labelledby="documentTrackingQrTitle" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered qr-code-modal">
         <div class="modal-content">
             <div class="modal-header">
                 <div>
@@ -312,7 +312,9 @@ if ($stmt !== false) {
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body text-center">
-                <canvas id="documentTrackingQrCanvas" class="img-fluid mx-auto" aria-label="QR code for tracking this document"></canvas>
+                <div class="qr-code-frame">
+                    <canvas id="documentTrackingQrCanvas" aria-label="QR code for tracking this document"></canvas>
+                </div>
                 <p class="small text-break mt-3 mb-2"><a id="documentTrackingQrLink" href="#" target="_blank" rel="noopener noreferrer"></a></p>
                 <p id="documentTrackingQrError" class="small text-danger mt-3 mb-0" role="alert" hidden></p>
             </div>

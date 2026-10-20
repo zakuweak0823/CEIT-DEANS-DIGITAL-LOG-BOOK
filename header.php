@@ -66,7 +66,7 @@ if ($adminName && isset($conn) && function_exists('safe_query')) {
     <title>CEIT Deans Office Digital Logbook</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="assets/css/style.css?v=dashboard-compact-balance-5">
+    <link rel="stylesheet" href="assets/css/style.css?v=responsive-qr-actions-2">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body<?php echo $adminName ? ' class="admin-body' . ($showAdminLoginArrival ? ' admin-login-arrival' : '') . (($_GET['embed'] ?? '') === '1' ? ' admin-embedded-body' : '') . '" data-latest-document-id="' . (int)($latestDocumentId ?? 0) . '" data-document-activity-ready="' . ($latestDocumentId === null ? 'false' : 'true') . '"' : ($currentPage === 'login.php' ? ' class="login-page"' : ''); ?>>
@@ -91,27 +91,16 @@ try {
     <?php endif; ?>
     <?php
     $pendingBadge = $pendingDocumentCount === null ? '!' : ($pendingDocumentCount > 99 ? '99+' : (string)$pendingDocumentCount);
-    $pendingLabel = $pendingDocumentCount === null
-        ? 'Pending document count unavailable. Open pending incoming documents.'
-        : $pendingDocumentCount . ' pending ' . ($pendingDocumentCount === 1 ? 'document' : 'documents') . '. Open pending incoming documents.';
     ?>
-    <a class="pending-documents-float<?php echo $pendingDocumentCount !== null && $pendingDocumentCount > 0 ? ' has-pending' : ''; ?>" href="incoming?status=Pending" aria-label="<?php echo sanitize($pendingLabel); ?>" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight" title="Drag the inbox icon to move it. Use arrow keys while focused.">
-        <span class="pending-documents-panel">
-            <span class="pending-documents-icon" data-pending-drag-handle aria-hidden="true">
-                <svg class="pending-documents-symbol" viewBox="0 0 24 24" focusable="false">
-                    <path d="M7 3.75h7l3 3v7.5H7z"></path>
-                    <path d="M14 3.75v3h3M9.5 9h5M9.5 11.5h3.5"></path>
-                    <path d="M4.5 13.25v5h15v-5M8 15.75h8"></path>
-                </svg>
-                <span class="pending-documents-count"><?php echo sanitize($pendingBadge); ?></span>
-            </span>
-            <span class="pending-documents-copy">
-                <strong><?php echo $pendingDocumentCount === null ? 'Pending count unavailable' : $pendingDocumentCount . ' Pending'; ?></strong>
-                <small><?php echo $pendingDocumentCount === null ? 'click to view incoming' : ($pendingDocumentCount === 0 ? 'all caught up' : ($pendingDocumentCount === 1 ? 'document needs review' : 'documents need review')); ?></small>
-            </span>
-            <i class="bi bi-arrow-up-right pending-documents-arrow" aria-hidden="true"></i>
+    <div class="admin-submission-toast" id="adminSubmissionToast" role="status" aria-live="polite" aria-atomic="true" hidden>
+        <span class="admin-submission-toast-icon" aria-hidden="true"><i class="bi bi-inbox"></i></span>
+        <span class="admin-submission-toast-copy">
+            <strong>New document submitted</strong>
+            <small>A new record is ready to review.</small>
         </span>
-    </a>
+        <a class="admin-submission-toast-link" href="records">View records</a>
+        <button class="admin-submission-toast-close" type="button" aria-label="Dismiss new submission notification"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+    </div>
     <section class="admin-assistant" aria-label="Admin Assistant">
         <button class="admin-assistant-launcher" type="button" aria-label="Open Admin Assistant" aria-expanded="false" aria-controls="adminAssistantPanel" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight" title="Drag to move; use arrow keys when focused.">
             <i class="bi bi-stars" aria-hidden="true"></i>

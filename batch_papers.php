@@ -739,7 +739,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                         <button class="btn btn-outline-primary" type="submit" aria-label="Search"><i class="bi bi-search"></i></button>
                     </form>
                 </div>
-                <div class="table-responsive d-none d-md-block batch-history-table">
+                <div class="table-responsive d-none d-xl-block batch-history-table">
                     <table class="table table-hover align-middle mb-0">
                         <thead class="table-light">
                             <tr><th>Date</th><th>Batch</th><th>Type</th><th>Status</th><th>From / Recipient</th><th>Papers</th><th>Actions</th></tr>
@@ -770,21 +770,14 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                                 <br><small class="text-muted">Awaiting count</small>
                                             <?php endif; ?>
                                         </td>
-                                        <td class="text-nowrap">
-                                                <form method="POST" class="d-inline">
-                                                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
-                                                    <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
-                                                    <input type="hidden" name="priority_batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
-                                                    <button class="btn btn-sm <?php echo (int)$batch['is_priority'] === 1 ? 'btn-warning' : 'btn-outline-warning'; ?>" type="submit" name="toggle_batch_priority" title="<?php echo (int)$batch['is_priority'] === 1 ? 'Remove priority' : 'Mark as priority'; ?>">
-                                                        <i class="bi bi-star<?php echo (int)$batch['is_priority'] === 1 ? '-fill' : ''; ?>" aria-hidden="true"></i>
-                                                    </button>
-                                                </form>
+                                        <td>
+                                            <div class="batch-row-actions">
                                                 <?php if ($batch['status'] !== 'Released'): ?>
-                                                    <form method="POST" class="d-inline">
+                                                    <form method="POST" class="m-0">
                                                         <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                                                         <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
                                                         <input type="hidden" name="status_batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
-                                                        <button class="btn btn-sm <?php echo $batch['status'] === 'For Release' ? 'btn-success' : 'btn-outline-primary'; ?>"
+                                                        <button class="btn btn-sm <?php echo $batch['status'] === 'For Release' ? 'btn-success' : 'btn-primary'; ?>"
                                                             type="<?php echo $batch['status'] === 'Pending' && $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_with_release' && $batch['received_at'] === null ? 'button' : 'submit'; ?>"
                                                             <?php if ($batch['status'] === 'Pending' && $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_with_release' && $batch['received_at'] === null): ?>
                                                                 data-bs-toggle="modal" data-bs-target="#confirmBatchReleaseModal"
@@ -801,11 +794,26 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                                                     data-confirm-button="<?php echo $batch['status'] === 'For Release' ? 'Released' : 'For Release'; ?>"
                                                                 <?php endif; ?>
                                                             <?php endif; ?>>
-                                                            <?php echo $batch['status'] === 'For Release' ? 'Released' : 'For Release'; ?>
+                                                            <i class="bi <?php echo $batch['status'] === 'For Release' ? 'bi-check2-circle' : 'bi-box-arrow-up-right'; ?> me-1" aria-hidden="true"></i>
+                                                            <?php echo $batch['status'] === 'For Release' ? 'Mark released' : 'For release'; ?>
                                                         </button>
                                                     </form>
                                                 <?php endif; ?>
-                                            <button class="btn btn-sm btn-outline-secondary edit-batch" type="button" data-bs-toggle="modal" data-bs-target="#create-batch"
+                                                <div class="dropdown dropstart">
+                                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions for <?php echo sanitize($batch['batch_code']); ?>">
+                                                        <i class="bi bi-three-dots" aria-hidden="true"></i><span class="d-none d-xxl-inline ms-1">More</span>
+                                                    </button>
+                                                    <div class="dropdown-menu batch-actions-menu">
+                                                        <form method="POST" class="m-0">
+                                                            <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                                                            <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
+                                                            <input type="hidden" name="priority_batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
+                                                            <button class="dropdown-item" type="submit" name="toggle_batch_priority">
+                                                                <i class="bi bi-star<?php echo (int)$batch['is_priority'] === 1 ? '-fill' : ''; ?> me-2" aria-hidden="true"></i>
+                                                                <?php echo (int)$batch['is_priority'] === 1 ? 'Remove priority' : 'Mark as priority'; ?>
+                                                            </button>
+                                                        </form>
+                                                        <button class="dropdown-item edit-batch" type="button" data-bs-toggle="modal" data-bs-target="#create-batch"
                                                 data-batch-id="<?php echo (int)$batch['batch_id']; ?>"
                                                 data-document-type="<?php echo sanitize($batch['document_type']); ?>"
                                                 data-batch-type="<?php echo sanitize($batch['batch_type']); ?>"
@@ -820,19 +828,30 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                                 data-remarks="<?php echo sanitize($batch['remarks'] ?? ''); ?>"
                                                 data-batch-code="<?php echo sanitize($batch['batch_code']); ?>"
                                                 data-received-at="<?php echo sanitize((string)$batch['received_at']); ?>"
-                                                title="Edit Bulk Papers"><i class="bi bi-pencil"></i></button>
-                                            <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#papers<?php echo (int)$batch['batch_id']; ?>" aria-expanded="false" aria-controls="papers<?php echo (int)$batch['batch_id']; ?>" title="View papers"><i class="bi bi-eye"></i></button>
-                                            <form method="POST" class="d-inline">
-                                                <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
-                                                <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
-                                                <input type="hidden" name="batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
-                                                <?php if (!empty($batch['tracking_token'])): ?>
-                                                    <button class="btn btn-sm btn-outline-success" type="button" onclick="showBatchQr(<?php echo htmlspecialchars(json_encode($batch['tracking_token'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($batch['batch_code'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)" title="Show batch QR code" aria-label="Show QR code for <?php echo sanitize($batch['batch_code']); ?>"><i class="bi bi-qr-code"></i></button>
-                                                <?php endif; ?>
-                                                <?php if ($batch['received_at'] === null): ?>
-                                                    <button class="btn btn-sm btn-outline-danger" type="submit" name="delete_batch" title="Delete batch" data-confirm-title="Delete this batch?" data-confirm-message="This permanently deletes the batch and all of its associated papers." data-confirm-button="Delete batch"><i class="bi bi-trash"></i></button>
-                                                <?php endif; ?>
-                                            </form>
+                                                            <i class="bi bi-pencil me-2" aria-hidden="true"></i>Edit batch
+                                                        </button>
+                                                        <button class="dropdown-item" type="button" data-bs-toggle="collapse" data-bs-target="#papers<?php echo (int)$batch['batch_id']; ?>" aria-expanded="false" aria-controls="papers<?php echo (int)$batch['batch_id']; ?>">
+                                                            <i class="bi bi-eye me-2" aria-hidden="true"></i>View papers
+                                                        </button>
+                                                        <?php if (!empty($batch['tracking_token'])): ?>
+                                                            <button class="dropdown-item" type="button" onclick="showBatchQr(<?php echo htmlspecialchars(json_encode($batch['tracking_token'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($batch['batch_code'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                                                <i class="bi bi-qr-code me-2" aria-hidden="true"></i>Show tracking QR
+                                                            </button>
+                                                        <?php endif; ?>
+                                                        <?php if ($batch['received_at'] === null): ?>
+                                                            <div class="dropdown-divider"></div>
+                                                            <form method="POST" class="m-0">
+                                                                <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                                                                <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
+                                                                <input type="hidden" name="batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
+                                                                <button class="dropdown-item text-danger" type="submit" name="delete_batch" data-confirm-title="Delete this batch?" data-confirm-message="This permanently deletes the batch and all of its associated papers." data-confirm-button="Delete batch">
+                                                                    <i class="bi bi-trash me-2" aria-hidden="true"></i>Delete batch
+                                                                </button>
+                                                            </form>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </td>
                                     </tr>
                                     <tr class="collapse" id="papers<?php echo (int)$batch['batch_id']; ?>">
@@ -876,7 +895,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                         </tbody>
                     </table>
                 </div>
-                <div class="batch-history-cards d-md-none">
+                <div class="batch-history-cards d-xl-none">
                     <?php if (!$batches): ?>
                         <div class="rounded-3 border bg-light px-3 py-4 text-center text-muted">No batches found.</div>
                     <?php else: ?>
@@ -914,42 +933,49 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                             <?php endif; ?>
                                         </dd>
                                     </dl>
-                                    <div class="d-flex flex-wrap gap-2">
-                                            <form method="POST">
+                                    <div class="batch-card-actions">
+                                        <?php if ($batch['status'] !== 'Released'): ?>
+                                            <form method="POST" class="m-0 flex-grow-1">
                                                 <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                                                 <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
-                                                <input type="hidden" name="priority_batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
-                                                <button class="btn btn-sm <?php echo (int)$batch['is_priority'] === 1 ? 'btn-warning' : 'btn-outline-warning'; ?>" type="submit" name="toggle_batch_priority">
-                                                    <i class="bi bi-star<?php echo (int)$batch['is_priority'] === 1 ? '-fill' : ''; ?> me-1" aria-hidden="true"></i><?php echo (int)$batch['is_priority'] === 1 ? 'Priority' : 'Set priority'; ?>
+                                                <input type="hidden" name="status_batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
+                                                <button class="btn btn-sm w-100 <?php echo $batch['status'] === 'For Release' ? 'btn-success' : 'btn-primary'; ?>"
+                                                    type="<?php echo $batch['status'] === 'Pending' && $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_with_release' && $batch['received_at'] === null ? 'button' : 'submit'; ?>"
+                                                    <?php if ($batch['status'] === 'Pending' && $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_with_release' && $batch['received_at'] === null): ?>
+                                                        data-bs-toggle="modal" data-bs-target="#confirmBatchReleaseModal"
+                                                        data-batch-id="<?php echo (int)$batch['batch_id']; ?>"
+                                                        data-batch-code="<?php echo sanitize($batch['batch_code']); ?>"
+                                                        data-paper-count="<?php echo (int)$batch['paper_count']; ?>"
+                                                    <?php else: ?>
+                                                        name="set_batch_status"
+                                                        <?php if ($batch['status'] === 'Pending' && $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_before_release' && $batch['received_at'] === null): ?>
+                                                            disabled title="Confirm receipt using Scan CEIT QR before moving this batch to For Release."
+                                                        <?php else: ?>
+                                                            data-confirm-title="<?php echo $batch['status'] === 'For Release' ? 'Mark batch as Released?' : 'Move batch to For Release?'; ?>"
+                                                            data-confirm-message="<?php echo $batch['status'] === 'For Release' ? 'This will mark the batch and its linked papers as Released.' : 'This will move the batch and its linked papers to For Release.'; ?>"
+                                                            data-confirm-button="<?php echo $batch['status'] === 'For Release' ? 'Released' : 'For Release'; ?>"
+                                                        <?php endif; ?>
+                                                    <?php endif; ?>>
+                                                    <i class="bi <?php echo $batch['status'] === 'For Release' ? 'bi-check2-circle' : 'bi-box-arrow-up-right'; ?> me-1" aria-hidden="true"></i>
+                                                    <?php echo $batch['status'] === 'For Release' ? 'Mark released' : 'For release'; ?>
                                                 </button>
                                             </form>
-                                            <?php if ($batch['status'] !== 'Released'): ?>
-                                                <form method="POST">
+                                        <?php endif; ?>
+                                        <div class="dropdown">
+                                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions for <?php echo sanitize($batch['batch_code']); ?>">
+                                                <i class="bi bi-three-dots" aria-hidden="true"></i><span class="ms-1">Actions</span>
+                                            </button>
+                                            <div class="dropdown-menu dropdown-menu-end batch-actions-menu">
+                                                <form method="POST" class="m-0">
                                                     <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                                                     <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
-                                                    <input type="hidden" name="status_batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
-                                                    <button class="btn btn-sm <?php echo $batch['status'] === 'For Release' ? 'btn-success' : 'btn-outline-primary'; ?>"
-                                                        type="<?php echo $batch['status'] === 'Pending' && $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_with_release' && $batch['received_at'] === null ? 'button' : 'submit'; ?>"
-                                                        <?php if ($batch['status'] === 'Pending' && $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_with_release' && $batch['received_at'] === null): ?>
-                                                            data-bs-toggle="modal" data-bs-target="#confirmBatchReleaseModal"
-                                                            data-batch-id="<?php echo (int)$batch['batch_id']; ?>"
-                                                            data-batch-code="<?php echo sanitize($batch['batch_code']); ?>"
-                                                            data-paper-count="<?php echo (int)$batch['paper_count']; ?>"
-                                                        <?php else: ?>
-                                                            name="set_batch_status"
-                                                            <?php if ($batch['status'] === 'Pending' && $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_before_release' && $batch['received_at'] === null): ?>
-                                                                disabled title="Confirm receipt using Scan CEIT QR before moving this batch to For Release."
-                                                            <?php else: ?>
-                                                                data-confirm-title="<?php echo $batch['status'] === 'For Release' ? 'Mark batch as Released?' : 'Move batch to For Release?'; ?>"
-                                                                data-confirm-message="<?php echo $batch['status'] === 'For Release' ? 'This will mark the batch and its linked papers as Released.' : 'This will move the batch and its linked papers to For Release.'; ?>"
-                                                                data-confirm-button="<?php echo $batch['status'] === 'For Release' ? 'Released' : 'For Release'; ?>"
-                                                            <?php endif; ?>
-                                                        <?php endif; ?>>
-                                                        <?php echo $batch['status'] === 'For Release' ? 'Released' : 'For Release'; ?>
+                                                    <input type="hidden" name="priority_batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
+                                                    <button class="dropdown-item" type="submit" name="toggle_batch_priority">
+                                                        <i class="bi bi-star<?php echo (int)$batch['is_priority'] === 1 ? '-fill' : ''; ?> me-2" aria-hidden="true"></i>
+                                                        <?php echo (int)$batch['is_priority'] === 1 ? 'Remove priority' : 'Mark as priority'; ?>
                                                     </button>
                                                 </form>
-                                            <?php endif; ?>
-                                        <button class="btn btn-sm btn-outline-secondary edit-batch" type="button" data-bs-toggle="modal" data-bs-target="#create-batch"
+                                                <button class="dropdown-item edit-batch" type="button" data-bs-toggle="modal" data-bs-target="#create-batch"
                                             data-batch-id="<?php echo (int)$batch['batch_id']; ?>"
                                             data-document-type="<?php echo sanitize($batch['document_type']); ?>"
                                             data-batch-type="<?php echo sanitize($batch['batch_type']); ?>"
@@ -964,24 +990,29 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                             data-remarks="<?php echo sanitize($batch['remarks'] ?? ''); ?>"
                                             data-batch-code="<?php echo sanitize($batch['batch_code']); ?>"
                                             data-received-at="<?php echo sanitize((string)$batch['received_at']); ?>">
-                                            <i class="bi bi-pencil me-1" aria-hidden="true"></i>Edit Bulk Papers
-                                        </button>
-                                        <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#mobile-papers<?php echo (int)$batch['batch_id']; ?>" aria-expanded="false" aria-controls="mobile-papers<?php echo (int)$batch['batch_id']; ?>">
-                                            <i class="bi bi-eye me-1" aria-hidden="true"></i>View papers
-                                        </button>
-                                        <?php if (!empty($batch['tracking_token'])): ?>
-                                            <button class="btn btn-sm btn-outline-success" type="button" onclick="showBatchQr(<?php echo htmlspecialchars(json_encode($batch['tracking_token'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($batch['batch_code'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
-                                                <i class="bi bi-qr-code me-1" aria-hidden="true"></i>Batch QR
-                                            </button>
-                                        <?php endif; ?>
-                                        <?php if ($batch['received_at'] === null): ?><form method="POST" class="d-inline">
-                                            <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
-                                            <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
-                                            <input type="hidden" name="batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
-                                            <button class="btn btn-sm btn-outline-danger" type="submit" name="delete_batch" data-confirm-title="Delete this batch?" data-confirm-message="This permanently deletes the batch and all of its associated papers." data-confirm-button="Delete batch">
-                                                <i class="bi bi-trash me-1" aria-hidden="true"></i>Delete
-                                            </button>
-                                        </form><?php endif; ?>
+                                                    <i class="bi bi-pencil me-2" aria-hidden="true"></i>Edit batch
+                                                </button>
+                                                <button class="dropdown-item" type="button" data-bs-toggle="collapse" data-bs-target="#mobile-papers<?php echo (int)$batch['batch_id']; ?>" aria-expanded="false" aria-controls="mobile-papers<?php echo (int)$batch['batch_id']; ?>">
+                                                    <i class="bi bi-eye me-2" aria-hidden="true"></i>View papers
+                                                </button>
+                                                <?php if (!empty($batch['tracking_token'])): ?>
+                                                    <button class="dropdown-item" type="button" onclick="showBatchQr(<?php echo htmlspecialchars(json_encode($batch['tracking_token'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($batch['batch_code'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                                        <i class="bi bi-qr-code me-2" aria-hidden="true"></i>Show tracking QR
+                                                    </button>
+                                                <?php endif; ?>
+                                                <?php if ($batch['received_at'] === null): ?>
+                                                    <div class="dropdown-divider"></div>
+                                                    <form method="POST" class="m-0">
+                                                        <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                                                        <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
+                                                        <input type="hidden" name="batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
+                                                        <button class="dropdown-item text-danger" type="submit" name="delete_batch" data-confirm-title="Delete this batch?" data-confirm-message="This permanently deletes the batch and all of its associated papers." data-confirm-button="Delete batch">
+                                                            <i class="bi bi-trash me-2" aria-hidden="true"></i>Delete batch
+                                                        </button>
+                                                    </form>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div class="collapse mt-3" id="mobile-papers<?php echo (int)$batch['batch_id']; ?>">
                                         <div class="rounded-3 bg-light p-3">
@@ -1061,7 +1092,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
     </div>
 </div>
 <div class="modal fade" id="batchQrModal" tabindex="-1" aria-labelledby="batchQrTitle" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered qr-code-modal">
         <div class="modal-content">
             <div class="modal-header">
                 <div>
@@ -1071,7 +1102,9 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body text-center">
-                <canvas id="batchQrCanvas" class="img-fluid mx-auto" aria-label="QR code for tracking this batch"></canvas>
+                <div class="qr-code-frame">
+                    <canvas id="batchQrCanvas" aria-label="QR code for tracking this batch"></canvas>
+                </div>
                 <p class="small text-muted mt-3 mb-2" id="batchQrHelp">Choose whether this QR identifies the local batch or opens its tracking page.</p>
                 <a id="batchTrackingLink" href="#" target="_blank" rel="noopener noreferrer" class="small text-break">Open batch tracker</a>
                 <p id="batchQrError" class="small text-danger mt-3 mb-0" role="alert" hidden></p>
@@ -1126,9 +1159,9 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                 <input type="hidden" id="batchScannerCsrf" value="<?php echo sanitize(csrf_token()); ?>">
                 <input type="hidden" id="batchScannerSessionToken" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
                 <div class="ratio ratio-4x3 bg-dark rounded overflow-hidden">
-                <video id="batchScannerVideo" class="w-100 h-100" style="object-fit: cover;" autoplay muted playsinline aria-label="Camera view for scanning a CEIT batch QR"></video>
+                <video id="batchScannerVideo" class="w-100 h-100" style="object-fit: cover;" autoplay muted playsinline aria-label="Camera view for scanning a CEIT document or batch QR"></video>
                 </div>
-                <p id="batchScannerStatus" class="small mt-3 mb-2" role="status" aria-live="polite">Scan a batch QR to look up its record. Scanning alone never confirms receipt.</p>
+                <p id="batchScannerStatus" class="small mt-3 mb-2" role="status" aria-live="polite">Scan a CEIT document QR to open its tracker, or a batch QR to look up its record. Scanning alone never confirms receipt.</p>
                 <div class="border rounded p-3 mb-3">
                     <label for="batchQrUpload" class="form-label fw-semibold">Or upload a QR image</label>
                     <input type="file" id="batchQrUpload" class="form-control" accept="image/png,image/jpeg,image/webp,image/gif">
@@ -1324,6 +1357,35 @@ document.addEventListener('DOMContentLoaded', function () {
         status.className = 'small mt-3 mb-2 text-danger';
     }
 
+    async function readScannerResponse(response) {
+        try {
+            return await response.json();
+        } catch (error) {
+            throw new Error('The office server returned an unreadable response.');
+        }
+    }
+
+    async function verifyDocumentTrackingToken(token) {
+        const projectBaseUrl = new URL('.', window.location.href);
+        const verificationUrl = new URL('mobile-api.php', projectBaseUrl);
+        verificationUrl.search = new URLSearchParams({
+            action: 'document_tracker_status',
+            token: token
+        }).toString();
+        const response = await fetch(verificationUrl, { cache: 'no-store', credentials: 'same-origin' });
+        const data = await readScannerResponse(response);
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || 'This document QR code could not be verified by the office.');
+        }
+
+        const trackerUrl = new URL('document-tracker', projectBaseUrl);
+        trackerUrl.search = new URLSearchParams({ token: token }).toString();
+        stopScanner();
+        status.textContent = 'Verified CEIT document QR code. Opening its tracker…';
+        status.className = 'small mt-3 mb-2 text-success';
+        window.location.assign(trackerUrl.href);
+    }
+
     function showBatchResult(batch) {
         const heading = document.createElement('strong');
         heading.textContent = batch.code + ' · ' + batch.type + ' · ' + batch.date;
@@ -1457,6 +1519,7 @@ document.addEventListener('DOMContentLoaded', function () {
     async function validateSystemQr(value) {
         let token = '';
         let batchCode = '';
+        let trackerType = '';
         value = value.trim();
         const localBatchMatch = value.match(/^CEIT-BATCH:(.+)$/i);
         if (localBatchMatch) {
@@ -1469,19 +1532,34 @@ document.addEventListener('DOMContentLoaded', function () {
             let scannedUrl;
             try {
                 scannedUrl = new URL(value);
-            } catch (error) {
+            } catch {
                 showScannerError('Not a CEIT batch QR. Keep scanning for a valid system code.');
                 return false;
             }
 
             const routeName = scannedUrl.pathname.split('/').filter(Boolean).pop()?.replace(/\.php$/i, '').toLowerCase();
             token = scannedUrl.searchParams.get('token') || '';
+            if (routeName === 'batch_tracker') {
+                trackerType = 'batch';
+            } else if (routeName === 'document-tracker' || routeName === 'document_tracker') {
+                trackerType = 'document';
+            }
             if (!['http:', 'https:'].includes(scannedUrl.protocol) ||
                 scannedUrl.username || scannedUrl.password ||
-                routeName !== 'batch_tracker' ||
+                trackerType === '' ||
                 scannedUrl.hash !== '' || [...scannedUrl.searchParams.keys()].length !== 1 ||
                 !/^[a-f0-9]{64}$/.test(token)) {
-                showScannerError('Not a CEIT batch QR. Keep scanning for a valid system code.');
+                showScannerError('This is not a valid CEIT document or batch tracking QR code.');
+                return false;
+            }
+        }
+
+        if (trackerType === 'document') {
+            try {
+                await verifyDocumentTrackingToken(token);
+                return true;
+            } catch (error) {
+                showScannerError(error instanceof Error ? error.message : 'This document QR code could not be verified.');
                 return false;
             }
         }
@@ -1499,7 +1577,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 credentials: 'same-origin',
                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
             });
-            const data = await response.json();
+            const data = await readScannerResponse(response);
             if (!response.ok || !data.success) {
                 showScannerError(data.message || 'This QR code is not registered in the CEIT batch system.');
                 return false;
@@ -1510,7 +1588,7 @@ document.addEventListener('DOMContentLoaded', function () {
             showBatchResult({ ...data.batch, trackingToken: data.batch.trackingToken || token });
             return true;
         } catch (error) {
-            showScannerError('The QR code could not be verified. Check the connection and scan again.');
+            showScannerError(error instanceof Error ? error.message : 'The QR code could not be verified. Check the connection and scan again.');
             return false;
         }
     }
@@ -1542,6 +1620,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const scale = Math.min(1, 1600 / Math.max(imageBitmap.width, imageBitmap.height));
             scanCanvas.width = Math.max(1, Math.round(imageBitmap.width * scale));
             scanCanvas.height = Math.max(1, Math.round(imageBitmap.height * scale));
+            if (!scanContext) throw new Error('This browser could not prepare the QR image.');
             scanContext.drawImage(imageBitmap, 0, 0, scanCanvas.width, scanCanvas.height);
             const image = scanContext.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
             const code = window.jsQR(image.data, image.width, image.height, { inversionAttempts: 'attemptBoth' });
@@ -1551,14 +1630,15 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             await validateSystemQr(code.data);
         } catch (error) {
-            showScannerError('Could not read the uploaded image. Try another QR image.');
+            showScannerError(error instanceof Error ? error.message : 'Could not read the uploaded image. Try another QR image.');
         } finally {
             if (imageBitmap) imageBitmap.close();
         }
     });
 
     function scanFrameLoop() {
-        if (!scanning || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        if (!scanning) return;
+        if (!scanContext || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth === 0 || video.videoHeight === 0) {
             if (scanning) scanFrame = requestAnimationFrame(scanFrameLoop);
             return;
         }
@@ -1595,7 +1675,7 @@ document.addEventListener('DOMContentLoaded', function () {
         verifying = false;
         lastScanAt = 0;
         if (!window.isSecureContext) {
-            showScannerError('Camera access is blocked because this page is not using a secure HTTPS connection. On a phone, “localhost” means the phone itself. Open this site using an HTTPS address with a trusted certificate, or upload a QR image below.');
+            showScannerError('Camera access needs HTTPS or localhost. On a phone, localhost means the phone itself. Open this Admin page using a trusted HTTPS address, or upload a QR image below.');
             return;
         }
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -1619,9 +1699,15 @@ document.addEventListener('DOMContentLoaded', function () {
             scanFrame = requestAnimationFrame(scanFrameLoop);
         } catch (error) {
             stopScanner();
-            showScannerError(error.name === 'NotAllowedError'
-                ? 'Camera access was denied. Allow camera access in the browser settings and try again.'
-                : 'Could not start the camera. Check that a camera is available and not in use.');
+            if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                showScannerError('Camera access was denied. Allow camera access for this site in the browser settings and try again.');
+            } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+                showScannerError('No camera was found on this device. Connect a camera or upload a QR image instead.');
+            } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+                showScannerError('The camera is already in use by another app. Close that app and try again.');
+            } else {
+                showScannerError('Could not start the camera. Check camera permission, HTTPS access, and that the camera is not in use.');
+            }
         }
     });
 

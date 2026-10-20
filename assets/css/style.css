@@ -957,6 +957,229 @@ body {
     color: var(--brand-green);
 }
 
+.admin-submission-toast {
+    position: fixed;
+    z-index: 1090;
+    top: max(0.75rem, env(safe-area-inset-top));
+    left: 50%;
+    display: flex;
+    width: min(38rem, calc(100vw - 1.5rem));
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.8rem 0.9rem;
+    border: 1px solid rgba(15, 81, 50, 0.16);
+    border-radius: 1rem;
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 0.85rem 2.25rem rgba(13, 48, 33, 0.2);
+    color: #173c2b;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, -0.75rem);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.admin-submission-toast[hidden] {
+    display: none;
+}
+
+.admin-submission-toast.is-visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate(-50%, 0);
+}
+
+.admin-submission-toast-icon {
+    display: grid;
+    width: 2.5rem;
+    height: 2.5rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 0.8rem;
+    background: #e7f4ec;
+    color: #0f6b45;
+    font-size: 1.15rem;
+}
+
+.admin-submission-toast-copy {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    line-height: 1.3;
+}
+
+.admin-submission-toast-copy strong {
+    font-size: 0.92rem;
+}
+
+.admin-submission-toast-copy small {
+    margin-top: 0.15rem;
+    color: #637268;
+    font-size: 0.76rem;
+}
+
+.admin-submission-toast-link {
+    flex: 0 0 auto;
+    padding: 0.45rem 0.65rem;
+    border-radius: 0.65rem;
+    background: #0f5132;
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 650;
+    text-decoration: none;
+}
+
+.admin-submission-toast-link:hover,
+.admin-submission-toast-link:focus-visible {
+    background: #0b3e27;
+    color: #fff;
+}
+
+.admin-submission-toast-close {
+    display: grid;
+    width: 2rem;
+    height: 2rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: #637268;
+}
+
+.admin-submission-toast-close:hover,
+.admin-submission-toast-close:focus-visible {
+    background: #f0f4f1;
+    color: #173c2b;
+}
+
+@media (max-width: 575.98px) {
+    .admin-submission-toast {
+        gap: 0.55rem;
+        padding: 0.65rem;
+    }
+
+    .admin-submission-toast-icon {
+        width: 2.15rem;
+        height: 2.15rem;
+    }
+
+    .admin-submission-toast-copy small {
+        display: none;
+    }
+
+    .admin-submission-toast-link {
+        padding: 0.4rem 0.5rem;
+        font-size: 0.76rem;
+    }
+}
+
+.modal-dialog.qr-code-modal {
+    width: min(32rem, calc(100% - 1rem));
+    margin-right: auto;
+    margin-left: auto;
+}
+
+.qr-code-frame {
+    display: grid;
+    width: min(100%, 27rem);
+    aspect-ratio: 1;
+    place-items: center;
+    margin-inline: auto;
+    padding: clamp(0.5rem, 2vw, 0.9rem);
+    overflow: hidden;
+    border: 1px solid #e5ece7;
+    border-radius: 1rem;
+    background: #f8fbf9;
+}
+
+.qr-code-frame canvas {
+    display: block;
+    width: 100% !important;
+    min-width: 0;
+    max-width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 1 / 1;
+    image-rendering: pixelated;
+}
+
+.batch-history-table {
+    overscroll-behavior-x: contain;
+}
+
+.admin-content .table-responsive.batch-history-table > .table {
+    min-width: 70rem;
+}
+
+.admin-content .table-responsive.batch-history-table > .table th:last-child,
+.admin-content .table-responsive.batch-history-table > .table td:last-child {
+    min-width: 11rem;
+}
+
+.batch-history-table .batch-row-actions,
+.batch-card-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+}
+
+.batch-history-table .batch-actions-menu,
+.batch-card-actions .batch-actions-menu {
+    min-width: 13rem;
+    padding: 0.4rem;
+    border-color: #e0e8e2;
+    border-radius: 0.8rem;
+    box-shadow: 0 0.75rem 1.75rem rgba(21, 52, 36, 0.16);
+}
+
+.batch-actions-menu .dropdown-item {
+    display: flex;
+    align-items: center;
+    padding: 0.55rem 0.7rem;
+    border-radius: 0.5rem;
+    white-space: nowrap;
+}
+
+.batch-actions-menu .dropdown-divider {
+    margin: 0.35rem 0;
+}
+
+.batch-history-cards .batch-history-card {
+    min-width: 0;
+    overflow: visible;
+}
+
+.batch-card-actions {
+    justify-content: stretch;
+}
+
+.batch-card-actions > .dropdown {
+    flex: 0 0 auto;
+}
+
+.batch-card-actions .dropdown-toggle {
+    min-height: 2.25rem;
+}
+
+@media (max-width: 575.98px) {
+    .batch-history-cards .batch-history-card {
+        padding: 0.9rem !important;
+    }
+
+    .batch-card-actions {
+        align-items: stretch;
+    }
+
+    .batch-card-actions > form {
+        min-width: 0;
+    }
+
+    .batch-card-actions > .dropdown > .dropdown-toggle {
+        height: 100%;
+    }
+}
+
 .pending-documents-float {
     position: fixed;
     right: max(1rem, env(safe-area-inset-right));
@@ -4289,7 +4512,7 @@ body.admin-body.admin-compact {
     width: 100%;
 }
 
-.admin-body.admin-compact .admin-content .table-responsive.batch-history-table.d-none.d-md-block {
+.admin-body.admin-compact .admin-content .table-responsive.batch-history-table.d-none.d-xl-block {
     display: none !important;
 }
 
