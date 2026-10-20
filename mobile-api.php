@@ -106,6 +106,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'documen
     exit;
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'batch_tracker_status') {
+    try {
+        ensure_batch_storage($conn);
+    } catch (Throwable $error) {
+        error_log('Batch tracker storage could not be initialized: ' . $error->getMessage());
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'Batch tracking is temporarily unavailable']);
+        exit;
+    }
+    $trackingToken = trim((string)($_GET['token'] ?? ''));
+    if (preg_match('/^[a-f0-9]{64}$/', $trackingToken) !== 1) {
+        http_response_code(404);
+        echo json_encode(['success' => false, 'message' => 'This batch QR code is invalid or was not issued by this office']);
+        exit;
+    }
+    $stmt = safe_query(
+        $conn,
+        'SELECT batch_id FROM document_batches WHERE tracking_token = ? LIMIT 1',
+        's',
+        [$trackingToken]
+    );
+    if ($stmt === false) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'Batch status could not be loaded']);
+        exit;
+    }
+    $result = mysqli_stmt_get_result($stmt);
+    $batch = $result === false ? false : mysqli_fetch_assoc($result);
+    mysqli_stmt_close($stmt);
+    if ($batch === false) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'Batch status could not be read']);
+        exit;
+    }
+    if ($batch === null) {
+        http_response_code(404);
+        echo json_encode(['success' => false, 'message' => 'This batch QR code is invalid or was not issued by this office']);
+        exit;
+    }
+    echo json_encode(['success' => true]);
+    exit;
+}
+
 if ($conn->query("ALTER TABLE documents ADD COLUMN IF NOT EXISTS entry_source VARCHAR(32) NOT NULL DEFAULT 'standard'") === false) {
     error_log('Mobile Quick Submit tracking setup failed: ' . $conn->error);
     http_response_code(500);
@@ -559,6 +602,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add_batch' || $action === 'update_batch') {
         $documentType = trim($input['document_type'] ?? '');
         $batchType = trim($input['batch_type'] ?? '');
+        $submitterName = trim($input['submitter_name'] ?? '');
         $isPriority = 0;
         $batchDate = trim($input['batch_date'] ?? '');
         $senderType = $mobileFormLabels['senderEnabled'] ? trim($input['sender_type'] ?? '') : '';
@@ -570,12 +614,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $dateObject = DateTime::createFromFormat('!Y-m-d', $batchDate);
         if (!in_array($documentType, ['Incoming', 'Outgoing'], true) ||
             $batchType === '' || strlen($batchType) > 255 ||
+            $submitterName === '' || strlen($submitterName) > 255 ||
             !$dateObject || $dateObject->format('Y-m-d') !== $batchDate ||
             ($mobileFormLabels['senderEnabled'] && !in_array($senderType, ['Student', 'Faculty'], true)) ||
             $paperCount === false || $paperCount < 1 || $paperCount > 9999 ||
             ($action === 'update_batch' && $batchId <= 0)) {
             http_response_code(400);
-            echo json_encode(['success' => false, 'message' => 'Check the batch name, date, submitter, and paper count (1–9,999).']);
+            echo json_encode(['success' => false, 'message' => 'Enter the submitter name and check the batch name, date, submitter type, and paper count (1–9,999).']);
             exit;
         }
 
@@ -589,9 +634,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $recipientValue = '';
                 $stmt = safe_query(
                     $conn,
-                    'INSERT INTO document_batches (batch_code, document_type, batch_type, status, batch_date, sender, sender_type, recipient, recipient_contact_type, remarks, tracking_token, paper_count, is_priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    'sssssssssssii',
-                    [$batchCode, $documentType, $batchType, 'Pending', $batchDate, $senderType, $senderType, $recipientValue, $recipientContactType, $batchRemarks, $trackingToken, $paperCount, $isPriority]
+                    'INSERT INTO document_batches (batch_code, document_type, batch_type, status, batch_date, sender, sender_type, submitter_name, recipient, recipient_contact_type, remarks, tracking_token, paper_count, is_priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    'ssssssssssssii',
+                    [$batchCode, $documentType, $batchType, 'Pending', $batchDate, $senderType, $senderType, $submitterName, $recipientValue, $recipientContactType, $batchRemarks, $trackingToken, $paperCount, $isPriority]
                 );
                 if ($stmt === false) throw new RuntimeException('Could not create the batch');
                 mysqli_stmt_close($stmt);
@@ -609,9 +654,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $isPriority = (int)$existingBatch['is_priority'];
                 $stmt = safe_query(
                     $conn,
-                    'UPDATE document_batches SET document_type = ?, batch_type = ?, batch_date = ?, sender = ?, sender_type = ?, remarks = ?, paper_count = ? WHERE batch_id = ?',
-                    'ssssssii',
-                    [$documentType, $batchType, $batchDate, $senderType, $senderType, $batchRemarks, $paperCount, $batchId]
+                    'UPDATE document_batches SET document_type = ?, batch_type = ?, batch_date = ?, sender = ?, sender_type = ?, submitter_name = ?, remarks = ?, paper_count = ? WHERE batch_id = ?',
+                    'sssssssii',
+                    [$documentType, $batchType, $batchDate, $senderType, $senderType, $submitterName, $batchRemarks, $paperCount, $batchId]
                 );
                 if ($stmt === false) throw new RuntimeException('Could not update batch details');
                 mysqli_stmt_close($stmt);
@@ -642,6 +687,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'batchDate' => $batchDate,
                 'sender' => $senderType,
                 'senderType' => $senderType,
+                'submitterName' => $submitterName,
                 'recipient' => $recipientValue,
                 'recipientContactType' => $recipientContactType,
                 'paperCount' => $paperCount,
@@ -897,6 +943,9 @@ $response = [
     'mobileKioskEnabled' => $officeKioskEnabled,
     'documentTrackerEnabled' => $documentTrackingSettings['enabled'],
     'documentTrackerBaseUrl' => $documentTrackingSettings['baseUrl'],
+    'batchTrackerBaseUrl' => $documentTrackingSettings['configuredBaseUrl'] === ''
+        ? ''
+        : $documentTrackingSettings['configuredBaseUrl'] . '/batch_tracker',
     'formLabels' => $mobileFormLabels,
     'mobileSettings' => $mobileAppSettings,
     'dashboard' => $dashboard,
@@ -904,7 +953,7 @@ $response = [
     'systemOverview' => $systemOverview,
     'documentStatuses' => fetch_rows($conn, "SELECT status, COUNT(*) AS count FROM documents GROUP BY status ORDER BY status"),
     'recentDocuments' => fetch_rows($conn, "SELECT doc_id AS id, CONCAT('DIT-', LPAD(doc_id, 6, '0')) AS reference, date_created AS date, type, sender, submitter_name AS submitterName, recipient, client_phone AS clientPhone, subject AS details, remarks, CONCAT(sender, ' / ', recipient) AS fromTo, status, submitter_type AS submitterType, is_priority AS isPriority FROM documents ORDER BY date_created DESC LIMIT 50"),
-    'recentBatches' => fetch_rows($conn, "SELECT b.batch_id AS id, b.batch_code AS batchCode, b.document_type AS documentType, b.batch_type AS batchType, b.status, b.batch_date AS batchDate, b.sender_type AS senderType, b.recipient, b.recipient_contact_type AS recipientContactType, b.remarks, b.paper_count AS paperCount, b.received_paper_count AS receivedPaperCount, b.intake_expected_count AS intakeExpectedCount, b.received_at AS receivedAt, b.is_priority AS isPriority FROM document_batches b ORDER BY b.is_priority DESC, b.batch_date DESC, b.batch_id DESC LIMIT 20"),
+    'recentBatches' => fetch_rows($conn, "SELECT b.batch_id AS id, b.batch_code AS batchCode, b.document_type AS documentType, b.batch_type AS batchType, b.status, b.batch_date AS batchDate, b.sender_type AS senderType, b.submitter_name AS submitterName, b.recipient, b.recipient_contact_type AS recipientContactType, b.remarks, b.paper_count AS paperCount, b.received_paper_count AS receivedPaperCount, b.intake_expected_count AS intakeExpectedCount, b.received_at AS receivedAt, b.is_priority AS isPriority FROM document_batches b ORDER BY b.is_priority DESC, b.batch_date DESC, b.batch_id DESC LIMIT 20"),
     'borrowedItems' => fetch_rows($conn, "SELECT item_id AS id, item_name AS item, borrower, DATE(date_borrowed) AS borrowed, DATE(returned_date) AS returned, CASE WHEN status = 'Returned' THEN 'Returned' ELSE 'Borrowed' END AS status FROM borrowed_items ORDER BY date_borrowed DESC LIMIT 5"),
     'smsLogs' => fetch_rows($conn, "SELECT recipient AS user, message, status, DATE_FORMAT(date_sent, '%h:%i %p') AS time FROM sms_logs ORDER BY date_sent DESC LIMIT 5"),
 ];

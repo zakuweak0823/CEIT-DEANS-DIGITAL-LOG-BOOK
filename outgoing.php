@@ -54,7 +54,49 @@ if (isset($_POST['update'])) {
     }
 }
 
-if (isset($_POST['set_outgoing_status'])) {
+if (isset($_POST['issue_tracking_qr'])) {
+    $documentId = (int)($_POST['tracking_doc_id'] ?? 0);
+    if (!$documentTrackingSettings['enabled']) {
+        $message = show_alert('Document tracking is turned off in Admin Settings.', 'warning');
+    } elseif ($documentId <= 0) {
+        $message = show_alert('Select a valid outgoing document.', 'danger');
+    } else {
+        $conn->begin_transaction();
+        try {
+            $stmt = safe_query($conn, "SELECT tracking_token FROM documents WHERE doc_id = ? AND type = 'Outgoing' FOR UPDATE", 'i', [$documentId]);
+            if ($stmt === false) {
+                throw new RuntimeException('Could not load the selected outgoing document.');
+            }
+            $result = mysqli_stmt_get_result($stmt);
+            $document = $result === false ? false : mysqli_fetch_assoc($result);
+            mysqli_stmt_close($stmt);
+            if ($document === false) {
+                throw new RuntimeException('Could not read the selected outgoing document.');
+            }
+            if ($document === null) {
+                throw new DomainException('Outgoing document was not found.');
+            }
+            if ($document['tracking_token'] === null || $document['tracking_token'] === '') {
+                $trackingToken = create_document_tracking_token();
+                $stmt = safe_query($conn, "UPDATE documents SET tracking_token = ? WHERE doc_id = ? AND (tracking_token IS NULL OR tracking_token = '')", 'si', [$trackingToken, $documentId]);
+                if ($stmt === false || mysqli_stmt_affected_rows($stmt) !== 1) {
+                    if ($stmt !== false) mysqli_stmt_close($stmt);
+                    throw new RuntimeException('Could not issue a tracking QR code.');
+                }
+                mysqli_stmt_close($stmt);
+            }
+            $conn->commit();
+            $message = show_alert('The office-issued outgoing document QR is ready in the table.', 'success');
+        } catch (DomainException $error) {
+            $conn->rollback();
+            $message = show_alert($error->getMessage(), 'danger');
+        } catch (Throwable $error) {
+            $conn->rollback();
+            error_log('Outgoing document tracking QR issuance failed: ' . $error->getMessage());
+            $message = show_alert('The tracking QR could not be issued. Check the server log and try again.', 'danger');
+        }
+    }
+} elseif (isset($_POST['set_outgoing_status'])) {
     $id = (int)($_POST['status_doc_id'] ?? 0);
     $status = trim($_POST['new_status'] ?? '');
     if ($id <= 0 || !in_array($status, ['For Release', 'Released'], true)) {
@@ -192,7 +234,22 @@ if ($stmt !== false) {
                                         <td data-label="Date"><?php echo sanitize(date('Y-m-d', strtotime($document['date_created']))); ?></td>
                                         <td data-label="Reference">
                                             <code><?php echo sanitize(document_tracking_reference($document['doc_id'])); ?></code>
-                                            <?php if (!empty($document['tracking_token']) && $documentTrackingSettings['enabled']): ?><div class="small text-success mt-1"><i class="bi bi-qr-code me-1" aria-hidden="true"></i>QR tracking active</div><?php endif; ?>
+                                            <?php if (!$documentTrackingSettings['enabled']): ?>
+                                                <div class="small text-muted mt-1">Tracking is off</div>
+                                            <?php elseif (!empty($document['tracking_token'])): ?>
+                                                <?php $documentTrackerUrl = $documentTrackingSettings['baseUrl'] . '?token=' . rawurlencode($document['tracking_token']); ?>
+                                                <button type="button" class="btn btn-sm btn-outline-success mt-1" onclick="showDocumentTrackingQr(<?php echo htmlspecialchars(json_encode($documentTrackerUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode(document_tracking_reference($document['doc_id']), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                                    <i class="bi bi-qr-code me-1" aria-hidden="true"></i>Show QR
+                                                </button>
+                                            <?php else: ?>
+                                                <form method="POST" class="mt-1">
+                                                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                                                    <input type="hidden" name="tracking_doc_id" value="<?php echo (int)$document['doc_id']; ?>">
+                                                    <button type="submit" name="issue_tracking_qr" value="1" class="btn btn-sm btn-outline-success">
+                                                        <i class="bi bi-qr-code me-1" aria-hidden="true"></i>Issue QR
+                                                    </button>
+                                                </form>
+                                            <?php endif; ?>
                                         </td>
                                         <td data-label="Submitted by"><?php echo sanitize(trim((string)($document['submitter_name'] ?? '')) !== '' ? $document['submitter_name'] : 'Name not recorded'); ?></td>
                                         <td data-label="Recipient"><?php echo sanitize($document['recipient']); ?></td>
@@ -239,6 +296,31 @@ if ($stmt !== false) {
                         </tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="documentTrackingQrModal" tabindex="-1" aria-labelledby="documentTrackingQrTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title text-primary" id="documentTrackingQrTitle">Document tracking QR</h5>
+                    <p class="mb-0 mt-1 small text-muted" id="documentTrackingQrReference"></p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <canvas id="documentTrackingQrCanvas" class="img-fluid mx-auto" aria-label="QR code for tracking this document"></canvas>
+                <p class="small text-break mt-3 mb-2"><a id="documentTrackingQrLink" href="#" target="_blank" rel="noopener noreferrer"></a></p>
+                <p id="documentTrackingQrError" class="small text-danger mt-3 mb-0" role="alert" hidden></p>
+            </div>
+            <div class="modal-footer">
+                <a id="downloadDocumentTrackingQr" class="btn btn-primary disabled" href="#" download aria-disabled="true">
+                    <i class="bi bi-download me-1" aria-hidden="true"></i>Download QR
+                </a>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -352,6 +434,7 @@ if ($stmt !== false) {
     </div>
 </div>
 
+<script src="assets/js/qr-tools.bundle.js"></script>
 <script>
 function editDocument(id, clientPhone, subject, remarks, date) {
     document.getElementById('editId').value = id;
@@ -360,6 +443,37 @@ function editDocument(id, clientPhone, subject, remarks, date) {
     document.getElementById('editSubject').value = subject;
     document.getElementById('editRemarks').value = remarks;
     new bootstrap.Modal(document.getElementById('editModal')).show();
+}
+
+function showDocumentTrackingQr(trackerUrl, reference) {
+    const canvas = document.getElementById('documentTrackingQrCanvas');
+    const error = document.getElementById('documentTrackingQrError');
+    const link = document.getElementById('documentTrackingQrLink');
+    const download = document.getElementById('downloadDocumentTrackingQr');
+    document.getElementById('documentTrackingQrReference').textContent = reference;
+    link.href = trackerUrl;
+    link.textContent = trackerUrl;
+    error.hidden = true;
+    download.classList.add('disabled');
+    download.setAttribute('aria-disabled', 'true');
+    download.removeAttribute('href');
+    download.download = reference.toLowerCase() + '-tracking-qr.png';
+    if (!window.QRCode || typeof window.QRCode.toCanvas !== 'function') {
+        error.textContent = 'The QR generator could not be loaded. Refresh the page and try again.';
+        error.hidden = false;
+    } else {
+        window.QRCode.toCanvas(canvas, trackerUrl, { width: 480, margin: 2, errorCorrectionLevel: 'H', color: { dark: '#064e3b', light: '#ffffff' } }, function (generationError) {
+            if (generationError) {
+                error.textContent = 'Could not generate the document tracking QR code.';
+                error.hidden = false;
+                return;
+            }
+            download.href = canvas.toDataURL('image/png');
+            download.classList.remove('disabled');
+            download.setAttribute('aria-disabled', 'false');
+        });
+    }
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('documentTrackingQrModal')).show();
 }
 
 document.addEventListener('DOMContentLoaded', function () {

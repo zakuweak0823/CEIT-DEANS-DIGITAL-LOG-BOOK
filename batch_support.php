@@ -3,7 +3,6 @@ function batch_workflow_setting_defaults()
 {
     return [
         'intake_confirmation_mode' => 'confirm_with_release',
-        'batch_qr_mode' => 'local_batch_id',
     ];
 }
 
@@ -12,17 +11,14 @@ function get_batch_workflow_settings($conn)
     $settings = batch_workflow_setting_defaults();
     $stmt = safe_query(
         $conn,
-        "SELECT key_name, value FROM settings WHERE key_name IN ('intake_confirmation_mode', 'batch_qr_mode')"
+        "SELECT key_name, value FROM settings WHERE key_name = 'intake_confirmation_mode'"
     );
     if ($stmt === false) {
         throw new RuntimeException('Could not load batch workflow settings.');
     }
     $result = mysqli_stmt_get_result($stmt);
     while ($row = mysqli_fetch_assoc($result)) {
-        $allowedValues = $row['key_name'] === 'intake_confirmation_mode'
-            ? ['confirm_before_release', 'confirm_with_release']
-            : ['local_batch_id', 'tracking_url'];
-        if (array_key_exists($row['key_name'], $settings) && in_array($row['value'], $allowedValues, true)) {
+        if ($row['key_name'] === 'intake_confirmation_mode' && in_array($row['value'], ['confirm_before_release', 'confirm_with_release'], true)) {
             $settings[$row['key_name']] = $row['value'];
         }
     }
@@ -34,9 +30,7 @@ function save_batch_workflow_settings($conn, $settings)
 {
     $defaults = batch_workflow_setting_defaults();
     foreach ($defaults as $key => $default) {
-        if (!isset($settings[$key]) || !in_array($settings[$key], $key === 'intake_confirmation_mode'
-            ? ['confirm_before_release', 'confirm_with_release']
-            : ['local_batch_id', 'tracking_url'], true)) {
+        if (!isset($settings[$key]) || !in_array($settings[$key], ['confirm_before_release', 'confirm_with_release'], true)) {
             return false;
         }
     }
@@ -73,6 +67,7 @@ function ensure_batch_storage($conn)
         status VARCHAR(20) NOT NULL DEFAULT 'Pending',
         batch_date DATE NOT NULL,
         sender VARCHAR(255) NOT NULL,
+        submitter_name VARCHAR(255) NOT NULL DEFAULT '',
         recipient VARCHAR(255) NOT NULL,
         remarks TEXT,
         tracking_token CHAR(64) DEFAULT NULL,
@@ -95,6 +90,9 @@ function ensure_batch_storage($conn)
     }
     if ($migrateStatus) {
         $conn->query("ALTER TABLE document_batches ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'Pending'");
+    }
+    if (!isset($columns['submitter_name']) && $conn->query("ALTER TABLE document_batches ADD COLUMN submitter_name VARCHAR(255) NOT NULL DEFAULT ''") === false) {
+        throw new RuntimeException('Could not add the batch submitter name field: ' . $conn->error);
     }
     $conn->query('ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS tracking_token CHAR(64) DEFAULT NULL');
     $indexResult = $conn->query("SHOW INDEX FROM document_batches WHERE Column_name = 'tracking_token'");

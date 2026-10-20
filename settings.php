@@ -123,17 +123,14 @@ if (isset($_POST['save_mobile_access'])) {
 } elseif (isset($_POST['save_batch_workflow'])) {
     $formSettingsNoticeScope = 'workflow';
     $confirmationMode = $_POST['intake_confirmation_mode'] ?? '';
-    $qrMode = $_POST['batch_qr_mode'] ?? '';
-    if (!is_string($confirmationMode) || !is_string($qrMode) ||
-        !in_array($confirmationMode, ['confirm_before_release', 'confirm_with_release'], true) ||
-        !in_array($qrMode, ['local_batch_id', 'tracking_url'], true)) {
-        $formSettingsNotice = 'Choose a valid intake confirmation and QR mode.';
+    if (!is_string($confirmationMode) ||
+        !in_array($confirmationMode, ['confirm_before_release', 'confirm_with_release'], true)) {
+        $formSettingsNotice = 'Choose a valid intake confirmation mode.';
         $formSettingsNoticeType = 'danger';
     } elseif (save_batch_workflow_settings($conn, [
         'intake_confirmation_mode' => $confirmationMode,
-        'batch_qr_mode' => $qrMode,
     ])) {
-        $formSettingsNotice = 'Bulk-paper workflow and QR settings saved.';
+        $formSettingsNotice = 'Bulk-paper workflow settings saved.';
     } else {
         $formSettingsNotice = 'Bulk-paper workflow settings could not be saved. Check the server log and try again.';
         $formSettingsNoticeType = 'danger';
@@ -423,7 +420,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
         <section class="card shadow-sm" aria-labelledby="batch-workflow-settings-title">
             <div class="card-header bg-white px-3 px-md-4 py-3">
                 <h5 class="mb-1 text-primary" id="batch-workflow-settings-title">Bulk-paper intake and QR</h5>
-                <p class="mb-0 small text-muted">Choose how Admin records receipt and what each batch QR contains. You can change these options at any time.</p>
+                <p class="mb-0 small text-muted">Choose how Admin records receipt. Batch QR codes use a tracking link that can be read by standard QR scanners.</p>
             </div>
             <div class="card-body p-3 p-md-4">
                 <?php if ($formSettingsNotice !== '' && $formSettingsNoticeScope === 'workflow'): ?>
@@ -439,14 +436,6 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                                 <option value="confirm_before_release" <?php echo $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_before_release' ? 'selected' : ''; ?>>Confirm receipt first; move Pending to For Release afterwards</option>
                             </select>
                             <div class="form-text">The count form is Admin-only. In either mode, an unexpected count requires a note.</div>
-                        </div>
-                        <div class="col-12 col-lg-6">
-                            <label class="form-label fw-semibold" for="batchQrMode">What should a batch QR contain?</label>
-                            <select class="form-select" id="batchQrMode" name="batch_qr_mode" required>
-                                <option value="local_batch_id" <?php echo $batchWorkflowSettings['batch_qr_mode'] === 'local_batch_id' ? 'selected' : ''; ?>>Local batch identifier (recommended for localhost)</option>
-                                <option value="tracking_url" <?php echo $batchWorkflowSettings['batch_qr_mode'] === 'tracking_url' ? 'selected' : ''; ?>>Public tracking-page link</option>
-                            </select>
-                            <div class="form-text">A tracking link is reachable only from devices that can connect to this server. A localhost link works only on the server device.</div>
                         </div>
                     </div>
                     <button class="btn btn-primary mt-3" type="submit" name="save_batch_workflow" value="1">

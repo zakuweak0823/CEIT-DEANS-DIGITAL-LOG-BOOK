@@ -87,44 +87,71 @@ const readApiResponse = async (response) => {
   }
 };
 
-const verifyOfficialDocumentTrackerQr = async (payload, trackerBaseUrl) => {
+const verifyOfficeTrackerQr = async (payload, trackerBaseUrl, batchTrackerBaseUrl) => {
   let scannedUrl;
-  let expectedUrl;
+  let trackerUrl;
+  let trackerType;
   try {
     scannedUrl = new URL(payload);
-    expectedUrl = new URL(trackerBaseUrl);
   } catch {
-    throw new Error('This QR code is not a valid document tracker link issued by the office.');
+    throw new Error('This QR code is not a valid office tracker link.');
   }
-  const expectedPath = expectedUrl.pathname.replace(/\/+$/, '');
+  if (!['http:', 'https:'].includes(scannedUrl.protocol) || scannedUrl.username || scannedUrl.password) {
+    throw new Error('This QR code must be an office-issued HTTP or HTTPS tracker link.');
+  }
+  const routeName = scannedUrl.pathname.split('/').filter(Boolean).pop()?.replace(/\.php$/i, '').toLowerCase();
+  if (['document-tracker', 'document_tracker'].includes(routeName)) {
+    trackerUrl = trackerBaseUrl ? new URL(trackerBaseUrl) : null;
+    trackerType = 'document';
+  } else if (routeName === 'batch_tracker') {
+    trackerUrl = batchTrackerBaseUrl ? new URL(batchTrackerBaseUrl) : null;
+    trackerType = 'batch';
+  } else {
+    throw new Error('This QR code was not issued by the CEIT Dean’s Office document or batch tracker.');
+  }
+  if (!trackerUrl) {
+    throw new Error('The office tracker URL is not configured. Contact the office to update its tracker settings.');
+  }
   if (
-    scannedUrl.pathname.replace(/\/+$/, '') !== expectedPath
-    || scannedUrl.hash !== ''
+    scannedUrl.hash !== ''
     || Array.from(scannedUrl.searchParams.keys()).length !== 1
   ) {
-    throw new Error('This QR code was not issued by the CEIT Dean’s Office document tracker.');
+    throw new Error('This QR code was not issued by the CEIT Dean’s Office tracker.');
   }
   const token = scannedUrl.searchParams.get('token') || '';
   if (!/^[a-f0-9]{64}$/.test(token)) {
     throw new Error('This QR code does not contain a valid office tracking code.');
   }
   const verificationUrl = new URL(API_ENDPOINT, window.location.href);
-  verificationUrl.search = new URLSearchParams({ action: 'document_tracker_status', token }).toString();
+  verificationUrl.search = new URLSearchParams({
+    action: trackerType === 'batch' ? 'batch_tracker_status' : 'document_tracker_status',
+    token,
+  }).toString();
   const response = await fetch(verificationUrl, { cache: 'no-store' });
   const result = await readApiResponse(response);
   if (!response.ok || !result.success) {
     throw new Error(result.message || 'This tracking QR code could not be verified by the office.');
   }
 
-  let trackerUrl = new URL(expectedUrl);
+  const activeTrackerUrl = new URL(trackerUrl);
   if (window.location.port === '5173' && import.meta.env.VITE_PROJECT_PATH) {
-    trackerUrl = new URL(
-      `${import.meta.env.VITE_PROJECT_PATH}/document-tracker`,
-      window.location.origin,
-    );
+    activeTrackerUrl.pathname = `${import.meta.env.VITE_PROJECT_PATH}/${trackerType === 'batch' ? 'batch_tracker' : 'document-tracker'}`;
+    activeTrackerUrl.host = window.location.host;
+    activeTrackerUrl.protocol = window.location.protocol;
   }
-  trackerUrl.search = new URLSearchParams({ token }).toString();
-  return trackerUrl;
+  activeTrackerUrl.search = new URLSearchParams({ token }).toString();
+  return activeTrackerUrl;
+};
+
+const getBatchTrackerBaseUrl = (configuredBaseUrl = '') => {
+  if (window.location.port === '5173' && import.meta.env.VITE_PROJECT_PATH) {
+    return new URL(`${import.meta.env.VITE_PROJECT_PATH}/batch_tracker`, window.location.origin);
+  }
+  if (configuredBaseUrl) return new URL(configuredBaseUrl);
+  const apiUrl = new URL(API_ENDPOINT, window.location.href);
+  apiUrl.pathname = apiUrl.pathname.replace(/mobile-api\.php$/i, 'batch_tracker');
+  apiUrl.search = '';
+  return apiUrl;
 };
 
 function App() {
@@ -201,7 +228,7 @@ function App() {
   const [borrowedSubmitting, setBorrowedSubmitting] = useState(false);
   const [batchSubmitting, setBatchSubmitting] = useState(false);
   const isFormSubmitting = incomingSubmitting || borrowedSubmitting || batchSubmitting;
-  const [batchForm, setBatchForm] = useState({ type: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', remarks: '' });
+  const [batchForm, setBatchForm] = useState({ type: '', submitterName: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', remarks: '' });
   const [editingBatchId, setEditingBatchId] = useState(null);
   const [batchStatusBusyId, setBatchStatusBusyId] = useState(null);
   const [reportForm, setReportForm] = useState({ type: 'Incoming', from: '', to: '' });
@@ -456,7 +483,11 @@ function App() {
       setDocumentScannerBusy(true);
       setDocumentScannerStatus('Verifying this QR code with the office…');
       try {
-        const trackerUrl = await verifyOfficialDocumentTrackerQr(payload, apiData?.documentTrackerBaseUrl || '');
+        const trackerUrl = await verifyOfficeTrackerQr(
+          payload,
+          apiData?.documentTrackerBaseUrl || '',
+          getBatchTrackerBaseUrl(apiData?.batchTrackerBaseUrl || '').href,
+        );
         if (!cancelled) {
           stopCamera();
           window.location.assign(trackerUrl.href);
@@ -480,7 +511,7 @@ function App() {
         canvas.height = Math.round(video.videoHeight * scale);
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         const image = context.getImageData(0, 0, canvas.width, canvas.height);
-        const qrCode = jsQR(image.data, image.width, image.height, { inversionAttempts: 'dontInvert' });
+        const qrCode = jsQR(image.data, image.width, image.height, { inversionAttempts: 'attemptBoth' });
         const now = Date.now();
         if (qrCode && !verificationInProgress && (qrCode.data !== lastQrPayload || now - lastQrAttemptTime >= 2500)) {
           lastQrPayload = qrCode.data;
@@ -492,10 +523,6 @@ function App() {
     };
 
     const startCamera = async () => {
-      if (!apiData?.documentTrackerEnabled) {
-        setDocumentScannerStatus('Document tracking is turned off by the office.');
-        return;
-      }
       if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
         const secureAddress = new URL(window.location.href);
         const isLoopbackAddress = ['localhost', '127.0.0.1', '[::1]'].includes(secureAddress.hostname);
@@ -538,7 +565,7 @@ function App() {
       cancelled = true;
       stopCamera();
     };
-  }, [apiData?.documentTrackerBaseUrl, apiData?.documentTrackerEnabled, documentScannerOpen]);
+  }, [apiData?.batchTrackerBaseUrl, apiData?.documentTrackerBaseUrl, documentScannerOpen]);
 
   const openClientStatusModal = () => {
     setClientStatusOpen(true);
@@ -574,7 +601,11 @@ function App() {
       const image = context.getImageData(0, 0, canvas.width, canvas.height);
       const qrCode = jsQR(image.data, image.width, image.height, { inversionAttempts: 'attemptBoth' });
       if (!qrCode) throw new Error('No readable QR code was found in that image.');
-      const trackerUrl = await verifyOfficialDocumentTrackerQr(qrCode.data, apiData?.documentTrackerBaseUrl || '');
+      const trackerUrl = await verifyOfficeTrackerQr(
+        qrCode.data,
+        apiData?.documentTrackerBaseUrl || '',
+        getBatchTrackerBaseUrl(apiData?.batchTrackerBaseUrl || '').href,
+      );
       window.location.assign(trackerUrl.href);
     } catch (error) {
       setDocumentScannerStatus(error instanceof Error ? error.message : 'The QR image could not be read.');
@@ -608,7 +639,7 @@ function App() {
   const openRecordModal = (formType) => {
     if (formType === 'batches') {
       setEditingBatchId(null);
-      setBatchForm({ type: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', remarks: '' });
+      setBatchForm({ type: '', submitterName: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', remarks: '' });
     }
     setRecordModal(formType);
   };
@@ -937,6 +968,11 @@ function App() {
       showActionFeedback({ title: 'Check the batch type', description: 'Enter a batch or document name of up to 255 characters.', tone: 'warning' });
       return;
     }
+    const submitterName = batchForm.submitterName.trim();
+    if (!submitterName || submitterName.length > 255) {
+      showActionFeedback({ title: 'Check the submitter name', description: 'Enter the name of the person submitting this batch (up to 255 characters).', tone: 'warning' });
+      return;
+    }
     const paperCount = Number(batchForm.paperCount);
     if (!Number.isInteger(paperCount) || paperCount < 1 || paperCount > 9999) {
       showActionFeedback({ title: 'Check the paper count', description: 'Enter a paper count between 1 and 9,999.', tone: 'warning' });
@@ -952,6 +988,7 @@ function App() {
           batch_id: editingBatchId,
           document_type: batchForm.documentType,
           batch_type: batchType,
+          submitter_name: submitterName,
           batch_date: batchForm.date,
           sender_type: formLabels.senderEnabled ? batchForm.senderType : '',
           remarks: batchForm.remarks,
@@ -964,18 +1001,38 @@ function App() {
       let successNotice;
       if (editingBatchId) {
         setBatchItems((items) => items.map((batch) => batch.id === editingBatchId
-          ? { ...batch, documentType: batchForm.documentType, batchType, batchDate: batchForm.date, senderType: batchForm.senderType, paperCount, remarks: batchForm.remarks }
+          ? { ...batch, documentType: batchForm.documentType, batchType, submitterName, batchDate: batchForm.date, senderType: batchForm.senderType, paperCount, remarks: batchForm.remarks }
           : batch));
         successNotice = {
           title: 'Bulk paper details updated',
           description: 'Your changes have been saved to the office records.',
           details: [
             { label: 'Batch type', value: batchType },
+            { label: 'Submitted by', value: submitterName },
             { label: 'Paper count', value: String(paperCount) },
           ],
         };
       } else {
         const savedBatch = { ...result.batch, receivedPaperCount: null, receivedAt: null };
+        let trackerUrl = '';
+        let trackerQrImage = '';
+        let trackerQrError = '';
+        if (savedBatch.trackingToken) {
+          try {
+            const batchUrl = getBatchTrackerBaseUrl(apiData?.batchTrackerBaseUrl || '');
+            batchUrl.search = new URLSearchParams({ token: savedBatch.trackingToken }).toString();
+            trackerUrl = batchUrl.href;
+            trackerQrImage = await QRCode.toDataURL(trackerUrl, {
+              width: 256,
+              margin: 2,
+              errorCorrectionLevel: 'Q',
+              color: { dark: '#064e3b', light: '#ffffff' },
+            });
+          } catch (error) {
+            console.error('Batch tracking QR could not be generated:', error);
+            trackerQrError = 'The batch was saved, but its QR image could not be generated. Show the batch code to office staff to reprint the QR.';
+          }
+        }
         if (mobileSettings.confirmationSound) playConfirmTone();
         setBatchItems((previous) => [savedBatch, ...previous]);
         successNotice = {
@@ -983,14 +1040,21 @@ function App() {
           description: 'The batch has been recorded and is ready for office tracking.',
           details: [
             { label: 'Batch type', value: savedBatch.batchType },
+            { label: 'Submitted by', value: savedBatch.submitterName },
             { label: 'Status', value: savedBatch.status },
             { label: 'Paper count', value: String(savedBatch.paperCount) },
           ],
           reference: savedBatch.batchCode ? `Batch ${savedBatch.batchCode}` : '',
+          trackerUrl,
+          trackerQrImage,
+          trackerQrError,
+          trackerQrLabel: 'Scan this office-issued QR code to track the batch status.',
+          trackerLinkLabel: 'Open the batch tracker',
+          trackerDisabled: !savedBatch.trackingToken,
         };
       }
       closePopup(() => {
-        setBatchForm({ type: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', remarks: '' });
+        setBatchForm({ type: '', submitterName: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', remarks: '' });
         setEditingBatchId(null);
         setActiveForm(null);
         setRecordModal(null);
@@ -1107,6 +1171,10 @@ function App() {
             <label className="space-y-2">
               <span className="text-sm font-semibold text-emerald-900">Date</span>
               <input type="date" className={inputClass} value={batchForm.date} onChange={(event) => setBatchForm({ ...batchForm, date: event.target.value })} required />
+            </label>
+            <label className="space-y-2 sm:col-span-2">
+              <span className="text-sm font-semibold text-emerald-900">Name of person submitting</span>
+              <input type="text" maxLength={255} autoComplete="name" className={inputClass} value={batchForm.submitterName} onChange={(event) => setBatchForm({ ...batchForm, submitterName: event.target.value })} placeholder="Enter the submitter’s full name" required />
             </label>
             <label className="space-y-2" hidden={!formLabels.senderEnabled}>
               <span className="text-sm font-semibold text-emerald-900">{formLabels.sender}</span>
@@ -1315,6 +1383,7 @@ function App() {
                   </div>
                 </div>
                 <p className="mt-2 text-sm font-semibold text-emerald-900">{batch.batchType || 'Bulk papers'} · {batch.paperCount} expected</p>
+                <p className="mt-1 text-sm text-emerald-700">Submitted by {batch.submitterName || 'Name not recorded'}</p>
                 {batch.receivedAt
                   ? <p className={`mt-1 text-sm font-medium ${Number(batch.receivedPaperCount) === Number(batch.intakeExpectedCount) ? 'text-emerald-700' : 'text-rose-700'}`}>{batch.receivedPaperCount} physically received · {String(batch.receivedAt).slice(0, 16)}</p>
                   : <p className="mt-1 text-sm text-amber-700">Awaiting office count confirmation</p>}
@@ -1340,6 +1409,7 @@ function App() {
                       setEditingBatchId(batch.id);
                       setBatchForm({
                         type: batch.batchType || '',
+                        submitterName: batch.submitterName || '',
                         documentType: batch.documentType || 'Incoming',
                         date: String(batch.batchDate || '').slice(0, 10),
                         senderType: batch.senderType || 'Student',
@@ -1834,9 +1904,9 @@ function App() {
               {submissionSuccess.trackerQrImage && (
                 <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-center">
                   <img src={submissionSuccess.trackerQrImage} alt={`Tracking QR code for ${submissionSuccess.reference}`} className="mx-auto h-48 w-48 rounded-xl bg-white p-2" />
-                  <p className="mt-3 text-sm font-semibold text-emerald-950">Scan this office-issued QR code to track the document status.</p>
+                  <p className="mt-3 text-sm font-semibold text-emerald-950">{submissionSuccess.trackerQrLabel || 'Scan this office-issued QR code to track the document status.'}</p>
                   <a href={submissionSuccess.trackerUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex min-h-10 items-center rounded-xl px-3 text-sm font-semibold text-emerald-800 underline">
-                    Open the status tracker
+                    {submissionSuccess.trackerLinkLabel || 'Open the status tracker'}
                   </a>
                 </div>
               )}
@@ -1845,7 +1915,7 @@ function App() {
               )}
               {submissionSuccess.trackerDisabled && (
                 <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
-                  The document was saved, but QR tracking is currently turned off by the office. Keep this reference: {submissionSuccess.reference}.
+                  The {submissionSuccess.trackerQrLabel ? 'batch' : 'document'} was saved, but QR tracking is currently turned off by the office. Keep this reference: {submissionSuccess.reference}.
                 </p>
               )}
               <button
@@ -1944,7 +2014,7 @@ function App() {
                 <p className="text-sm text-emerald-800">Have an office-issued tracking QR code?</p>
                 <button
                   type="button"
-                  disabled={!apiData?.documentTrackerEnabled || !isOnline}
+                  disabled={!isOnline}
                   onClick={() => {
                     setClientStatusOpen(false);
                     setDocumentScannerStatus('');
@@ -1952,7 +2022,7 @@ function App() {
                   }}
                   className="mt-3 min-h-11 w-full rounded-xl bg-emerald-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {apiData?.documentTrackerEnabled ? 'Scan tracking QR code' : 'QR tracking is turned off'}
+                  Scan document or batch QR code
                 </button>
               </div>
 
@@ -2017,21 +2087,21 @@ function App() {
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-600">Document tracking</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-600">Office QR tracking</p>
                   <h2 id="document-scanner-title" className="mt-1 text-xl font-bold text-emerald-950">Scan office QR code</h2>
                   <p className="mt-1 text-sm leading-relaxed text-emerald-700">The office verifies each QR code, then opens its tracker through the server you are using now. Older QR codes can work after the Wi-Fi address changes.</p>
                 </div>
                 <button type="button" aria-label="Close QR scanner" onClick={() => setDocumentScannerOpen(false)} className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-full border border-emerald-200 text-lg font-semibold text-emerald-800">×</button>
               </div>
               <div className="mt-4 overflow-hidden rounded-2xl bg-emerald-950">
-                <video ref={scannerVideoRef} className="aspect-[4/3] w-full object-cover" autoPlay muted playsInline aria-label="Camera preview for document tracking QR scanner" />
+                <video ref={scannerVideoRef} className="aspect-[4/3] w-full object-cover" autoPlay muted playsInline aria-label="Camera preview for office document and batch QR scanner" />
               </div>
               <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900" role="status" aria-live="polite">
                 {documentScannerBusy ? <><span className="loading-spinner mr-2" aria-hidden="true" />{documentScannerStatus}</> : documentScannerStatus || 'Allow camera access and point it at the tracking QR code.'}
               </p>
               <label className="mt-4 block rounded-2xl border border-dashed border-emerald-300 bg-white p-4 text-sm font-semibold text-emerald-900">
                 Or choose a QR image
-                <input type="file" accept="image/*" capture="environment" onChange={handleDocumentTrackerQrImage} disabled={documentScannerBusy || !apiData?.documentTrackerEnabled} className="mt-2 block w-full text-sm font-normal text-emerald-700" />
+                <input type="file" accept="image/*" capture="environment" onChange={handleDocumentTrackerQrImage} disabled={documentScannerBusy || !isOnline} className="mt-2 block w-full text-sm font-normal text-emerald-700" />
               </label>
               <p className="mt-3 text-xs leading-relaxed text-emerald-700">For camera access over Wi-Fi, start the mobile app on the office computer with <strong>npm run dev:lan</strong>, then open its HTTPS LAN address on your phone. Trust the office certificate first if prompted.</p>
             </section>
