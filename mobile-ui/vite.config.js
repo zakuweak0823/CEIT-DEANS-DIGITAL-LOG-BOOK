@@ -18,7 +18,7 @@ const findXamppRoot = () => {
 
     const parent = dirname(directory);
     if (parent === directory) {
-      throw new Error('LAN HTTPS needs the XAMPP certificate files ceit-logbook-lan.crt and ceit-logbook-lan.key.');
+      throw new Error('LAN HTTPS certificate setup did not complete. Start the app with "npm run dev:lan" so its setup step can create the local certificate.');
     }
     directory = parent;
   }

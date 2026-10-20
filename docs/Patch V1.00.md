@@ -174,6 +174,24 @@ commit.
 - Expanded the README and Windows setup troubleshooting with the submitter
   field distinctions and the separate Apache tracker/Vite mobile URLs.
 
+## V1.15 — Automatic LAN camera certificates
+
+**Git commit:** to be recorded after this patch is committed.
+
+- Added a Windows `predev:lan` setup step that finds XAMPP OpenSSL, detects
+  the active Private-network IP, and creates a host-specific CA and matching
+  TLS certificate when needed.
+- Keeps CA and server private keys in the local XAMPP Apache configuration
+  directories; only the public CA certificate is copied to the ignored
+  project-root download path used by Admin Settings.
+- Reuses an existing valid certificate for the current LAN address without
+  requiring the CA private key to be present on the development computer.
+- Documented first-run phone trust steps and clarified that npm audit warnings
+  do not require `npm audit fix --force`.
+- Clarified that the QR Tracker base URL must be the new host's Apache project
+  URL (not Vite port 5173); update this database setting after moving the
+  project and importing its records.
+
 ## Earlier chat requests included in the project snapshot
 
 These requests were part of the same project conversation. They do not all

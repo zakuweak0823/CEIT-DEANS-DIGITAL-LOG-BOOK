@@ -274,39 +274,44 @@ address used to open the app. Local IP addresses and certificates are specific
 to a host computer; do not assume the address or development certificate from
 another computer will work.
 
-1. From the computer, open **Admin Settings** and choose **Download
-   certificate** under **Mobile camera certificate**, if a certificate has
-   been configured for this host. Transfer the downloaded public certificate
-   to the phone using a trusted method.
-2. Install that file on the phone as a **CA certificate**. On Android, use
-   **Settings → Security → Encryption & credentials → Install a certificate
-   → CA certificate** (menu names vary by device). On iPhone, install the
-   downloaded profile in **Settings**, then enable full trust for it under
-   **Settings → General → About → Certificate Trust Settings**.
-3. Start the office server with [`start-office-server.bat`](start-office-server.bat)
-   and approve the Private-network firewall prompt. In a terminal, start the
-   mobile UI's HTTPS development server:
+1. On the computer that hosts XAMPP, install Node.js and run `npm install` in
+   `mobile-ui`. Start [`start-office-server.bat`](start-office-server.bat)
+   and approve its Private-network firewall prompt.
+2. Start the mobile UI's HTTPS development server:
 
    ```powershell
    cd mobile-ui
    npm run dev:lan
    ```
 
-   Open the `https://<office-LAN-IP>:5173/` address shown by Vite on the phone,
-   allow camera access, and use the QR scanner. Do not use the `http://`
-   address or `localhost` on the phone. The Vite HTTPS server uses this
-   computer's XAMPP LAN certificate; it is available only when the XAMPP
-   certificate and private-key files are installed on this computer.
+   Its setup step creates a host-specific CA and an IP-matched certificate
+   using XAMPP's OpenSSL when this computer has no usable certificate. The
+   private keys stay in the computer's XAMPP certificate folders and are not
+   shared through Git. Keep this command running.
+3. On the computer, open **Admin Settings** and choose **Download
+   certificate** under **Mobile camera certificate**. Transfer the downloaded
+   public CA certificate to the phone using a trusted method.
+4. Install that file on the phone as a **CA certificate**. On Android, use
+   **Settings → Security → Encryption & credentials → Install a certificate
+   → CA certificate** (menu names vary by device). On iPhone, install the
+   downloaded profile in **Settings**, then enable full trust for it under
+   **Settings → General → About → Certificate Trust Settings**.
+5. Open the `https://<office-LAN-IP>:5173/` address printed by Vite on the
+   phone, allow camera access, and use the QR scanner. Do not use the `http://`
+   address or `localhost` on the phone. If a new CA is created later, install
+   it on trusted phones again.
 
 In **Admin Settings → Document status tracking**, set the **Tracker base URL**
-to the exact HTTPS address and project-folder path that the phone can open,
-for example `https://192.168.1.20/CEIT-DEANS-DIGITAL-LOG-BOOK`. Leave it blank
-only when the address used to reach the API is also the correct address for the
-tracker. Update this value if the host IP, project folder, or future domain
-changes. The camera scanner accepts only links on this configured tracker
-address and verifies each token with the office before opening it. QR tracking
-can be disabled in the same Admin Settings section; disabling it blocks
-existing QR links as well as new ones.
+to the phone-reachable Apache project URL, using HTTPS if Apache HTTPS is
+configured, for example `http://192.168.1.20/CEIT-DEANS-DIGITAL-LOG-BOOK` on a
+trusted local network. Do not use the Vite `:5173` address here: that is where
+the mobile app runs; the QR status page and API are served by Apache. Leave
+the setting blank only when the address used to reach the API is also the
+correct address for the tracker. Update it if the host IP, project folder, or
+future domain changes. The camera scanner accepts only links on this
+configured tracker address and verifies each token with the office before
+opening it. QR tracking can be disabled in the same Admin Settings section;
+disabling it blocks existing QR links as well as new ones.
 
 If the browser still reports an untrusted connection, confirm the CA is
 installed and fully trusted, and that the certificate matches the address
@@ -321,8 +326,10 @@ for the limits of the local setup.
 The main mobile client is the React/Vite app in `mobile-ui/`, with Capacitor
 providing its Android project. Use `npm run dev` for local browser work, or
 `npm run dev:lan` to serve the development app over HTTPS to phones on the
-same Private network. The LAN command uses the XAMPP LAN certificate and
-requires the phone to trust its issuing CA. The separate
+same Private network. On Windows, `npm run dev:lan` creates a host-specific
+certificate with XAMPP OpenSSL when needed. Install and trust the generated CA
+on each phone. The CA and server private keys are machine-specific and must
+not be copied through Git. The separate
 `mobile-ui/expo-wrapper/` is an
 optional Expo wrapper with its own dependencies; the steps below use the
 primary Vite/Capacitor app.
@@ -447,6 +454,7 @@ identifies the Git commit that contains the recorded changes.
 | **V1.12 — Local HTTPS for phone QR scanning** | [`5453bb9`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/5453bb9) | Configured this XAMPP computer with a private development CA and an IP-matched Apache certificate, and documented how to install the CA on a phone and open the app over trusted HTTPS. The server and CA private keys remain outside the repository. |
 | **V1.13 — Certificate download in Admin Settings** | [`28d774d`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/28d774d) | Added a download button to Admin Settings for the public local development CA certificate, with a clear unavailable notice if the certificate is not installed on the server. Updated the phone QR-scanning setup instructions to use the button. |
 | **V1.14 — Clear submitter fields and reliable QR tracking** | [`e51c23c`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/e51c23c) | Replaced the ambiguous mobile “From” category label with “Submitter type”; made the admin submitting department/office field explicitly optional; fixed tracker API routing for installations in a named project folder; and documented the field meanings and phone tracker troubleshooting. |
+| **V1.15 — Automatic LAN camera certificates** | This patch | `npm run dev:lan` now provisions a host-specific local CA and LAN-IP-matched TLS certificate with XAMPP OpenSSL when needed. Private keys remain outside the repository; the public CA can be downloaded from Admin Settings and trusted on phones. |
 
 Earlier chat iterations included repeated README and footer refinements,
 pending-document bubble improvements and its hide/show setting, admin
@@ -477,6 +485,7 @@ expanded notes.
 | Clean page routes return 404 | Enable Apache `mod_rewrite` and allow `.htaccess` overrides for the project directory. |
 | Another computer cannot open the site | Run `start-office-server.bat` on the host computer, approve its Private-network firewall prompt, and use the network URL it prints. Keep both computers on the same trusted network and leave Apache/MySQL running. |
 | Mobile app cannot reach the API | Keep Apache/MySQL running and verify the Vite proxy or `VITE_API_ENDPOINT`. On Android emulators, use `10.0.2.2` rather than `localhost`. |
+| `npm run dev:lan` says the LAN certificate files are missing | Run it as `npm run dev:lan` inside `mobile-ui`; its `predev:lan` setup creates a host-specific certificate with XAMPP OpenSSL. If setup reports OpenSSL or permission errors, verify XAMPP is above this project in `htdocs`, `apache\bin\openssl.exe` exists, and the account can write to Apache's `conf\ssl.crt` and `conf\ssl.key` folders. Then download the public CA from Admin Settings and install/trust it on the phone. |
 | Document tracker says “Failed to fetch” | Open the QR link on the same HTTPS Apache address and project-folder path used by the office. Confirm Admin Settings → Document status tracking has the correct Tracker base URL, and that Apache/PHP and MySQL are running. Do not use the Vite `:5173` URL as the tracker URL; it serves the mobile app, while the QR status API is served by Apache. |
 | SMS sending fails | Check cURL, Communication Settings, provider credentials, and provider account status. |
 | Android build cannot find a device | Open the Android project in Android Studio, install the required SDK components, and start an emulator or connect a device. |

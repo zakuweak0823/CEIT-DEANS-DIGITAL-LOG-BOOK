@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "predev:lan": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"..\\tools\\ensure-mobile-camera-certificate.ps1\"",
     "dev:lan": "vite --mode lan",
     "build": "vite build",
     "preview": "vite preview",

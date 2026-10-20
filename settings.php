@@ -241,9 +241,9 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                     </div>
                     <label class="form-label fw-semibold" for="document_tracker_base_url">Tracker base URL <span class="fw-normal text-muted">(optional)</span></label>
                     <input class="form-control" type="url" name="document_tracker_base_url" id="document_tracker_base_url" maxlength="255" value="<?php echo sanitize($documentTrackingSettings['configuredBaseUrl']); ?>" placeholder="https://logbook.example.edu/CEIT-DEANS-DIGITAL-LOG-BOOK">
-                    <div class="form-text mb-3">This is the base address encoded into tracking QR codes, not the Vite mobile-app address. For phones, use the office computer's Apache HTTPS URL and project path (for example, https://192.168.1.20/CEIT-DEANS-DIGITAL-LOG-BOOK); do not add :5173. Leave blank to use this server's current request address.</div>
+                    <div class="form-text mb-3">This is the Apache address encoded into tracking QR codes, not the Vite mobile-app address. Use the office computer's reachable project URL (HTTPS if configured; otherwise HTTP only on your trusted local network), for example http://192.168.1.20/CEIT-DEANS-DIGITAL-LOG-BOOK. Do not add :5173. Leave blank to use this server's current request address.</div>
                     <div class="alert alert-info" role="note">
-                        Phone camera scanning requires trusted HTTPS. Start the mobile UI with npm run dev:lan and open its HTTPS LAN address on the phone; install and trust the office certificate first. “localhost” on a phone means the phone itself.
+                        Phone camera scanning uses the mobile app's separate HTTPS address on port 5173. Start it with npm run dev:lan and install/trust its certificate on the phone. “localhost” on a phone means the phone itself.
                     </div>
                     <button class="btn btn-primary" type="submit" name="save_document_tracking_settings" value="1">
                         <i class="bi bi-check2 me-1" aria-hidden="true"></i>Save tracking settings
