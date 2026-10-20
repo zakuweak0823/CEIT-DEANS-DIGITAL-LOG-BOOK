@@ -214,8 +214,9 @@ if ($stmt !== false) {
                         </button>
                     </form>
                 </div>
+                <!-- Use the shared row-separated table skin consistently across admin lists. -->
                 <div class="table-responsive">
-                    <table class="table table-bordered align-middle mb-0">
+                    <table class="table align-middle mb-0">
                         <thead class="table-light">
                             <tr>
                                 <th scope="col">Date Sent</th>

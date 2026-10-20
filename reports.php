@@ -14,7 +14,7 @@ $dailyCounts = [];
 $dateField = 'date_created';
 
 if (isset($_GET['generate'])) {
-    $validTypes = ['Incoming', 'Outgoing', 'Borrowed Items', 'SMS Logs'];
+    $validTypes = ['All Reports', 'Incoming', 'Outgoing', 'Borrowed Items', 'SMS Logs'];
     $fromDate = DateTime::createFromFormat('!Y-m-d', $from);
     $toDate = DateTime::createFromFormat('!Y-m-d', $to);
     if (!in_array($reportType, $validTypes, true)) {
@@ -23,7 +23,41 @@ if (isset($_GET['generate'])) {
         $message = show_alert('Please select a valid date range.', 'danger');
     } else {
         // Use each record type's own timestamp while keeping the selected end date inclusive.
-        if ($reportType === 'Borrowed Items') {
+        if ($reportType === 'All Reports') {
+            $dateField = 'report_date';
+            $reportQueries = [
+                ['Incoming Documents', "SELECT date_created AS report_date, 'Incoming Documents' AS report_category, subject AS report_record, CONCAT_WS(' | ', CONCAT('From: ', sender), IF(NULLIF(recipient, '') IS NULL, NULL, CONCAT('To: ', recipient))) AS report_details, status FROM documents WHERE type = 'Incoming' AND date_created >= ? AND date_created < DATE_ADD(?, INTERVAL 1 DAY)", 'ss'],
+                ['Outgoing Documents', "SELECT date_created AS report_date, 'Outgoing Documents' AS report_category, subject AS report_record, CONCAT_WS(' | ', CONCAT('From: ', sender), IF(NULLIF(recipient, '') IS NULL, NULL, CONCAT('To: ', recipient))) AS report_details, status FROM documents WHERE type = 'Outgoing' AND date_created >= ? AND date_created < DATE_ADD(?, INTERVAL 1 DAY)", 'ss'],
+                ['Borrowed Items', "SELECT date_borrowed AS report_date, 'Borrowed Items' AS report_category, item_name AS report_record, CONCAT('Borrower: ', borrower) AS report_details, CASE WHEN status = 'Returned' THEN 'Returned' ELSE 'Borrowed' END AS status FROM borrowed_items WHERE date_borrowed >= ? AND date_borrowed < DATE_ADD(?, INTERVAL 1 DAY)", 'ss'],
+                ['SMS Logs', "SELECT date_sent AS report_date, 'SMS Logs' AS report_category, 'SMS notification' AS report_record, CONCAT('To: ', recipient, ' | ', message) AS report_details, status FROM sms_logs WHERE date_sent >= ? AND date_sent < DATE_ADD(?, INTERVAL 1 DAY)", 'ss'],
+            ];
+            foreach ($reportQueries as [$category, $sql, $types]) {
+                $stmt = safe_query($conn, $sql, $types, [$from, $to]);
+                if ($stmt === false) {
+                    $message = show_alert('The report could not be loaded. Please try again.', 'danger');
+                    break;
+                }
+                $result = mysqli_stmt_get_result($stmt);
+                if ($result === false) {
+                    error_log('Combined report results could not be read for ' . $category . '.');
+                    mysqli_stmt_close($stmt);
+                    $message = show_alert('The report could not be loaded. Please try again.', 'danger');
+                    break;
+                }
+                while ($row = mysqli_fetch_assoc($result)) {
+                    $preview[] = $row;
+                }
+                mysqli_stmt_close($stmt);
+            }
+            if ($message === '') {
+                usort($preview, static function ($first, $second) {
+                    return strcmp((string)$second['report_date'], (string)$first['report_date']);
+                });
+                $reportGenerated = true;
+            } else {
+                $preview = [];
+            }
+        } elseif ($reportType === 'Borrowed Items') {
             $dateField = 'date_borrowed';
             $stmt = safe_query($conn, "SELECT item_name, borrower, date_borrowed, CASE WHEN status = 'Returned' THEN 'Returned' ELSE 'Borrowed' END AS status FROM borrowed_items WHERE date_borrowed >= ? AND date_borrowed < DATE_ADD(?, INTERVAL 1 DAY) ORDER BY date_borrowed DESC", 'ss', [$from, $to]);
         } elseif ($reportType === 'SMS Logs') {
@@ -32,20 +66,22 @@ if (isset($_GET['generate'])) {
         } else {
             $stmt = safe_query($conn, "SELECT date_created, sender, recipient, subject, status FROM documents WHERE type = ? AND date_created >= ? AND date_created < DATE_ADD(?, INTERVAL 1 DAY) ORDER BY date_created DESC", 'sss', [$reportType, $from, $to]);
         }
-        if ($stmt === false) {
-            $message = show_alert('The report could not be loaded. Please try again.', 'danger');
-        } else {
-            $result = mysqli_stmt_get_result($stmt);
-            if ($result === false) {
-                error_log('Report results could not be read.');
+        if ($reportType !== 'All Reports') {
+            if ($stmt === false) {
                 $message = show_alert('The report could not be loaded. Please try again.', 'danger');
             } else {
-                while ($row = mysqli_fetch_assoc($result)) {
-                    $preview[] = $row;
+                $result = mysqli_stmt_get_result($stmt);
+                if ($result === false) {
+                    error_log('Report results could not be read.');
+                    $message = show_alert('The report could not be loaded. Please try again.', 'danger');
+                } else {
+                    while ($row = mysqli_fetch_assoc($result)) {
+                        $preview[] = $row;
+                    }
+                    $reportGenerated = true;
                 }
-                $reportGenerated = true;
+                mysqli_stmt_close($stmt);
             }
-            mysqli_stmt_close($stmt);
         }
 
         if ($reportGenerated && count($preview) === 0) {
@@ -72,21 +108,85 @@ function reportTitle(string $type): string
     if ($type === 'Outgoing') return 'Outgoing Documents Report';
     if ($type === 'Borrowed Items') return 'Borrowed Items Report';
     if ($type === 'SMS Logs') return 'SMS Delivery Report';
+    if ($type === 'All Reports') return 'All Reports';
     return 'Report Preview';
 }
 ?>
 <?php include 'header.php'; ?>
 <style>
 .report-page .report-stat {
-    border: 0;
-    border-left: 4px solid var(--brand-green);
+    position: relative;
+    overflow: hidden;
+    border: 1px solid #e2ebe5;
+    border-radius: 1rem;
+    background: linear-gradient(145deg, #fff 0%, #f7fbf8 100%);
+    box-shadow: 0 0.5rem 1.4rem rgba(6, 78, 59, 0.06);
+    transition: transform 180ms ease, box-shadow 180ms ease;
+}
+.report-page .report-stat:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.8rem 1.8rem rgba(6, 78, 59, 0.1);
+}
+.report-page .report-stat .card-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.25rem 0.75rem;
+    padding: 1.15rem 1.25rem;
+}
+.report-page .report-stat-label,
+.report-page .report-stat-value,
+.report-page .report-stat-note {
+    grid-column: 1;
+}
+.report-page .report-stat-icon {
+    display: grid;
+    width: 3rem;
+    height: 3rem;
+    grid-column: 2;
+    grid-row: 1 / span 3;
+    place-items: center;
+    border: 1px solid rgba(15, 81, 50, 0.1);
+    border-radius: 0.9rem;
+    background: #eaf5ee;
+    color: #0f5132;
+    font-size: 1.25rem;
 }
 .report-page .report-stat-label {
     color: #64748b;
-    font-size: 0.8rem;
-    font-weight: 600;
+    font-size: 0.75rem;
+    font-weight: 750;
     letter-spacing: 0.04em;
     text-transform: uppercase;
+}
+.report-page .report-stat-value {
+    color: #123e2a;
+    font-size: clamp(1.5rem, 2.4vw, 2rem);
+    font-weight: 750;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+.report-page .report-stat-note {
+    color: #64748b;
+    font-size: 0.8rem;
+}
+.report-page .report-chart > .card {
+    height: 100%;
+    border: 1px solid #e2ebe5;
+    border-radius: 1rem;
+    box-shadow: 0 0.5rem 1.4rem rgba(6, 78, 59, 0.05);
+}
+.report-page .report-chart > .card .card-body {
+    padding: clamp(1rem, 2vw, 1.35rem);
+}
+.report-page .report-table--all th:first-child,
+.report-page .report-table--all td:first-child,
+.report-page .report-table--all th:last-child,
+.report-page .report-table--all td:last-child {
+    text-align: center !important;
+}
+.report-page .report-table--all td:nth-child(2) {
+    font-weight: 650;
 }
 .report-page .report-chart-wrap {
     height: 250px;
@@ -94,7 +194,30 @@ function reportTitle(string $type): string
 .report-page .report-table th {
     white-space: nowrap;
 }
+.report-page .report-table--all {
+    width: 100%;
+    table-layout: fixed;
+}
+/* Fixed columns keep longer on-screen labels inside their intended cells. */
+.report-page .report-table--all col.report-col-date {
+    width: 16%;
+}
+.report-page .report-table--all col.report-col-category {
+    width: 21%;
+}
+.report-page .report-table--all col.report-col-subject {
+    width: 19%;
+}
+.report-page .report-table--all col.report-col-details {
+    width: 32%;
+}
+.report-page .report-table--all col.report-col-status {
+    width: 12%;
+}
 .report-page .report-print-header {
+    display: none;
+}
+.report-page .report-print-note {
     display: none;
 }
 @media print {
@@ -198,6 +321,22 @@ function reportTitle(string $type): string
     }
     .report-page .report-table--documents col.report-col-status {
         width: 14%;
+    }
+    /* Print widths must wrap long labels instead of shifting adjacent columns. */
+    .report-page .report-table--all col.report-col-date {
+        width: 16%;
+    }
+    .report-page .report-table--all col.report-col-category {
+        width: 21%;
+    }
+    .report-page .report-table--all col.report-col-subject {
+        width: 19%;
+    }
+    .report-page .report-table--all col.report-col-details {
+        width: 32%;
+    }
+    .report-page .report-table--all col.report-col-status {
+        width: 12%;
     }
     .report-page .report-table--sms col.report-col-recipient {
         width: 23%;
@@ -305,6 +444,35 @@ function reportTitle(string $type): string
         font-size: 9pt;
         line-height: 1.3;
     }
+    .report-page .report-table--all td:nth-child(2) {
+        font-size: 8pt;
+        font-weight: 600;
+    }
+    .report-page .report-table--all td:nth-child(4) {
+        font-size: 8pt;
+        line-height: 1.25;
+    }
+    .report-page .report-table--all tbody tr {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+    /* Clamp only the print presentation; the full text stays available to screen and workbook exports. */
+    .report-page .report-table--all .report-print-cell {
+        display: -webkit-box !important;
+        overflow: hidden;
+        overflow-wrap: anywhere;
+        max-height: 5em;
+        line-height: 1.25;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 4;
+    }
+    .report-page .report-print-note {
+        display: block !important;
+        margin: 0.06in 0 0;
+        color: #4b5563 !important;
+        font: 7pt/1.2 Arial, sans-serif;
+        text-align: right;
+    }
     .report-page .report-table .report-date-cell {
         text-align: center !important;
         white-space: nowrap;
@@ -348,16 +516,37 @@ function reportTitle(string $type): string
     .report-page .report-table th {
         color: #000 !important;
         background: #f0f0f0 !important;
-        font-size: 7.5pt;
+        font-size: 7pt !important;
         font-weight: 700;
-        letter-spacing: 0.035em;
+        letter-spacing: 0.015em;
         text-transform: uppercase;
+        white-space: normal !important;
+        overflow-wrap: anywhere;
+        line-height: 1.15;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
     }
-    .report-page .report-table th:first-child {
-        white-space: normal;
+    .report-page .report-table--all th:first-child,
+    .report-page .report-table--all th:nth-child(2),
+    .report-page .report-table--all th:nth-child(3),
+    .report-page .report-table--all th:nth-child(4),
+    .report-page .report-table--all th:last-child {
         text-align: center !important;
+    }
+    .report-page .report-table--all td:nth-child(2) .badge {
+        display: block !important;
+        max-width: 100%;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow-wrap: anywhere;
+        text-align: left;
+        white-space: normal !important;
+    }
+    .report-page .report-table--all td:last-child .badge {
+        display: inline-block !important;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        white-space: normal !important;
     }
     .report-page .report-table--sms td:nth-child(2) {
         white-space: nowrap;
@@ -374,6 +563,12 @@ function reportTitle(string $type): string
     .report-page .report-table--borrowed td:nth-child(3),
     .report-page .report-table--borrowed th:last-child,
     .report-page .report-table--borrowed td:last-child {
+        text-align: center !important;
+    }
+    .report-page .report-table--all th:first-child,
+    .report-page .report-table--all td:first-child,
+    .report-page .report-table--all th:last-child,
+    .report-page .report-table--all td:last-child {
         text-align: center !important;
     }
     .report-page .report-table--sms th:nth-child(2),
@@ -439,7 +634,7 @@ function reportTitle(string $type): string
                     <div class="col-md-4">
                         <label class="form-label" for="report_type">Report type</label>
                         <select id="report_type" name="report_type" class="form-select" required>
-                            <option value="">Select Report Type</option>
+                            <option value="All Reports" <?php echo $reportType === 'All Reports' ? 'selected' : ''; ?>>All Reports</option>
                             <option value="Incoming" <?php echo $reportType === 'Incoming' ? 'selected' : ''; ?>>Incoming Documents</option>
                             <option value="Outgoing" <?php echo $reportType === 'Outgoing' ? 'selected' : ''; ?>>Outgoing Documents</option>
                             <option value="Borrowed Items" <?php echo $reportType === 'Borrowed Items' ? 'selected' : ''; ?>>Borrowed Items</option>
@@ -474,22 +669,25 @@ function reportTitle(string $type): string
             <div class="col-sm-6 col-xl-4">
                 <div class="card shadow-sm report-stat h-100"><div class="card-body">
                     <div class="report-stat-label">Total records</div>
-                    <div class="display-6 fw-semibold text-primary"><?php echo number_format(count($preview)); ?></div>
-                    <div class="small text-muted">Matching the selected date range</div>
+                    <div class="report-stat-value"><?php echo number_format(count($preview)); ?></div>
+                    <div class="report-stat-note">Across <?php echo $reportType === 'All Reports' ? 'all report categories' : sanitize($reportType); ?> in the selected period</div>
+                    <span class="report-stat-icon" aria-hidden="true"><i class="bi bi-files"></i></span>
                 </div></div>
             </div>
             <div class="col-sm-6 col-xl-4">
                 <div class="card shadow-sm report-stat h-100"><div class="card-body">
                     <div class="report-stat-label">Most common status</div>
-                    <div class="fs-3 fw-semibold text-primary"><?php echo sanitize((string)array_key_first($statusCounts)); ?></div>
-                    <div class="small text-muted"><?php echo number_format((int)reset($statusCounts)); ?> record(s)</div>
+                    <div class="report-stat-value fs-3"><?php echo sanitize((string)array_key_first($statusCounts)); ?></div>
+                    <div class="report-stat-note"><?php echo number_format((int)reset($statusCounts)); ?> record(s) · most common status</div>
+                    <span class="report-stat-icon" aria-hidden="true"><i class="bi bi-activity"></i></span>
                 </div></div>
             </div>
             <div class="col-sm-6 col-xl-4">
                 <div class="card shadow-sm report-stat h-100"><div class="card-body">
-                    <div class="report-stat-label">Status types</div>
-                    <div class="display-6 fw-semibold text-primary"><?php echo number_format(count($statusCounts)); ?></div>
-                    <div class="small text-muted">Distinct statuses in this report</div>
+                    <div class="report-stat-label">Active days</div>
+                    <div class="report-stat-value"><?php echo number_format(count($dailyCounts)); ?></div>
+                    <div class="report-stat-note">Days with recorded activity</div>
+                    <span class="report-stat-icon" aria-hidden="true"><i class="bi bi-calendar2-week"></i></span>
                 </div></div>
             </div>
             <div class="col-lg-7 report-chart">
@@ -547,6 +745,9 @@ function reportTitle(string $type): string
                             <dd id="reportPrintRecordCount"><?php echo number_format(count($preview)); ?></dd>
                         </div>
                     </dl>
+                    <?php if ($reportType === 'All Reports'): ?>
+                        <p class="report-print-note">Long record details are shortened for print. Export to Excel for complete details.</p>
+                    <?php endif; ?>
                 </header>
                 <?php endif; ?>
                 <div class="report-screen-heading d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3">
@@ -582,7 +783,7 @@ function reportTitle(string $type): string
                 </div>
                 <?php endif; ?>
                 <div class="table-responsive report-table-wrap">
-                    <table id="reportTable" class="table table-hover align-middle mb-0 report-table <?php echo $reportType === 'SMS Logs' ? 'report-table--sms' : ($reportType === 'Borrowed Items' ? 'report-table--borrowed' : 'report-table--documents'); ?>">
+                    <table id="reportTable" class="table table-hover align-middle mb-0 report-table <?php echo $reportType === 'All Reports' ? 'report-table--all' : ($reportType === 'SMS Logs' ? 'report-table--sms' : ($reportType === 'Borrowed Items' ? 'report-table--borrowed' : 'report-table--documents')); ?>">
                         <?php if ($reportType === 'Borrowed Items'): ?>
                             <colgroup>
                                 <col class="report-col-item">
@@ -595,6 +796,14 @@ function reportTitle(string $type): string
                                 <col class="report-col-date">
                                 <col class="report-col-recipient">
                                 <col class="report-col-message">
+                                <col class="report-col-status">
+                            </colgroup>
+                        <?php elseif ($reportType === 'All Reports'): ?>
+                            <colgroup>
+                                <col class="report-col-date">
+                                <col class="report-col-category">
+                                <col class="report-col-subject">
+                                <col class="report-col-details">
                                 <col class="report-col-status">
                             </colgroup>
                         <?php else: ?>
@@ -617,6 +826,12 @@ function reportTitle(string $type): string
                                     <th>Date and time</th>
                                     <th>Recipient</th>
                                     <th>Message</th>
+                                    <th>Status</th>
+                                <?php elseif ($reportType === 'All Reports'): ?>
+                                    <th>Date and time</th>
+                                    <th>Report type</th>
+                                    <th>Record</th>
+                                    <th>Details</th>
                                     <th>Status</th>
                                 <?php else: ?>
                                     <th>Date and time</th>
@@ -648,6 +863,15 @@ function reportTitle(string $type): string
                                             <td><?php echo sanitize((string)$row['recipient']); ?></td>
                                             <td class="report-message"><?php echo sanitize((string)$row['message']); ?></td>
                                             <td><span class="badge text-bg-<?php echo $row['status'] === 'Failed' ? 'danger' : ($row['status'] === 'Pending' ? 'warning' : 'success'); ?>"><?php echo sanitize((string)$row['status']); ?></span></td>
+                                        <?php elseif ($reportType === 'All Reports'): ?>
+                                            <td class="report-date-cell" data-csv-value="<?php echo sanitize((string)$row['report_date']); ?>">
+                                                <span class="report-date-part"><?php echo sanitize(date('M j, Y', strtotime((string)$row['report_date']))); ?></span>
+                                                <span class="report-date-part"><?php echo sanitize(date('g:i A', strtotime((string)$row['report_date']))); ?></span>
+                                            </td>
+                                            <td><span class="badge rounded-pill text-bg-light border"><?php echo sanitize((string)$row['report_category']); ?></span></td>
+                                            <td class="report-message"><span class="report-print-cell" title="<?php echo sanitize((string)$row['report_record']); ?>"><?php echo sanitize((string)$row['report_record']); ?></span></td>
+                                            <td class="report-message"><span class="report-print-cell" title="<?php echo sanitize((string)$row['report_details']); ?>"><?php echo sanitize((string)$row['report_details']); ?></span></td>
+                                            <td><span class="badge text-bg-<?php echo $row['status'] === 'Failed' ? 'danger' : ($row['status'] === 'Pending' || $row['status'] === 'Borrowed' ? 'warning' : ($row['status'] === 'Returned' || $row['status'] === 'Released' || $row['status'] === 'Sent' ? 'success' : 'primary')); ?>"><?php echo sanitize((string)$row['status']); ?></span></td>
                                         <?php else: ?>
                                             <td class="report-date-cell" data-csv-value="<?php echo sanitize((string)$row['date_created']); ?>">
                                                 <span class="report-date-part"><?php echo sanitize(date('M j, Y', strtotime((string)$row['date_created']))); ?></span>
@@ -662,7 +886,7 @@ function reportTitle(string $type): string
                                 <?php endforeach; ?>
                             <?php endif; ?>
                             <?php if ($reportGenerated && count($preview) > 0): ?>
-                                <tr id="reportNoMatches" hidden><td colspan="<?php echo $reportType === 'SMS Logs' ? '4' : '5'; ?>" class="text-center text-muted py-4">No records match your search and status filters.</td></tr>
+                                <tr id="reportNoMatches" hidden><td colspan="<?php echo in_array($reportType, ['SMS Logs', 'Borrowed Items'], true) ? '4' : '5'; ?>" class="text-center text-muted py-4">No records match your search and status filters.</td></tr>
                             <?php endif; ?>
                         </tbody>
                     </table>
@@ -781,7 +1005,7 @@ document.getElementById('exportExcel').addEventListener('click', function () {
         });
     });
     const columnWidths = <?php echo json_encode(
-        $reportType === 'SMS Logs' ? [23, 20, 70, 18] : ($reportType === 'Borrowed Items' ? [34, 28, 20, 18] : [23, 24, 24, 48, 18]),
+        $reportType === 'All Reports' ? [23, 27, 38, 65, 18] : ($reportType === 'SMS Logs' ? [23, 20, 70, 18] : ($reportType === 'Borrowed Items' ? [34, 28, 20, 18] : [23, 24, 24, 48, 18])),
         JSON_THROW_ON_ERROR
     ); ?>;
 

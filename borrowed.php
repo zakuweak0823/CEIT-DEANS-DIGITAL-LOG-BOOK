@@ -194,8 +194,9 @@ if ($stmt !== false) {
                         <?php endif; ?>
                     </div>
                 </form>
+                <!-- Shared table styling keeps row separators without vertical cell gridlines. -->
                 <div class="table-responsive">
-                    <table class="table table-bordered table-hover align-middle mb-0">
+                    <table class="table table-hover align-middle mb-0">
                         <thead class="table-light">
                             <tr>
                                 <th>Item</th>
@@ -231,7 +232,7 @@ if ($stmt !== false) {
                                             <span class="badge rounded-pill <?php echo $statusBadgeClass; ?>"><?php echo sanitize($itemRow['display_status']); ?></span>
                                         </td>
                                         <td>
-                                            <div class="d-flex flex-wrap gap-2">
+                                            <div class="table-actions">
                                                 <?php if ($itemRow['display_status'] !== 'Returned'): ?>
                                                     <button type="button" class="btn btn-sm btn-outline-primary" onclick="editItem(<?php echo (int)$itemRow['item_id']; ?>, <?php echo htmlspecialchars(json_encode($itemRow['item_name'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($itemRow['borrower'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($itemRow['borrower_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo $itemRow['category_id'] !== null ? (int)$itemRow['category_id'] : 'null'; ?>)">
                                                         <i class="bi bi-pencil"></i> Edit

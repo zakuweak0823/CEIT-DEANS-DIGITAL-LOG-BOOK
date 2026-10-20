@@ -208,6 +208,24 @@ commit.
 - Documented network conditions that still require manual action, including
   phone CA trust, Public Wi-Fi profiles, and guest-network isolation.
 
+## V1.17 — Reporting, batch workflows, and responsive admin polish
+
+- Added **All Reports** to combine incoming and outgoing documents, borrowed
+  items, and SMS logs for a selected date range.
+- Refined printable reports into portrait documents with a centered university
+  letterhead, wrapped and proportioned columns, and a clear note when long
+  details are shortened for print. Excel export retains complete values.
+- Added separate priority indicators and clearer document actions across
+  Incoming, Outgoing, Quick Submit, and Bulk Papers. Quick Submit management
+  links open the exact matching record.
+- Unified admin table styling with green headers, alternating rows, subtle
+  horizontal separators, and responsive card layouts for narrow screens.
+- Added a top-of-screen new-submission notification preference.
+- Documented the mobile **From / submitter type** visibility switch and the
+  removal of recipient inputs from incoming submission forms.
+- Added a dedicated security guide covering the access model, existing
+  controls, deployment requirements, and important limitations.
+
 ## Earlier chat requests included in the project snapshot
 
 These requests were part of the same project conversation. They do not all
@@ -216,6 +234,12 @@ map to separate commits or a distinct versioned release:
 - Created and iteratively improved the project README.
 - Refined the admin footer to be thinner and better suited to narrow screens.
 - Added and refined a floating pending-documents shortcut.
+- Replaced the floating pending-documents shortcut with a configurable
+  top-of-screen notification for new submissions.
+- Added All Reports and refined printable reports, Excel export, and shared
+  admin table styling across document, inventory, and communication screens.
+- Added clearer priority handling and direct management actions to document
+  and bulk-paper lists.
 - Added a dedicated server-disconnected experience for the admin portal.
 - Added admin preferences, then moved them into a separate Settings page.
 - Added the option to hide or restore the floating pending-documents shortcut.

@@ -39,6 +39,8 @@ $subject = '';
 $remarks = '';
 $clientPhone = '';
 $search = trim($_GET['search'] ?? '');
+$documentIdParam = $_GET['document_id'] ?? '';
+$documentIdFilter = is_string($documentIdParam) && ctype_digit($documentIdParam) ? (int)$documentIdParam : 0;
 $statusFilter = trim($_GET['status'] ?? '');
 $validStatusFilters = ['Pending', 'For Release', 'Released'];
 if (!in_array($statusFilter, $validStatusFilters, true)) {
@@ -197,7 +199,10 @@ if (!in_array($submitterFilter, ['All', 'Faculty', 'Student', 'Other'], true)) {
     $submitterFilter = 'All';
 }
 $documents = [];
-if ($search !== '' && $statusFilter !== '' && $submitterFilter !== 'All') {
+if ($documentIdFilter > 0) {
+    // Quick Submit's Manage action must show only the selected incoming record.
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND doc_id = ?", 'i', [$documentIdFilter]);
+} elseif ($search !== '' && $statusFilter !== '' && $submitterFilter !== 'All') {
     $searchTerm = "%{$search}%";
     $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND status = ? AND submitter_type = ? AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ?) ORDER BY is_priority DESC, date_created DESC", 'sssssss', [$statusFilter, $submitterFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
 } elseif ($search !== '' && $statusFilter !== '') {
@@ -279,8 +284,9 @@ if ($stmt !== false) {
                         <button class="btn btn-primary">Search</button>
                     </div>
                 </form>
+                <!-- Use the shared row-separated table skin consistently across admin lists. -->
                 <div class="table-responsive">
-                    <table class="table table-bordered align-middle mb-0">
+                    <table class="table align-middle mb-0 incoming-documents-table">
                         <thead class="table-light">
                             <tr>
                                 <th>Date Submitted</th>
@@ -290,12 +296,13 @@ if ($stmt !== false) {
                                 <th>Recipient</th>
                                 <th>Client Contact</th>
                                 <th>Status</th>
+                                <th>Priority</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php if (count($documents) === 0): ?>
-                                <tr><td colspan="8" class="text-center text-muted">No incoming documents found.</td></tr>
+                                <tr><td colspan="9" class="text-center text-muted">No incoming documents found.</td></tr>
                             <?php else: ?>
                                 <?php foreach ($documents as $document): ?>
                                     <tr>
@@ -303,9 +310,6 @@ if ($stmt !== false) {
                                         <td>
                                             <div class="table-cell-badges">
                                                 <span class="badge text-bg-light border"><?php echo sanitize($document['submitter_type']); ?></span>
-                                                <?php if ($document['submitter_type'] === 'Faculty' && (int)$document['is_priority'] === 1): ?>
-                                                    <span class="badge text-bg-warning"><i class="bi bi-star-fill me-1" aria-hidden="true"></i>Priority</span>
-                                                <?php endif; ?>
                                             </div>
                                             <div class="mt-1 fw-semibold"><?php echo sanitize(trim((string)($document['submitter_name'] ?? '')) !== '' ? $document['submitter_name'] : 'Name not recorded'); ?></div>
                                         </td>
@@ -339,24 +343,29 @@ if ($stmt !== false) {
                                             </span>
                                         </td>
                                         <td>
-                                            <div class="table-actions">
-                                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="editDocument(<?php echo (int)$document['doc_id']; ?>, <?php echo htmlspecialchars(json_encode($document['sender'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['submitter_name'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['client_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['subject'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['remarks'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['submitter_type'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
-                                                <i class="bi bi-pencil"></i> Edit
-                                            </button>
                                             <?php if ($document['submitter_type'] === 'Faculty'): ?>
-                                                <form method="POST" class="d-inline">
+                                                <form method="POST" class="document-priority-control">
                                                     <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                                                     <input type="hidden" name="priority_doc_id" value="<?php echo (int)$document['doc_id']; ?>">
-                                                    <button class="btn btn-sm <?php echo (int)$document['is_priority'] === 1 ? 'btn-warning' : 'btn-outline-warning'; ?>" type="submit" name="toggle_priority" title="<?php echo (int)$document['is_priority'] === 1 ? 'Remove priority' : 'Mark as priority'; ?>">
-                                                        <i class="bi bi-star<?php echo (int)$document['is_priority'] === 1 ? '-fill' : ''; ?>" aria-hidden="true"></i>
-                                                        <?php echo (int)$document['is_priority'] === 1 ? 'Priority' : 'Set priority'; ?>
+                                                    <button class="btn btn-sm <?php echo (int)$document['is_priority'] === 1 ? 'btn-warning' : 'btn-outline-secondary'; ?>" type="submit" name="toggle_priority" aria-label="<?php echo (int)$document['is_priority'] === 1 ? 'Remove priority from' : 'Mark as priority'; ?> <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?>">
+                                                        <i class="bi bi-star<?php echo (int)$document['is_priority'] === 1 ? '-fill' : ''; ?> me-1" aria-hidden="true"></i><?php echo (int)$document['is_priority'] === 1 ? 'Priority' : 'Standard'; ?>
                                                     </button>
                                                 </form>
+                                            <?php else: ?>
+                                                <span class="badge rounded-pill text-bg-light border">Standard</span>
                                             <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <div class="table-actions document-row-actions">
+                                            <button type="button" class="btn btn-sm btn-outline-primary document-action-button" title="Edit document" aria-label="Edit <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?>" onclick="editDocument(<?php echo (int)$document['doc_id']; ?>, <?php echo htmlspecialchars(json_encode($document['sender'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['submitter_name'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['client_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['subject'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['remarks'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['submitter_type'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                                <i class="bi bi-pencil"></i> Edit
+                                            </button>
                                             <?php if ($document['status'] === 'Pending'): ?>
                                                 <button
-                                                    class="btn btn-sm btn-outline-success js-prepare-release"
+                                                    class="btn btn-sm btn-outline-success js-prepare-release document-action-button"
                                                     type="button"
+                                                    title="Prepare for release"
+                                                    aria-label="Prepare <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?> for release"
                                                     data-document-id="<?php echo (int)$document['doc_id']; ?>"
                                                     data-document-subject="<?php echo sanitize($document['subject']); ?>"
                                                     data-document-sender="<?php echo sanitize($document['sender']); ?>"

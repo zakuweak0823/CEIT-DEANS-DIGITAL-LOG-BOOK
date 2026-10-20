@@ -349,9 +349,18 @@ if (document.body.classList.contains('admin-body')) {
     applyAdminPreferences();
     // Add accessible mobile labels from the table headers without changing desktop markup.
     document.querySelectorAll('.admin-content .table-responsive table').forEach(function (table) {
+        const headerRow = table.tHead && table.tHead.rows.length ? table.tHead.rows[0] : null;
+        const lastHeader = headerRow && headerRow.cells.length
+            ? headerRow.cells[headerRow.cells.length - 1].textContent.trim()
+            : '';
+        table.classList.toggle('admin-table-has-actions', /^actions?$/i.test(lastHeader));
+        if (headerRow) {
+            Array.from(headerRow.cells).forEach(function (cell) {
+                if (cell.tagName === 'TH' && !cell.hasAttribute('scope')) cell.setAttribute('scope', 'col');
+            });
+        }
         if (document.body.classList.contains('admin-compact') && table.closest('.batch-history-table')) return;
         if (!document.body.classList.contains('admin-compact') && table.closest('.d-none, .d-xl-block')) return;
-        const headerRow = table.tHead && table.tHead.rows.length ? table.tHead.rows[0] : null;
         if (!headerRow) return;
 
         const labels = Array.from(headerRow.cells).map(function (cell) {

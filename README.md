@@ -3,11 +3,12 @@
 
 <h1>CEIT Dean's Office Digital Logbook</h1>
 
-<p><strong>A document and inventory tracking system for the CVSU College of Engineering and Information Technology Dean's Office.</strong></p>
+<p><strong>A responsive document, bulk-paper, and inventory tracking workspace for the CVSU College of Engineering and Information Technology Dean's Office.</strong></p>
 
-<p>Manage office records through a PHP and MySQL admin portal, with a React mobile app for on-the-go logbook tasks.</p>
+<p>Bring the admin dashboard, document workflows, QR status tracking, printable reports, and mobile logbook into one coordinated system.</p>
 
 <p><img src="assets/images/ceit-web-android-showcase.svg" alt="Illustrated showcase of the CEIT Admin web dashboard and Android public kiosk UI" width="100%"></p>
+<p><sub>Project showcase: desktop admin workspace and mobile logbook concept.</sub></p>
 
 <p>
 <a href="https://www.php.net/"><img src="https://img.shields.io/badge/PHP-8%2B-777BB4?logo=php&logoColor=white" alt="PHP 8 or later"></a>
@@ -23,6 +24,7 @@
 ## Contents
 
 - [Overview](#overview)
+- [Highlights](#highlights)
 - [Start here](#start-here)
 - [What you can do](#what-you-can-do)
 - [Technology](#technology)
@@ -32,6 +34,7 @@
 - [Project layout](#project-layout)
 - [Patch history](#patch-history)
 - [Security before deployment](#security-before-deployment)
+- [Security guide](docs/SECURITY.md)
 - [Troubleshooting](#troubleshooting)
 
 ## Overview
@@ -51,19 +54,34 @@ PHP API and MySQL database.
 | Run or build the mobile client | [Mobile app instructions](#mobile-app) |
 | Deploy outside a trusted local network | Read [Security before deployment](#security-before-deployment) first. |
 
+## Highlights
+
+- **One office workflow:** incoming and outgoing documents, bulk-paper batches,
+  borrowed items, SMS records, and reports share one PHP/MySQL database.
+- **Traceable handoffs:** office-issued QR tokens let submitters check limited
+  document or batch status without exposing the admin workspace.
+- **Purpose-built admin workspace:** separate priority indicators, direct
+  record actions, responsive tables, top-of-screen submission alerts, and
+  configurable themes and Compact Mode.
+- **Ready-to-share reporting:** date-filtered All Reports, portrait print/PDF
+  output with a university letterhead, search/status filters, and formatted
+  Excel workbook export.
+- **Web and Android clients:** a mobile-first React/Vite app can run in a
+  browser or be packaged for Android with Capacitor.
+
 ## What you can do
 
 | Area | Capabilities |
 | --- | --- |
-| **Dashboard** | Review document status summaries and see pending incoming documents. |
+| **Dashboard** | Review activity summaries, daily counts, pending incoming work, and recent records. |
 | **Incoming documents** | Record the submitter's name and submitter type separately; optionally note the submitting department or office; issue office-verified QR tracking codes; search records; and prepare documents for release. |
-| **Outgoing documents** | Track released documents and send client notifications. |
-| **Bulk papers** | Register batches, associate paper-level records, and follow batch status. |
+| **Outgoing documents** | Track outgoing records and release status, manage each document directly, and send client notifications. |
+| **Bulk papers** | Register batches, associate paper-level records, separate Priority from Standard batches, scan office QR codes, record received counts, and follow release status. |
 | **Borrowed items** | Manage item categories, borrowers, due dates, and return status. |
-| **Records and reports** | Search logbook records, inspect document activity, and generate date-filtered reports. |
-| **SMS and notifications** | Configure SMS and email, tune per-browser activity alerts, send client updates, and review SMS logs. |
+| **Records and reports** | Search logbook records; generate Incoming, Outgoing, Borrowed Items, SMS Logs, or All Reports; filter results by text/status; print a formal portrait document or export a formatted Excel workbook. |
+| **SMS and notifications** | Configure SMS and email, send client updates, review delivery logs, and choose browser alerts and sounds. New-submission alerts appear in a neat top-of-screen notification. |
 | **Admin Assistant** | Get privacy-friendly workflow guidance from a clickable side-peeking launcher and links to admin tools. Optional form assistance previews changes and requires approval before filling fields; it never submits forms. Toggle it in Settings. |
-| **Mobile app** | Submit documents with a required submitter name and a clearly labeled Student/Faculty submitter type, receive a reference and status-tracking QR, scan office-issued codes, and access office logbook features. |
+| **Mobile app** | Submit documents with a required submitter name and a clearly labeled Student/Faculty submitter type, receive a reference and status-tracking QR, scan office-issued codes, and access office logbook features. Admin settings control optional form fields and public kiosk access. |
 | **Document tracker** | A separate, mobile-friendly public page shows only the status tied to an office-issued, unguessable QR token. Its API URL respects the project's folder path, including when installed under XAMPP `htdocs`. |
 
 ### Incoming submission fields
@@ -73,9 +91,34 @@ PHP API and MySQL database.
 - **Submitter type** records whether the person is a Student, Faculty member,
   or Other. It is distinct from their name and replaces the ambiguous
   **From** label in the mobile form and shared form-label settings.
+- The mobile **From / submitter type** field can be shown or hidden with the
+  **Show and require the submitter type** switch in Admin Settings. When
+  hidden, mobile submissions store the type as **Other**.
+- Incoming submission forms in both the admin portal and mobile app do not
+  request a recipient.
 - **Submitting department or office** is an optional admin-only field for
   documents delivered on behalf of a department. Leave it blank for an
   individual submission; it is not a replacement for the submitter's name.
+
+### Reports, tables, and document actions
+
+- **All Reports** combines incoming and outgoing documents, borrowed items,
+  and SMS logs for the selected dates. Its formal print layout uses portrait
+  pages, a centered university heading, fixed-width columns, and wrapped
+  headings and category names. Very long print details are shortened to keep
+  rows readable; the Excel workbook retains the complete report content.
+- Search and status filters work with the report preview and update its
+  visible record count. The Excel export includes clear headings, the selected
+  reporting period, generation time, and readable column widths.
+- Incoming, Outgoing, Quick Submit, Borrowed Items, SMS Logs, Records, and
+  other admin tables share a consistent green-header and alternating-row
+  treatment. Tables adapt to touch-friendly cards on narrow screens.
+- Incoming and Outgoing keep priority separate from row actions. Quick Submit
+  includes a **Manage** link to the specific record in the appropriate
+  Incoming or Outgoing list.
+- Bulk-paper history keeps priority, status, paper intake, and row actions
+  distinct. Receipt confirmation is recorded separately from QR scanning;
+  mismatched paper counts require a note.
 
 ## Admin workspace options
 
@@ -111,8 +154,8 @@ PHP API and MySQL database.
   it from **Settings**. Form assistance only fills values after an approval
   preview; the assistant never submits a form.
 - **Browser preferences** include activity polling, sound and optional
-  privacy-conscious desktop alerts, the pending-documents bubble, the
-  assistant, and Compact Mode. These preferences are saved in the current
+  privacy-conscious desktop alerts, top-of-screen submission notifications,
+  the assistant, and Compact Mode. These preferences are saved in the current
   browser and synchronized between open admin tabs.
 - **Server recovery** provides a status screen and retry guidance when the
   office server or database disconnects; the admin interface also shows live
@@ -213,7 +256,7 @@ in, and never reuse it on a deployed system.
 ### 3. Configure workspace and communication settings (optional)
 
 Open **Settings** from the administrator dropdown to personalize live activity
-monitoring, alerts, and the floating pending-documents shortcut for the current
+monitoring, alerts, and top-of-screen submission notifications for the current
 browser, or turn on **Compact Mode** from the administrator dropdown.
 Compact Mode switches the entire admin portal to a mobile-style layout with
 four primary shortcuts and a bottom **More** menu for the remaining admin
@@ -230,8 +273,9 @@ settings or server environment—not in Git-tracked files or database exports.
 
 Use the **Shared form labels** section in Admin Settings to rename sender,
 recipient, document type, contact number, and remarks fields across admin
-document/bulk-paper forms and the mobile app. The Recipient switch can hide
-recipient inputs in both interfaces; hidden recipients are saved as blank.
+document/bulk-paper forms and the mobile app. The From/submitter-type and
+Recipient switches can hide those optional fields in both interfaces; hidden
+values are saved as blank.
 The **Mobile app appearance and experience** section lets administrators keep
 the existing Classic kiosk UI as the default or switch to a translucent green
 Glass theme, customize the kiosk header and welcome text, and enable or disable
@@ -412,6 +456,7 @@ another server, set `VITE_API_ENDPOINT` at build time to the complete
 ├── database/
 │   └── schema.sql                    # Fresh-install schema and initial admin seed
 ├── docs/
+│   ├── SECURITY.md                   # Security model and deployment checklist
 │   ├── WINDOWS-SETUP.md              # Windows setup and computer transfer
 │   └── Patch V1.00.md                # Project patch history
 ├── tools/
@@ -478,9 +523,14 @@ expanded notes.
 
 ## Security before deployment
 
+- Read the detailed [Security guide](docs/SECURITY.md) before enabling
+  computer-to-computer or mobile access.
 - Replace the seeded admin password immediately.
 - Use a dedicated MySQL account with a strong password; do not deploy with the
   default XAMPP `root` account.
+- Mobile logbook access without sign-in is a configurable kiosk feature. Turn
+  it off on networks where every reachable device should not be allowed to
+  submit or modify logbook data.
 - Serve the application over HTTPS outside a local development environment.
 - The local XAMPP CA described above is development-only; do not deploy it or
   copy its private key to another machine.

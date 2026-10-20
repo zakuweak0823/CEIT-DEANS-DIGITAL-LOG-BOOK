@@ -8,11 +8,20 @@ if ($conn->query("ALTER TABLE documents ADD COLUMN IF NOT EXISTS entry_source VA
     http_response_code(500);
     exit('Quick Submit tracking is unavailable. Check the database setup and try again.');
 }
+foreach ([
+    'ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_priority TINYINT(1) NOT NULL DEFAULT 0',
+] as $schemaSql) {
+    if ($conn->query($schemaSql) === false) {
+        error_log('Quick Submit display setup failed: ' . $conn->error);
+        http_response_code(500);
+        exit('Quick Submit records are unavailable. Check the database setup and try again.');
+    }
+}
 
 // The explicit source marker separates Quick Submit records from other incoming documents.
 $search = trim($_GET['search'] ?? '');
 $quickDocuments = [];
-$query = "SELECT doc_id, date_created, type, sender, recipient, subject, status
+$query = "SELECT doc_id, date_created, type, sender, recipient, subject, status, is_priority
           FROM documents WHERE entry_source = 'quick_submit'";
 $params = [];
 $types = '';
@@ -64,8 +73,9 @@ mysqli_stmt_close($stmt);
                         <button type="submit" class="btn btn-primary"><i class="bi bi-search me-2" aria-hidden="true"></i>Search</button>
                     </div>
                 </form>
+                <!-- Use the shared row-separated table skin consistently across admin lists. -->
                 <div class="table-responsive">
-                    <table class="table table-bordered align-middle">
+                    <table class="table align-middle mb-0 quick-submit-table">
                         <thead class="table-light">
                             <tr>
                                 <th>Date Submitted</th>
@@ -74,11 +84,13 @@ mysqli_stmt_close($stmt);
                                 <th>Recipient</th>
                                 <th>Current Section</th>
                                 <th>Status</th>
+                                <th>Priority</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php if (count($quickDocuments) === 0): ?>
-                                <tr><td colspan="6" class="text-center text-muted py-4">No mobile Quick Submit records<?php echo $search !== '' ? ' match this search' : ' yet'; ?>.</td></tr>
+                                <tr><td colspan="8" class="text-center text-muted py-4">No mobile Quick Submit records<?php echo $search !== '' ? ' match this search' : ' yet'; ?>.</td></tr>
                             <?php else: ?>
                                 <?php foreach ($quickDocuments as $document): ?>
                                     <tr>
@@ -88,6 +100,22 @@ mysqli_stmt_close($stmt);
                                         <td><?php echo sanitize($document['recipient']); ?></td>
                                         <td><?php echo sanitize($document['type']); ?></td>
                                         <td><span class="badge <?php echo $document['status'] === 'Pending' ? 'text-bg-warning' : ($document['status'] === 'For Release' ? 'text-bg-primary' : 'text-bg-success'); ?>"><?php echo sanitize($document['status']); ?></span></td>
+                                        <td>
+                                            <?php if ((int)$document['is_priority'] === 1): ?>
+                                                <span class="badge rounded-pill text-bg-warning"><i class="bi bi-star-fill me-1" aria-hidden="true"></i>Priority</span>
+                                            <?php else: ?>
+                                                <span class="badge rounded-pill text-bg-light border">Standard</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <div class="table-actions document-row-actions">
+                                                <?php // Route by the record's current type; destination pages filter by this exact ID. ?>
+                                                <?php $managePage = $document['type'] === 'Outgoing' ? 'outgoing' : 'incoming'; ?>
+                                                <a class="btn btn-sm btn-outline-primary document-action-button" href="<?php echo $managePage; ?>?document_id=<?php echo (int)$document['doc_id']; ?>" aria-label="Manage Quick Submit record <?php echo (int)$document['doc_id']; ?>" title="Open in <?php echo $managePage === 'outgoing' ? 'Outgoing' : 'Incoming'; ?> Documents">
+                                                    <i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>Manage
+                                                </a>
+                                            </div>
+                                        </td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php endif; ?>

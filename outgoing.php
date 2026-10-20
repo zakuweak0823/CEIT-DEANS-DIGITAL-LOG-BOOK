@@ -26,6 +26,8 @@ $setSmsOutcome = static function ($title, $detail, $type = 'info') use (&$smsOut
     $smsOutcome = ['title' => $title, 'detail' => $detail, 'type' => $type];
 };
 $search = trim($_GET['search'] ?? '');
+$documentIdParam = $_GET['document_id'] ?? '';
+$documentIdFilter = is_string($documentIdParam) && ctype_digit($documentIdParam) ? (int)$documentIdParam : 0;
 $statusFilter = trim($_GET['status'] ?? '');
 if (!in_array($statusFilter, ['', 'For Release', 'Released'], true)) {
     $statusFilter = '';
@@ -156,7 +158,10 @@ if (isset($_POST['send_client_sms'])) {
 }
 
 $documents = [];
-if ($search !== '' && $statusFilter !== '') {
+if ($documentIdFilter > 0) {
+    // Quick Submit's Manage action must resolve to one exact outgoing document.
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND doc_id = ?", 'i', [$documentIdFilter]);
+} elseif ($search !== '' && $statusFilter !== '') {
     $searchTerm = "%{$search}%";
     $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND status = ? AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ?) ORDER BY (status = 'For Release') DESC, date_created DESC", 'ssssss', [$statusFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
 } elseif ($search !== '') {
@@ -211,8 +216,9 @@ if ($stmt !== false) {
                         <button class="btn btn-primary" type="submit">Search</button>
                     </div>
                 </form>
+                <!-- Use the shared row-separated table skin consistently across admin lists. -->
                 <div class="table-responsive outgoing-documents-table-responsive">
-                    <table class="table table-bordered align-middle mb-0 outgoing-documents-table">
+                    <table class="table align-middle mb-0 outgoing-documents-table">
                         <thead class="table-light">
                             <tr>
                                 <th>Date</th>
@@ -222,12 +228,13 @@ if ($stmt !== false) {
                                 <th>Document type</th>
                                 <th>Client Contact</th>
                                 <th>Status</th>
+                                <th>Priority</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php if (count($documents) === 0): ?>
-                                <tr><td colspan="8" class="text-center text-muted">No outgoing documents found.</td></tr>
+                                <tr><td colspan="9" class="text-center text-muted">No outgoing documents found.</td></tr>
                             <?php else: ?>
                                 <?php foreach ($documents as $document): ?>
                                     <tr>
@@ -257,20 +264,24 @@ if ($stmt !== false) {
                                         <td data-label="Client contact"><?php echo sanitize($document['client_phone'] ?? 'Not provided'); ?></td>
                                         <td data-label="Status">
                                             <span class="badge <?php echo $document['status'] === 'Released' ? 'text-bg-success' : 'text-bg-warning'; ?>"><?php echo sanitize($document['status']); ?></span>
-                                            <?php if (($document['submitter_type'] ?? '') === 'Faculty' && (int)($document['is_priority'] ?? 0) === 1): ?>
-                                                <span class="badge text-bg-warning ms-1"><i class="bi bi-star-fill me-1" aria-hidden="true"></i>Priority</span>
+                                        </td>
+                                        <td data-label="Priority">
+                                            <?php if ((int)($document['is_priority'] ?? 0) === 1): ?>
+                                                <span class="badge rounded-pill text-bg-warning"><i class="bi bi-star-fill me-1" aria-hidden="true"></i>Priority</span>
+                                            <?php else: ?>
+                                                <span class="badge rounded-pill text-bg-light border">Standard</span>
                                             <?php endif; ?>
                                         </td>
                                         <td data-label="Actions">
-                                            <div class="table-actions">
-                                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="editDocument(<?php echo (int)$document['doc_id']; ?>, <?php echo htmlspecialchars(json_encode($document['client_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['subject'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['remarks'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode(date('Y-m-d', strtotime($document['date_created'])), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                            <div class="table-actions document-row-actions">
+                                            <button type="button" class="btn btn-sm btn-outline-primary document-action-button" title="Edit document" aria-label="Edit <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?>" onclick="editDocument(<?php echo (int)$document['doc_id']; ?>, <?php echo htmlspecialchars(json_encode($document['client_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['subject'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['remarks'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode(date('Y-m-d', strtotime($document['date_created'])), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
                                                 <i class="bi bi-pencil"></i> Edit
                                             </button>
                                             <form method="POST" class="d-inline">
                                                 <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                                                 <input type="hidden" name="status_doc_id" value="<?php echo (int)$document['doc_id']; ?>">
                                                 <input type="hidden" name="new_status" value="<?php echo $document['status'] === 'Released' ? 'For Release' : 'Released'; ?>">
-                                                <button type="submit" name="set_outgoing_status" class="btn btn-sm <?php echo $document['status'] === 'Released' ? 'btn-outline-secondary' : 'btn-success'; ?>">
+                                                <button type="submit" name="set_outgoing_status" class="btn btn-sm document-action-button <?php echo $document['status'] === 'Released' ? 'btn-outline-secondary' : 'btn-success'; ?>" title="<?php echo $document['status'] === 'Released' ? 'Set for release' : 'Mark released'; ?>">
                                                     <i class="bi <?php echo $document['status'] === 'Released' ? 'bi-arrow-counterclockwise' : 'bi-check2-circle'; ?> me-1" aria-hidden="true"></i>
                                                     <?php echo $document['status'] === 'Released' ? 'Set For Release' : 'Mark Released'; ?>
                                                 </button>
@@ -278,7 +289,8 @@ if ($stmt !== false) {
                                             <?php if ($document['status'] === 'For Release' && is_valid_contact_number(trim((string)($document['client_phone'] ?? '')))): ?>
                                                 <button
                                                     type="button"
-                                                    class="btn btn-sm btn-outline-success js-send-release-sms"
+                                                    class="btn btn-sm btn-outline-success js-send-release-sms document-action-button"
+                                                    title="Send release notification"
                                                     data-document-id="<?php echo (int)$document['doc_id']; ?>"
                                                     data-document-subject="<?php echo sanitize($document['subject']); ?>"
                                                     data-document-recipient="<?php echo sanitize($document['recipient']); ?>"

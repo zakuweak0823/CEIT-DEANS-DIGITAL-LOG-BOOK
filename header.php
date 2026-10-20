@@ -34,7 +34,6 @@ $sidebarActiveClass = static function (string $page) use ($currentPage): string 
     return $currentPage === $page ? ' active' : '';
 };
 $isDocumentReportActive = $currentPage === 'reports.php' && !in_array($currentReportType, ['Borrowed Items', 'SMS Logs'], true);
-$isBorrowedReportActive = $currentPage === 'reports.php' && $currentReportType === 'Borrowed Items';
 $isSmsReportActive = $currentPage === 'reports.php' && $currentReportType === 'SMS Logs';
 $pendingDocumentCount = null;
 $latestDocumentId = null;
@@ -66,7 +65,8 @@ if ($adminName && isset($conn) && function_exists('safe_query')) {
     <title>CEIT Deans Office Digital Logbook</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="assets/css/style.css?v=responsive-qr-actions-2">
+    <!-- Bump this asset version when shared styles change to refresh browser caches. -->
+    <link rel="stylesheet" href="assets/css/style.css?v=responsive-admin-tables-5">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body<?php echo $adminName ? ' class="admin-body' . ($showAdminLoginArrival ? ' admin-login-arrival' : '') . (($_GET['embed'] ?? '') === '1' ? ' admin-embedded-body' : '') . '" data-latest-document-id="' . (int)($latestDocumentId ?? 0) . '" data-document-activity-ready="' . ($latestDocumentId === null ? 'false' : 'true') . '"' : ($currentPage === 'login.php' ? ' class="login-page"' : ''); ?>>
@@ -165,8 +165,7 @@ try {
             <a href="sms" class="sidebar-link<?php echo $sidebarActiveClass('sms.php'); ?>"<?php echo $currentPage === 'sms.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots me-2"></i>SMS Logs</a>
             <a href="notification_settings" class="sidebar-link<?php echo $sidebarActiveClass('notification_settings.php'); ?>"<?php echo $currentPage === 'notification_settings.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots me-2"></i>Communication Settings</a>
             <div class="sidebar-section text-uppercase fw-semibold text-muted mt-4 mb-2">Reports</div>
-            <a href="reports" class="sidebar-link<?php echo $isDocumentReportActive ? ' active' : ''; ?>"<?php echo $isDocumentReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-file-earmark-text me-2"></i>Document Reports</a>
-            <a href="reports?report_type=Borrowed%20Items&amp;generate=1" class="sidebar-link<?php echo $isBorrowedReportActive ? ' active' : ''; ?>"<?php echo $isBorrowedReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-clipboard-data me-2"></i>Borrowed Items Reports</a>
+            <a href="reports?report_type=All%20Reports&amp;generate=1" class="sidebar-link<?php echo $isDocumentReportActive ? ' active' : ''; ?>"<?php echo $isDocumentReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-file-earmark-text me-2"></i>All Reports</a>
             <a href="reports?report_type=SMS%20Logs&amp;generate=1" class="sidebar-link<?php echo $isSmsReportActive ? ' active' : ''; ?>"<?php echo $isSmsReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-left-text me-2"></i>SMS Reports</a>
         </div>
         <div class="civic-sidebar-footer">
@@ -262,8 +261,7 @@ try {
                     <a href="item_categories"<?php echo $currentPage === 'item_categories.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-tags" aria-hidden="true"></i><span>Categories</span></a>
                     <a href="sms"<?php echo $currentPage === 'sms.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots" aria-hidden="true"></i><span>SMS logs</span></a>
                     <a href="notification_settings"<?php echo $currentPage === 'notification_settings.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots" aria-hidden="true"></i><span>Communication</span></a>
-                    <a href="reports"<?php echo $currentPage === 'reports.php' && $currentReportType === '' ? ' aria-current="page"' : ''; ?>><i class="bi bi-file-earmark-bar-graph" aria-hidden="true"></i><span>Reports</span></a>
-                    <a href="reports?report_type=Borrowed%20Items&amp;generate=1"<?php echo $currentPage === 'reports.php' && $currentReportType === 'Borrowed Items' ? ' aria-current="page"' : ''; ?>><i class="bi bi-clipboard-data" aria-hidden="true"></i><span>Borrowed reports</span></a>
+                    <a href="reports?report_type=All%20Reports&amp;generate=1"<?php echo $isDocumentReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-file-earmark-bar-graph" aria-hidden="true"></i><span>All Reports</span></a>
                     <a href="reports?report_type=SMS%20Logs&amp;generate=1"<?php echo $currentPage === 'reports.php' && $currentReportType === 'SMS Logs' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-left-text" aria-hidden="true"></i><span>SMS reports</span></a>
                     <a href="settings"<?php echo $currentPage === 'settings.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-gear" aria-hidden="true"></i><span>Settings</span></a>
                 </div>
@@ -293,8 +291,7 @@ try {
                     <a href="sms" class="sidebar-link<?php echo $sidebarActiveClass('sms.php'); ?>"<?php echo $currentPage === 'sms.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots me-2"></i>SMS Logs</a>
                     <a href="notification_settings" class="sidebar-link<?php echo $sidebarActiveClass('notification_settings.php'); ?>"<?php echo $currentPage === 'notification_settings.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots me-2"></i>Communication Settings</a>
                     <div class="sidebar-section text-uppercase fw-semibold text-muted mt-4 mb-2">Reports</div>
-                    <a href="reports" class="sidebar-link<?php echo $isDocumentReportActive ? ' active' : ''; ?>"<?php echo $isDocumentReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-file-earmark-text me-2"></i>Document Reports</a>
-                    <a href="reports?report_type=Borrowed%20Items&amp;generate=1" class="sidebar-link<?php echo $isBorrowedReportActive ? ' active' : ''; ?>"<?php echo $isBorrowedReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-clipboard-data me-2"></i>Borrowed Items Reports</a>
+                    <a href="reports?report_type=All%20Reports&amp;generate=1" class="sidebar-link<?php echo $isDocumentReportActive ? ' active' : ''; ?>"<?php echo $isDocumentReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-file-earmark-text me-2"></i>All Reports</a>
                     <a href="reports?report_type=SMS%20Logs&amp;generate=1" class="sidebar-link<?php echo $isSmsReportActive ? ' active' : ''; ?>"<?php echo $isSmsReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-left-text me-2"></i>SMS Reports</a>
                 </div>
             </div>

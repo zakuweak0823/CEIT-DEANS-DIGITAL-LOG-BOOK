@@ -829,6 +829,9 @@ body {
 @media (max-width: 767.98px) {
     .admin-content .admin-mobile-card-wrap {
         overflow: visible;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
     }
 
     .admin-content .table-responsive > .admin-mobile-card-table {
@@ -1124,27 +1127,6 @@ body {
     gap: 0.45rem;
 }
 
-.batch-history-table .batch-actions-menu,
-.batch-card-actions .batch-actions-menu {
-    min-width: 13rem;
-    padding: 0.4rem;
-    border-color: #e0e8e2;
-    border-radius: 0.8rem;
-    box-shadow: 0 0.75rem 1.75rem rgba(21, 52, 36, 0.16);
-}
-
-.batch-actions-menu .dropdown-item {
-    display: flex;
-    align-items: center;
-    padding: 0.55rem 0.7rem;
-    border-radius: 0.5rem;
-    white-space: nowrap;
-}
-
-.batch-actions-menu .dropdown-divider {
-    margin: 0.35rem 0;
-}
-
 .batch-history-cards .batch-history-card {
     min-width: 0;
     overflow: visible;
@@ -1154,12 +1136,85 @@ body {
     justify-content: stretch;
 }
 
-.batch-card-actions > .dropdown {
-    flex: 0 0 auto;
+.batch-priority-control {
+    display: flex;
+    justify-content: center;
 }
 
-.batch-card-actions .dropdown-toggle {
-    min-height: 2.25rem;
+.batch-priority-control .btn {
+    min-width: 7.25rem;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+
+.batch-history-table .batch-row-actions,
+.batch-card-actions {
+    flex-wrap: wrap;
+}
+
+.batch-history-table .batch-row-actions > form,
+.batch-card-actions > form:not(.flex-grow-1) {
+    display: inline-flex;
+    margin: 0;
+}
+
+.batch-history-table .batch-row-actions .batch-action-button,
+.batch-card-actions .batch-action-button {
+    display: inline-grid;
+    width: 2.45rem;
+    min-width: 2.45rem;
+    height: 2.45rem;
+    padding: 0;
+    place-items: center;
+    border-radius: 0.65rem;
+    font-size: 0.92rem;
+}
+
+.batch-history-table .batch-row-actions .batch-action-button:hover,
+.batch-card-actions .batch-action-button:hover {
+    transform: translateY(-1px);
+}
+
+.admin-content .table-responsive.batch-history-table > .table th:last-child,
+.admin-content .table-responsive.batch-history-table > .table td:last-child {
+    min-width: 19rem;
+}
+
+.batch-priority-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 0.9rem;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid #e1e8e3;
+    border-radius: 0.75rem;
+    background: #f7f9f8;
+}
+
+.batch-priority-strip > div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.batch-priority-strip .small {
+    color: #64736a;
+    font-size: 0.66rem;
+    letter-spacing: 0.07em;
+}
+
+.batch-priority-strip.is-priority {
+    border-color: #f1d38b;
+    background: #fff8e6;
+    color: #6b4a00;
+}
+
+.batch-priority-strip.is-standard {
+    border-color: #dce7df;
+    background: #f5faf6;
+    color: #315d40;
 }
 
 @media (max-width: 575.98px) {
@@ -1175,8 +1230,9 @@ body {
         min-width: 0;
     }
 
-    .batch-card-actions > .dropdown > .dropdown-toggle {
-        height: 100%;
+    .batch-priority-strip {
+        align-items: flex-start;
+        flex-direction: column;
     }
 }
 
@@ -8384,5 +8440,295 @@ body.admin-theme-glass.admin-compact .admin-quick-access-count {
     body.admin-theme-glass .admin-quick-access-links a,
     body.admin-theme-glass.admin-compact .admin-quick-access-links .admin-quick-access-more {
         transition: none !important;
+    }
+}
+
+/* The shared table skin uses row separators; avoid vertical gridlines across admin lists. */
+.admin-body .admin-content .table-responsive {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-gutter: stable;
+    border: 1px solid rgba(15, 81, 50, 0.12);
+    border-radius: 0.85rem;
+    background: #fff;
+    box-shadow: 0 0.25rem 0.8rem rgba(6, 78, 59, 0.045);
+}
+
+@media (min-width: 768px) {
+    .admin-body .admin-content .table-responsive > .table {
+        width: 100%;
+        min-width: 64rem;
+        table-layout: auto;
+    }
+
+    .admin-body .admin-content .table > thead > tr > th {
+        padding: 0.85rem 0.9rem;
+        color: #fff;
+        font-size: 0.8125rem;
+        font-weight: 700;
+        letter-spacing: 0.035em;
+        line-height: 1.35;
+        text-align: left;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+
+    .admin-body .admin-content .table > tbody > tr > td {
+        min-width: 6rem;
+        padding: 0.8rem 0.9rem;
+        font-size: 0.9375rem;
+        line-height: 1.5;
+        text-align: left;
+        vertical-align: middle;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-body .admin-content .table > tbody > tr > td[data-label="Date"],
+    .admin-body .admin-content .table > tbody > tr > td[data-label="Date Submitted"],
+    .admin-body .admin-content .table > tbody > tr > td[data-label="Date Created"],
+    .admin-body .admin-content .table > tbody > tr > td[data-label="Date Sent"],
+    .admin-body .admin-content .table > tbody > tr > td[data-label="Status"],
+    .admin-body .admin-content .table > tbody > tr > td[data-label="Direction"],
+    .admin-body .admin-content .table > tbody > tr > td[data-label="Current Section"] {
+        text-align: center;
+    }
+
+    .admin-body .admin-content .table > tbody > tr > td[data-label="Reference"],
+    .admin-body .admin-content .table > tbody > tr > td[data-label="Reference / QR Tracking"] {
+        min-width: 10rem;
+        text-align: center;
+    }
+
+    .admin-body .admin-content .table.admin-table-has-actions > thead > tr > th:last-child,
+    .admin-body .admin-content .table.admin-table-has-actions > tbody > tr > td:last-child {
+        min-width: 15rem;
+        text-align: center;
+    }
+
+    .admin-body .admin-content .table.admin-table-has-actions > tbody > tr > td:last-child {
+        white-space: normal;
+    }
+
+    .admin-body .admin-content .table.admin-table-has-actions > tbody > tr > td:last-child > form {
+        display: inline-flex;
+        margin: 0;
+    }
+
+    .admin-body .admin-content .table.admin-table-has-actions > tbody > tr > td:last-child .btn {
+        min-height: 2.4rem;
+        padding: 0.48rem 0.72rem;
+        border-radius: 0.55rem;
+        font-size: 0.8125rem;
+        font-weight: 650;
+        line-height: 1.25;
+        white-space: nowrap;
+    }
+
+    .admin-body .admin-content .batch-history-table > .table {
+        min-width: 70rem;
+    }
+}
+
+.admin-body .admin-content .table-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-width: 0;
+}
+
+.admin-body .admin-content .table-actions > form {
+    display: inline-flex;
+    flex: 0 1 auto;
+    margin: 0;
+}
+
+.admin-body .admin-content .table-actions > .btn,
+.admin-body .admin-content .table-actions > form > .btn {
+    min-height: 2.4rem;
+    max-width: 100%;
+    padding: 0.48rem 0.72rem;
+    border-radius: 0.55rem;
+    font-size: 0.8125rem;
+    font-weight: 650;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+
+.admin-body .admin-content .table code {
+    color: #a52d58;
+    font-size: 0.84em;
+    white-space: nowrap;
+}
+
+.admin-body .admin-content .table .badge {
+    margin: 0.1rem;
+    padding: 0.4em 0.62em;
+    font-size: 0.76rem;
+    font-weight: 650;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+
+.admin-body .admin-content .batch-history-table > .table:not(.admin-mobile-card-table) {
+    min-width: 70rem;
+}
+
+.admin-body .admin-content .incoming-documents-table,
+.admin-body .admin-content .outgoing-documents-table,
+.admin-body .admin-content .quick-submit-table {
+    width: 100%;
+}
+
+.admin-body .admin-content .document-row-actions {
+    gap: 0.45rem;
+}
+
+.admin-body .admin-content .document-action-button {
+    min-height: 2.4rem;
+    padding: 0.48rem 0.72rem;
+    border-radius: 0.55rem;
+    font-size: 0.8125rem;
+    font-weight: 650;
+    line-height: 1.25;
+    white-space: nowrap;
+}
+
+.admin-body .admin-content .document-priority-control {
+    display: flex;
+    justify-content: center;
+    margin: 0;
+}
+
+.admin-body .admin-content .document-priority-control .btn {
+    min-width: 7.25rem;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+
+@media (max-width: 767.98px) {
+    .admin-body .admin-content .admin-mobile-card-table > tbody > tr > td[data-label="Action"],
+    .admin-body .admin-content .admin-mobile-card-table > tbody > tr > td[data-label="Actions"] {
+        text-align: left;
+    }
+
+    .admin-body .admin-content .admin-mobile-card-table .table-actions > .btn,
+    .admin-body .admin-content .admin-mobile-card-table .table-actions > form > .btn {
+        min-height: 2.6rem;
+        white-space: normal;
+    }
+
+    .admin-body .admin-content .admin-mobile-card-table .document-row-actions {
+        grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+    }
+
+    .admin-body .admin-content .admin-mobile-card-table .document-action-button {
+        min-height: 2.6rem;
+        white-space: normal;
+    }
+}
+
+@media (min-width: 768px) and (max-width: 1199.98px) {
+    .admin-body .admin-content .table-responsive > .table {
+        min-width: 68rem;
+    }
+
+    .admin-body .admin-content .table-responsive.batch-history-table > .table {
+        min-width: 70rem;
+    }
+}
+
+@media (min-width: 768px) {
+    .admin-body .admin-content .incoming-documents-table,
+    .admin-body .admin-content .outgoing-documents-table,
+    .admin-body .admin-content .quick-submit-table {
+        min-width: 78rem;
+    }
+
+    .admin-body .admin-content .table-responsive.batch-history-table > .table.admin-table-has-actions > thead > tr > th:last-child,
+    .admin-body .admin-content .table-responsive.batch-history-table > .table.admin-table-has-actions > tbody > tr > td:last-child {
+        min-width: 19rem;
+    }
+}
+
+@media (min-width: 768px) and (max-width: 1199.98px) {
+    .admin-body .admin-content .admin-mobile-card-wrap {
+        overflow: visible;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+
+    .admin-body .admin-content .table-responsive > .admin-mobile-card-table {
+        display: block;
+        width: 100%;
+        min-width: 0;
+        border: 0;
+        table-layout: auto;
+    }
+
+    .admin-body .admin-content .admin-mobile-card-table thead {
+        display: none;
+    }
+
+    .admin-body .admin-content .admin-mobile-card-table tbody {
+        display: grid;
+        gap: 0.875rem;
+    }
+
+    .admin-body .admin-content .admin-mobile-card-table tbody tr {
+        display: block;
+        overflow: hidden;
+        border: 1px solid rgba(15, 81, 50, 0.15);
+        border-radius: 0.875rem;
+        background: #fff;
+        box-shadow: 0 0.25rem 0.75rem rgba(6, 78, 59, 0.06);
+    }
+
+    .admin-body .admin-content .admin-mobile-card-table tbody tr > * {
+        display: grid;
+        grid-template-columns: minmax(8rem, 32%) minmax(0, 1fr);
+        gap: 0.75rem;
+        align-items: start;
+        min-width: 0;
+        padding: 0.75rem 0.875rem;
+        border: 0;
+        border-bottom: 1px solid rgba(15, 81, 50, 0.09);
+        text-align: left;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-body .admin-content .admin-mobile-card-table tbody tr > *::before {
+        color: #526b5e;
+        content: attr(data-label);
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.025em;
+        text-transform: uppercase;
+    }
+
+    .admin-body .admin-content .admin-mobile-card-table tbody tr > *:last-child {
+        border-bottom: 0;
+    }
+
+    .admin-body .admin-content .admin-mobile-card-table tbody tr > td[colspan] {
+        display: block;
+        text-align: center;
+    }
+
+    .admin-body .admin-content .admin-mobile-card-table tbody tr > td[colspan]::before {
+        display: none;
+    }
+
+    .admin-body .admin-content .admin-mobile-card-table td[data-label="Actions"] .table-actions,
+    .admin-body .admin-content .admin-mobile-card-table td[data-label="Action"] .table-actions {
+        justify-content: flex-start;
+    }
+
+    .admin-body .admin-content .admin-mobile-card-table .table-cell-badges {
+        justify-content: flex-start;
     }
 }

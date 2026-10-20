@@ -739,26 +739,34 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                         <button class="btn btn-outline-primary" type="submit" aria-label="Search"><i class="bi bi-search"></i></button>
                     </form>
                 </div>
+                <!-- Keep the desktop history table separate from the narrow-screen card list below. -->
                 <div class="table-responsive d-none d-xl-block batch-history-table">
                     <table class="table table-hover align-middle mb-0">
                         <thead class="table-light">
-                            <tr><th>Date</th><th>Batch</th><th>Type</th><th>Status</th><th>From / Recipient</th><th>Papers</th><th>Actions</th></tr>
+                            <tr><th>Date</th><th>Batch</th><th>Type</th><th>Status</th><th>Priority</th><th>From / Recipient</th><th>Papers</th><th>Actions</th></tr>
                         </thead>
                         <tbody>
                             <?php if (!$batches): ?>
-                                <tr><td colspan="7" class="text-center text-muted py-4">No batches found.</td></tr>
+                                <tr><td colspan="8" class="text-center text-muted py-4">No batches found.</td></tr>
                             <?php else: ?>
                                 <?php foreach ($batches as $batch): ?>
                                     <tr>
                                         <td><?php echo sanitize($batch['batch_date']); ?></td>
                                         <td class="fw-semibold">
                                             <?php echo sanitize($batch['batch_code']); ?>
-                                            <?php if ((int)$batch['is_priority'] === 1): ?>
-                                                <span class="badge text-bg-warning ms-1"><i class="bi bi-star-fill me-1" aria-hidden="true"></i>Priority</span>
-                                            <?php endif; ?>
                                         </td>
                                         <td><?php echo sanitize($batch['batch_type']); ?></td>
                                         <td><span class="badge <?php echo $batch['status'] === 'Released' ? 'text-bg-success' : ($batch['status'] === 'For Release' ? 'text-bg-primary' : 'text-bg-warning'); ?>"><?php echo sanitize($batch['status']); ?></span></td>
+                                        <td>
+                                            <form method="POST" class="batch-priority-control">
+                                                <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                                                <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
+                                                <input type="hidden" name="priority_batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
+                                                <button class="btn btn-sm <?php echo (int)$batch['is_priority'] === 1 ? 'btn-warning' : 'btn-outline-secondary'; ?>" type="submit" name="toggle_batch_priority" aria-label="<?php echo (int)$batch['is_priority'] === 1 ? 'Remove priority from' : 'Mark as priority'; ?> <?php echo sanitize($batch['batch_code']); ?>">
+                                                    <i class="bi bi-star<?php echo (int)$batch['is_priority'] === 1 ? '-fill' : ''; ?> me-1" aria-hidden="true"></i><?php echo (int)$batch['is_priority'] === 1 ? 'Priority' : 'Standard'; ?>
+                                                </button>
+                                            </form>
+                                        </td>
                                         <td><?php echo sanitize($batch['sender_type']); ?><br><small class="text-muted">Submitted by <?php echo sanitize(trim((string)($batch['submitter_name'] ?? '')) !== '' ? $batch['submitter_name'] : 'Name not recorded'); ?></small><br><small class="text-muted"><?php echo sanitize($batch['recipient_contact_type']); ?><?php echo $batch['recipient'] !== '' ? ': ' . sanitize($batch['recipient']) : ''; ?></small></td>
                                         <td>
                                             <?php echo (int)$batch['paper_count']; ?> expected
@@ -799,63 +807,46 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                                         </button>
                                                     </form>
                                                 <?php endif; ?>
-                                                <div class="dropdown dropstart">
-                                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions for <?php echo sanitize($batch['batch_code']); ?>">
-                                                        <i class="bi bi-three-dots" aria-hidden="true"></i><span class="d-none d-xxl-inline ms-1">More</span>
+                                                <button class="btn btn-sm btn-outline-primary batch-action-button edit-batch" type="button" title="Edit batch" aria-label="Edit <?php echo sanitize($batch['batch_code']); ?>" data-bs-toggle="modal" data-bs-target="#create-batch"
+                                                    data-batch-id="<?php echo (int)$batch['batch_id']; ?>"
+                                                    data-document-type="<?php echo sanitize($batch['document_type']); ?>"
+                                                    data-batch-type="<?php echo sanitize($batch['batch_type']); ?>"
+                                                    data-batch-status="<?php echo sanitize($batch['status']); ?>"
+                                                    data-is-priority="<?php echo (int)$batch['is_priority']; ?>"
+                                                    data-batch-date="<?php echo sanitize($batch['batch_date']); ?>"
+                                                    data-sender-type="<?php echo sanitize($batch['sender_type']); ?>"
+                                                    data-submitter-name="<?php echo sanitize($batch['submitter_name'] ?? ''); ?>"
+                                                    data-recipient-type="<?php echo sanitize($batch['recipient_contact_type']); ?>"
+                                                    data-recipient="<?php echo sanitize($batch['recipient']); ?>"
+                                                    data-paper-count="<?php echo (int)$batch['paper_count']; ?>"
+                                                    data-remarks="<?php echo sanitize($batch['remarks'] ?? ''); ?>"
+                                                    data-batch-code="<?php echo sanitize($batch['batch_code']); ?>"
+                                                    data-received-at="<?php echo sanitize((string)$batch['received_at']); ?>">
+                                                    <i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">Edit batch</span>
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-secondary batch-action-button" type="button" title="View papers" aria-label="View papers in <?php echo sanitize($batch['batch_code']); ?>" data-bs-toggle="collapse" data-bs-target="#papers<?php echo (int)$batch['batch_id']; ?>" aria-expanded="false" aria-controls="papers<?php echo (int)$batch['batch_id']; ?>">
+                                                    <i class="bi bi-eye" aria-hidden="true"></i>
+                                                </button>
+                                                <?php if (!empty($batch['tracking_token'])): ?>
+                                                    <button class="btn btn-sm btn-outline-secondary batch-action-button" type="button" title="Show tracking QR" aria-label="Show tracking QR for <?php echo sanitize($batch['batch_code']); ?>" onclick="showBatchQr(<?php echo htmlspecialchars(json_encode($batch['tracking_token'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($batch['batch_code'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                                        <i class="bi bi-qr-code" aria-hidden="true"></i>
                                                     </button>
-                                                    <div class="dropdown-menu batch-actions-menu">
-                                                        <form method="POST" class="m-0">
-                                                            <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
-                                                            <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
-                                                            <input type="hidden" name="priority_batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
-                                                            <button class="dropdown-item" type="submit" name="toggle_batch_priority">
-                                                                <i class="bi bi-star<?php echo (int)$batch['is_priority'] === 1 ? '-fill' : ''; ?> me-2" aria-hidden="true"></i>
-                                                                <?php echo (int)$batch['is_priority'] === 1 ? 'Remove priority' : 'Mark as priority'; ?>
-                                                            </button>
-                                                        </form>
-                                                        <button class="dropdown-item edit-batch" type="button" data-bs-toggle="modal" data-bs-target="#create-batch"
-                                                data-batch-id="<?php echo (int)$batch['batch_id']; ?>"
-                                                data-document-type="<?php echo sanitize($batch['document_type']); ?>"
-                                                data-batch-type="<?php echo sanitize($batch['batch_type']); ?>"
-                                                data-batch-status="<?php echo sanitize($batch['status']); ?>"
-                                                data-is-priority="<?php echo (int)$batch['is_priority']; ?>"
-                                                data-batch-date="<?php echo sanitize($batch['batch_date']); ?>"
-                                                data-sender-type="<?php echo sanitize($batch['sender_type']); ?>"
-                                                data-submitter-name="<?php echo sanitize($batch['submitter_name'] ?? ''); ?>"
-                                                data-recipient-type="<?php echo sanitize($batch['recipient_contact_type']); ?>"
-                                                data-recipient="<?php echo sanitize($batch['recipient']); ?>"
-                                                data-paper-count="<?php echo (int)$batch['paper_count']; ?>"
-                                                data-remarks="<?php echo sanitize($batch['remarks'] ?? ''); ?>"
-                                                data-batch-code="<?php echo sanitize($batch['batch_code']); ?>"
-                                                data-received-at="<?php echo sanitize((string)$batch['received_at']); ?>"
-                                                            <i class="bi bi-pencil me-2" aria-hidden="true"></i>Edit batch
+                                                <?php endif; ?>
+                                                <?php if ($batch['received_at'] === null): ?>
+                                                    <form method="POST" class="m-0">
+                                                        <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                                                        <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
+                                                        <input type="hidden" name="batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
+                                                        <button class="btn btn-sm btn-outline-danger batch-action-button" type="submit" name="delete_batch" title="Delete batch" aria-label="Delete <?php echo sanitize($batch['batch_code']); ?>" data-confirm-title="Delete this batch?" data-confirm-message="This permanently deletes the batch and all of its associated papers." data-confirm-button="Delete batch">
+                                                            <i class="bi bi-trash" aria-hidden="true"></i>
                                                         </button>
-                                                        <button class="dropdown-item" type="button" data-bs-toggle="collapse" data-bs-target="#papers<?php echo (int)$batch['batch_id']; ?>" aria-expanded="false" aria-controls="papers<?php echo (int)$batch['batch_id']; ?>">
-                                                            <i class="bi bi-eye me-2" aria-hidden="true"></i>View papers
-                                                        </button>
-                                                        <?php if (!empty($batch['tracking_token'])): ?>
-                                                            <button class="dropdown-item" type="button" onclick="showBatchQr(<?php echo htmlspecialchars(json_encode($batch['tracking_token'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($batch['batch_code'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
-                                                                <i class="bi bi-qr-code me-2" aria-hidden="true"></i>Show tracking QR
-                                                            </button>
-                                                        <?php endif; ?>
-                                                        <?php if ($batch['received_at'] === null): ?>
-                                                            <div class="dropdown-divider"></div>
-                                                            <form method="POST" class="m-0">
-                                                                <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
-                                                                <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
-                                                                <input type="hidden" name="batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
-                                                                <button class="dropdown-item text-danger" type="submit" name="delete_batch" data-confirm-title="Delete this batch?" data-confirm-message="This permanently deletes the batch and all of its associated papers." data-confirm-button="Delete batch">
-                                                                    <i class="bi bi-trash me-2" aria-hidden="true"></i>Delete batch
-                                                                </button>
-                                                            </form>
-                                                        <?php endif; ?>
-                                                    </div>
-                                                </div>
+                                                    </form>
+                                                <?php endif; ?>
                                             </div>
                                         </td>
                                     </tr>
                                     <tr class="collapse" id="papers<?php echo (int)$batch['batch_id']; ?>">
-                                        <td colspan="7" class="bg-light">
+                                        <td colspan="8" class="bg-light">
                                             <div class="py-2">
                                                 <?php if (trim((string)$batch['remarks']) !== ''): ?>
                                                     <p class="small mb-2"><strong>Batch remarks:</strong> <?php echo nl2br(sanitize($batch['remarks'])); ?></p>
@@ -906,14 +897,25 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                         <div class="min-w-0">
                                             <h6 class="mb-1 text-break fw-bold">
                                                 <?php echo sanitize($batch['batch_code']); ?>
-                                                <?php if ((int)$batch['is_priority'] === 1): ?>
-                                                    <span class="badge text-bg-warning"><i class="bi bi-star-fill me-1" aria-hidden="true"></i>Priority</span>
-                                                <?php endif; ?>
                                             </h6>
                                             <p class="mb-0 small text-muted"><?php echo sanitize(date('M j, Y', strtotime($batch['batch_date']))); ?></p>
                                         </div>
                                         <span class="badge rounded-pill flex-shrink-0 <?php echo $batch['status'] === 'Released' ? 'text-bg-success' : ($batch['status'] === 'For Release' ? 'text-bg-primary' : 'text-bg-warning'); ?>"><?php echo sanitize($batch['status']); ?></span>
                                     </div>
+                                        <div class="batch-priority-strip <?php echo (int)$batch['is_priority'] === 1 ? 'is-priority' : 'is-standard'; ?>">
+                                            <div>
+                                                <span class="small text-uppercase fw-bold">Handling</span>
+                                                <span class="fw-semibold"><?php echo (int)$batch['is_priority'] === 1 ? 'Priority review' : 'Standard'; ?></span>
+                                            </div>
+                                            <form method="POST" class="m-0">
+                                                <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                                                <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
+                                                <input type="hidden" name="priority_batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
+                                                <button class="btn btn-sm <?php echo (int)$batch['is_priority'] === 1 ? 'btn-warning' : 'btn-outline-secondary'; ?>" type="submit" name="toggle_batch_priority">
+                                                    <i class="bi bi-star<?php echo (int)$batch['is_priority'] === 1 ? '-fill' : ''; ?> me-1" aria-hidden="true"></i><?php echo (int)$batch['is_priority'] === 1 ? 'Remove priority' : 'Mark priority'; ?>
+                                                </button>
+                                            </form>
+                                        </div>
                                     <dl class="row small g-2 mt-2 mb-3">
                                         <dt class="col-4 text-muted">Type</dt>
                                         <dd class="col-8 mb-0 text-break"><?php echo sanitize($batch['batch_type']); ?></dd>
@@ -961,21 +963,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                                 </button>
                                             </form>
                                         <?php endif; ?>
-                                        <div class="dropdown">
-                                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions for <?php echo sanitize($batch['batch_code']); ?>">
-                                                <i class="bi bi-three-dots" aria-hidden="true"></i><span class="ms-1">Actions</span>
-                                            </button>
-                                            <div class="dropdown-menu dropdown-menu-end batch-actions-menu">
-                                                <form method="POST" class="m-0">
-                                                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
-                                                    <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
-                                                    <input type="hidden" name="priority_batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
-                                                    <button class="dropdown-item" type="submit" name="toggle_batch_priority">
-                                                        <i class="bi bi-star<?php echo (int)$batch['is_priority'] === 1 ? '-fill' : ''; ?> me-2" aria-hidden="true"></i>
-                                                        <?php echo (int)$batch['is_priority'] === 1 ? 'Remove priority' : 'Mark as priority'; ?>
-                                                    </button>
-                                                </form>
-                                                <button class="dropdown-item edit-batch" type="button" data-bs-toggle="modal" data-bs-target="#create-batch"
+                                        <button class="btn btn-sm btn-outline-primary batch-action-button edit-batch" type="button" title="Edit batch" aria-label="Edit <?php echo sanitize($batch['batch_code']); ?>" data-bs-toggle="modal" data-bs-target="#create-batch"
                                             data-batch-id="<?php echo (int)$batch['batch_id']; ?>"
                                             data-document-type="<?php echo sanitize($batch['document_type']); ?>"
                                             data-batch-type="<?php echo sanitize($batch['batch_type']); ?>"
@@ -990,29 +978,26 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                             data-remarks="<?php echo sanitize($batch['remarks'] ?? ''); ?>"
                                             data-batch-code="<?php echo sanitize($batch['batch_code']); ?>"
                                             data-received-at="<?php echo sanitize((string)$batch['received_at']); ?>">
-                                                    <i class="bi bi-pencil me-2" aria-hidden="true"></i>Edit batch
+                                            <i class="bi bi-pencil" aria-hidden="true"></i><span class="visually-hidden">Edit batch</span>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary batch-action-button" type="button" title="View papers" aria-label="View papers in <?php echo sanitize($batch['batch_code']); ?>" data-bs-toggle="collapse" data-bs-target="#mobile-papers<?php echo (int)$batch['batch_id']; ?>" aria-expanded="false" aria-controls="mobile-papers<?php echo (int)$batch['batch_id']; ?>">
+                                            <i class="bi bi-eye" aria-hidden="true"></i>
+                                        </button>
+                                        <?php if (!empty($batch['tracking_token'])): ?>
+                                            <button class="btn btn-sm btn-outline-secondary batch-action-button" type="button" title="Show tracking QR" aria-label="Show tracking QR for <?php echo sanitize($batch['batch_code']); ?>" onclick="showBatchQr(<?php echo htmlspecialchars(json_encode($batch['tracking_token'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($batch['batch_code'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                                <i class="bi bi-qr-code" aria-hidden="true"></i>
+                                            </button>
+                                        <?php endif; ?>
+                                        <?php if ($batch['received_at'] === null): ?>
+                                            <form method="POST" class="m-0">
+                                                <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                                                <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
+                                                <input type="hidden" name="batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
+                                                <button class="btn btn-sm btn-outline-danger batch-action-button" type="submit" name="delete_batch" title="Delete batch" aria-label="Delete <?php echo sanitize($batch['batch_code']); ?>" data-confirm-title="Delete this batch?" data-confirm-message="This permanently deletes the batch and all of its associated papers." data-confirm-button="Delete batch">
+                                                    <i class="bi bi-trash" aria-hidden="true"></i>
                                                 </button>
-                                                <button class="dropdown-item" type="button" data-bs-toggle="collapse" data-bs-target="#mobile-papers<?php echo (int)$batch['batch_id']; ?>" aria-expanded="false" aria-controls="mobile-papers<?php echo (int)$batch['batch_id']; ?>">
-                                                    <i class="bi bi-eye me-2" aria-hidden="true"></i>View papers
-                                                </button>
-                                                <?php if (!empty($batch['tracking_token'])): ?>
-                                                    <button class="dropdown-item" type="button" onclick="showBatchQr(<?php echo htmlspecialchars(json_encode($batch['tracking_token'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($batch['batch_code'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
-                                                        <i class="bi bi-qr-code me-2" aria-hidden="true"></i>Show tracking QR
-                                                    </button>
-                                                <?php endif; ?>
-                                                <?php if ($batch['received_at'] === null): ?>
-                                                    <div class="dropdown-divider"></div>
-                                                    <form method="POST" class="m-0">
-                                                        <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
-                                                        <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
-                                                        <input type="hidden" name="batch_id" value="<?php echo (int)$batch['batch_id']; ?>">
-                                                        <button class="dropdown-item text-danger" type="submit" name="delete_batch" data-confirm-title="Delete this batch?" data-confirm-message="This permanently deletes the batch and all of its associated papers." data-confirm-button="Delete batch">
-                                                            <i class="bi bi-trash me-2" aria-hidden="true"></i>Delete batch
-                                                        </button>
-                                                    </form>
-                                                <?php endif; ?>
-                                            </div>
-                                        </div>
+                                            </form>
+                                        <?php endif; ?>
                                     </div>
                                     <div class="collapse mt-3" id="mobile-papers<?php echo (int)$batch['batch_id']; ?>">
                                         <div class="rounded-3 bg-light p-3">

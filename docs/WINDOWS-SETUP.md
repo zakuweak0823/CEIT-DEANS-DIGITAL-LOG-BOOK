@@ -16,6 +16,10 @@ For example, the project may be located at
 `C:\xampp\htdocs\Office Logbook`. The folder name can vary; the app detects it
 automatically.
 
+Before enabling access from other computers or phones, review the
+[Security Guide](SECURITY.md), especially the mobile kiosk access and trusted
+network settings.
+
 ## First-time setup
 
 1. Copy the complete project folder into XAMPP's `htdocs` directory.
@@ -122,4 +126,4 @@ public internet.
 | QR tracker opens but says “Failed to fetch” | Use the office Apache LAN address with the project folder, for example `http://<office-LAN-IP>/<project-folder>/document-tracker?...` or HTTPS if Apache HTTPS is configured. In Admin Settings, set the Tracker base URL to that Apache project URL without `:5173`; port 5173 is only for the Vite mobile app. Confirm Apache/PHP and MySQL are running. |
 
 For mobile web development and Android builds, continue with the
-[Mobile app section in the main README](README.md#mobile-app).
+[Mobile app section in the main README](../README.md#mobile-app).
