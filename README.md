@@ -377,6 +377,10 @@ The generated web app is written to `mobile-ui/dist`. This output is ignored by
 Git and copied into the Android project by Capacitor when syncing/building.
 You can recreate generated output with the build command; do not use generated
 folders as the source when transferring the project.
+For a browser deployment, publish the complete `dist` directory together:
+`index.html` loads fingerprinted JavaScript and CSS files from `assets`, and
+those files must come from the same build. The build output is not committed to
+Git.
 
 ### Run on Android
 
