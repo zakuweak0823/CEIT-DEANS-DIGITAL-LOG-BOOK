@@ -55,6 +55,11 @@ export default defineConfig(({ mode }) => {
           secure: false,
           rewrite: (path) => path.replace(/^\/api/, projectUrlPath),
         },
+        [projectUrlPath]: {
+          target: 'http://localhost',
+          changeOrigin: true,
+          secure: false,
+        },
       },
     },
   };

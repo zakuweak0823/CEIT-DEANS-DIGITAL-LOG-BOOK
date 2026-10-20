@@ -48,15 +48,18 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        $stmt = safe_query(
-            $conn,
-            'SELECT b.batch_id, b.batch_code, b.document_type, b.batch_type, b.status, b.batch_date, b.paper_count, b.is_priority,
+        $lookupColumn = $trackingToken !== '' ? 'tracking_token' : 'batch_code';
+        $lookupValue = $trackingToken !== '' ? $trackingToken : $batchCode;
+        $batchSelect = 'SELECT b.batch_id, b.batch_code, b.document_type, b.batch_type, b.status, b.batch_date, b.paper_count, b.is_priority,
                     b.tracking_token, b.received_paper_count, b.intake_expected_count, b.intake_notes, b.received_at, b.received_by
              FROM document_batches b
-             WHERE (? <> \'\' AND b.tracking_token = ?) OR (? <> \'\' AND b.batch_code = ?)
-             LIMIT 1',
-            'ssss',
-            [$trackingToken, $trackingToken, $batchCode, $batchCode]
+             WHERE b.' . $lookupColumn . ' = ?
+             LIMIT 1';
+        $stmt = safe_query(
+            $conn,
+            $batchSelect,
+            's',
+            [$lookupValue]
         );
         if ($stmt === false) {
             http_response_code(500);
@@ -1286,6 +1289,7 @@ document.addEventListener('DOMContentLoaded', function () {
     let scanning = false;
     let verifying = false;
     let lastRejectedValue = '';
+    let lastScanAt = 0;
 
     function stopScanner() {
         scanning = false;
@@ -1543,24 +1547,28 @@ document.addEventListener('DOMContentLoaded', function () {
             if (scanning) scanFrame = requestAnimationFrame(scanFrameLoop);
             return;
         }
-        const scale = Math.min(1, 640 / video.videoWidth);
-        scanCanvas.width = Math.round(video.videoWidth * scale);
-        scanCanvas.height = Math.round(video.videoHeight * scale);
-        scanContext.drawImage(video, 0, 0, scanCanvas.width, scanCanvas.height);
-        const image = scanContext.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
-        const code = window.jsQR(image.data, image.width, image.height, { inversionAttempts: 'dontInvert' });
-        if (code && !verifying && code.data !== lastRejectedValue) {
-            lastRejectedValue = code.data;
-            verifying = true;
-            validateSystemQr(code.data).then(function (accepted) {
-                verifying = false;
-                if (accepted) return;
-                window.setTimeout(function () {
-                    if (lastRejectedValue === code.data) lastRejectedValue = '';
-                }, 1200);
-            }).catch(function () {
-                verifying = false;
-            });
+        const now = performance.now();
+        if (!verifying && now - lastScanAt >= 180) {
+            lastScanAt = now;
+            const scale = Math.min(1, 640 / video.videoWidth);
+            scanCanvas.width = Math.round(video.videoWidth * scale);
+            scanCanvas.height = Math.round(video.videoHeight * scale);
+            scanContext.drawImage(video, 0, 0, scanCanvas.width, scanCanvas.height);
+            const image = scanContext.getImageData(0, 0, scanCanvas.width, scanCanvas.height);
+            const code = window.jsQR(image.data, image.width, image.height, { inversionAttempts: 'dontInvert' });
+            if (code && code.data !== lastRejectedValue) {
+                lastRejectedValue = code.data;
+                verifying = true;
+                validateSystemQr(code.data).then(function (accepted) {
+                    verifying = false;
+                    if (accepted) return;
+                    window.setTimeout(function () {
+                        if (lastRejectedValue === code.data) lastRejectedValue = '';
+                    }, 1200);
+                }).catch(function () {
+                    verifying = false;
+                });
+            }
         }
         scanFrame = requestAnimationFrame(scanFrameLoop);
     }
@@ -1570,6 +1578,7 @@ document.addEventListener('DOMContentLoaded', function () {
         resultPanel.replaceChildren();
         lastRejectedValue = '';
         verifying = false;
+        lastScanAt = 0;
         if (!window.isSecureContext) {
             showScannerError('Camera access is blocked because this page is not using a secure HTTPS connection. On a phone, “localhost” means the phone itself. Open this site using an HTTPS address with a trusted certificate, or upload a QR image below.');
             return;

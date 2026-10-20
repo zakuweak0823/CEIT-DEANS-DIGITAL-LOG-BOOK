@@ -98,8 +98,7 @@ const verifyOfficialDocumentTrackerQr = async (payload, trackerBaseUrl) => {
   }
   const expectedPath = expectedUrl.pathname.replace(/\/+$/, '');
   if (
-    scannedUrl.origin !== expectedUrl.origin
-    || scannedUrl.pathname.replace(/\/+$/, '') !== expectedPath
+    scannedUrl.pathname.replace(/\/+$/, '') !== expectedPath
     || scannedUrl.hash !== ''
     || Array.from(scannedUrl.searchParams.keys()).length !== 1
   ) {
@@ -116,7 +115,16 @@ const verifyOfficialDocumentTrackerQr = async (payload, trackerBaseUrl) => {
   if (!response.ok || !result.success) {
     throw new Error(result.message || 'This tracking QR code could not be verified by the office.');
   }
-  return scannedUrl;
+
+  let trackerUrl = new URL(expectedUrl);
+  if (window.location.port === '5173' && import.meta.env.VITE_PROJECT_PATH) {
+    trackerUrl = new URL(
+      `${import.meta.env.VITE_PROJECT_PATH}/document-tracker`,
+      window.location.origin,
+    );
+  }
+  trackerUrl.search = new URLSearchParams({ token }).toString();
+  return trackerUrl;
 };
 
 function App() {
@@ -2011,7 +2019,7 @@ function App() {
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-600">Document tracking</p>
                   <h2 id="document-scanner-title" className="mt-1 text-xl font-bold text-emerald-950">Scan office QR code</h2>
-                  <p className="mt-1 text-sm leading-relaxed text-emerald-700">Only QR codes registered by the CEIT Dean’s Office can open a document record.</p>
+                  <p className="mt-1 text-sm leading-relaxed text-emerald-700">The office verifies each QR code, then opens its tracker through the server you are using now. Older QR codes can work after the Wi-Fi address changes.</p>
                 </div>
                 <button type="button" aria-label="Close QR scanner" onClick={() => setDocumentScannerOpen(false)} className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-full border border-emerald-200 text-lg font-semibold text-emerald-800">×</button>
               </div>

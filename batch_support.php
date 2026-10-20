@@ -76,6 +76,7 @@ function ensure_batch_storage($conn)
         recipient VARCHAR(255) NOT NULL,
         remarks TEXT,
         tracking_token CHAR(64) DEFAULT NULL,
+        INDEX idx_document_batches_tracking_token (tracking_token),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
@@ -96,6 +97,15 @@ function ensure_batch_storage($conn)
         $conn->query("ALTER TABLE document_batches ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'Pending'");
     }
     $conn->query('ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS tracking_token CHAR(64) DEFAULT NULL');
+    $indexResult = $conn->query("SHOW INDEX FROM document_batches WHERE Column_name = 'tracking_token'");
+    if ($indexResult === false) {
+        throw new RuntimeException('Could not check batch tracking-token index: ' . $conn->error);
+    }
+    $hasTrackingTokenIndex = $indexResult->num_rows > 0;
+    $indexResult->free();
+    if (!$hasTrackingTokenIndex && $conn->query('CREATE INDEX idx_document_batches_tracking_token ON document_batches (tracking_token)') === false) {
+        throw new RuntimeException('Could not create batch tracking-token index: ' . $conn->error);
+    }
     $conn->query("ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS sender_type VARCHAR(20) NOT NULL DEFAULT 'Student'");
     $conn->query("ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS recipient_contact_type VARCHAR(20) NOT NULL DEFAULT 'Unassigned'");
     $conn->query('ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS paper_count INT UNSIGNED NOT NULL DEFAULT 0');

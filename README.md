@@ -311,11 +311,14 @@ configured, for example `http://192.168.1.20/CEIT-DEANS-DIGITAL-LOG-BOOK` on a
 trusted local network. Do not use the Vite `:5173` address here: that is where
 the mobile app runs; the QR status page and API are served by Apache. Leave
 the setting blank only when the address used to reach the API is also the
-correct address for the tracker. Update it if the host IP, project folder, or
-future domain changes. The camera scanner accepts only links on this
-configured tracker address and verifies each token with the office before
-opening it. QR tracking can be disabled in the same Admin Settings section;
-disabling it blocks existing QR links as well as new ones.
+correct address for the tracker. Update it if the project folder or future
+domain changes. When scanned inside the mobile app on its HTTPS LAN address,
+the app verifies each token with the office and opens the tracker through that
+current server, so QR codes printed on a previous Wi-Fi network can still work.
+Scanning an old QR directly with the phone's camera still uses its old address;
+open the mobile app and use its QR scanner instead. QR tracking can be disabled
+in the same Admin Settings section; disabling it blocks existing QR links as
+well as new ones.
 
 If the browser still reports an untrusted connection, confirm the CA is
 installed and fully trusted, and that the certificate matches the address
