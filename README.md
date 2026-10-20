@@ -272,10 +272,11 @@ and require browser permission. Provider credentials belong in the application
 settings or server environment—not in Git-tracked files or database exports.
 
 Use the **Shared form labels** section in Admin Settings to rename sender,
-recipient, document type, contact number, and remarks fields across admin
-document/bulk-paper forms and the mobile app. The From/submitter-type and
-Recipient switches can hide those optional fields in both interfaces; hidden
-values are saved as blank.
+recipient, document type, contact number, and remarks fields across supported
+admin document/bulk-paper forms and the mobile app. The submitter-type switch
+can hide that field in mobile document and Bulk Papers forms; hidden mobile
+submissions use **Other** as the submitter type. Incoming document forms do
+not request a recipient.
 The **Mobile app appearance and experience** section lets administrators keep
 the existing Classic kiosk UI as the default or switch to a translucent green
 Glass theme, customize the kiosk header and welcome text, and enable or disable
@@ -288,6 +289,25 @@ The mobile **Submit Document**
 form requires an 11-digit contact number; **Quick Submit** remains contact-free.
 Mobile document-status lookup also includes bulk-paper batches assigned to the
 entered contact number and displays each batch's current status and paper count.
+
+### CMD log data maintenance
+
+Start **CMD log** from the administrator menu to open the live command window.
+In that window, `/clear` only clears the terminal display. Use
+`/clear incoming`, `/clear outgoing`, `/clear batches`, `/clear borrowed`, or
+`/clear sms` to request deletion of those records; `/clear all` clears all
+listed log data. `/purge SCOPE` is an equivalent command. Each data-clear
+request shows a prominent warning and affected-record counts, then requires
+typing `YES` and an exact second phrase such as `DELETE INCOMING`. Use
+`/cancel` at either prompt to abort.
+
+The confirmation expires after two minutes. Empty affected tables have their
+auto-increment reset to 1. Incoming and Outgoing share document references, so
+clearing only one direction cannot reset the shared document counter while
+records of the other direction remain; existing IDs are preserved. Clearing
+`all` also resets the document, batch, batch-paper, borrowed-item, SMS, and
+mobile submission audit counters. Admin accounts, settings, categories, and
+API tokens are kept.
 
 ### Bulk-paper intake and receipts
 
@@ -513,6 +533,7 @@ identifies the Git commit that contains the recorded changes.
 | **V1.13 — Certificate download in Admin Settings** | [`28d774d`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/28d774d) | Added a download button to Admin Settings for the public local development CA certificate, with a clear unavailable notice if the certificate is not installed on the server. Updated the phone QR-scanning setup instructions to use the button. |
 | **V1.14 — Clear submitter fields and reliable QR tracking** | [`e51c23c`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/e51c23c) | Replaced the ambiguous mobile “From” category label with “Submitter type”; made the admin submitting department/office field explicitly optional; fixed tracker API routing for installations in a named project folder; and documented the field meanings and phone tracker troubleshooting. |
 | **V1.15 — Automatic LAN camera certificates** | This patch | `npm run dev:lan` now provisions a host-specific local CA and LAN-IP-matched TLS certificate with XAMPP OpenSSL when needed. Private keys remain outside the repository; the public CA can be downloaded from Admin Settings and trusted on phones. |
+| **V1.18 — CMD log data maintenance** | This patch | Added CMD-only commands to clear Incoming, Outgoing, batch, borrowed-item, SMS, or all log data with an affected-record warning and two confirmations. Empty tables reset their auto-increment; the shared Incoming/Outgoing document sequence is preserved whenever records remain. |
 
 Earlier chat iterations included repeated README and footer refinements,
 pending-document bubble improvements and its hide/show setting, admin

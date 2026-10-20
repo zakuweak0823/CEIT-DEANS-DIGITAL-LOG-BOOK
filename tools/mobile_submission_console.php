@@ -48,8 +48,200 @@ function print_console_table_row($values, $widths)
 function latest_document_id($conn)
 {
     $result = $conn->query('SELECT COALESCE(MAX(doc_id), 0) AS latest_id FROM documents');
+    if ($result === false) {
+        throw new RuntimeException('Could not read the latest document reference.');
+    }
     $row = $result->fetch_assoc();
+    $result->free();
     return (int)$row['latest_id'];
+}
+
+function console_count_rows($conn, $query, $types = '', $params = [])
+{
+    $stmt = safe_query($conn, $query, $types, $params);
+    if ($stmt === false) {
+        throw new RuntimeException('Could not count records for the requested CMD log operation.');
+    }
+    $result = mysqli_stmt_get_result($stmt);
+    $row = mysqli_fetch_row($result);
+    mysqli_stmt_close($stmt);
+    if (!$row) {
+        throw new RuntimeException('The CMD log record count could not be read.');
+    }
+    return (int)$row[0];
+}
+
+function console_execute_clear_query($conn, $query, $types = '', $params = [])
+{
+    $stmt = safe_query($conn, $query, $types, $params);
+    if ($stmt === false) {
+        throw new RuntimeException('A database deletion for the requested CMD log operation failed.');
+    }
+    $deleted = max(0, mysqli_stmt_affected_rows($stmt));
+    mysqli_stmt_close($stmt);
+    return $deleted;
+}
+
+function console_clear_preview($conn, $scope)
+{
+    if (in_array($scope, ['incoming', 'outgoing'], true)) {
+        $type = ucfirst($scope);
+        return [
+            'documents' => console_count_rows($conn, 'SELECT COUNT(*) FROM documents WHERE type = ?', 's', [$type]),
+            'batches' => console_count_rows($conn, 'SELECT COUNT(*) FROM document_batches WHERE document_type = ?', 's', [$type]),
+            'batch paper links' => console_count_rows(
+                $conn,
+                'SELECT COUNT(*) FROM batch_papers p INNER JOIN documents d ON d.doc_id = p.doc_id WHERE d.type = ?',
+                's',
+                [$type]
+            ),
+            'mobile submission audit rows' => console_count_rows(
+                $conn,
+                'SELECT COUNT(*) FROM mobile_submission_logs l INNER JOIN documents d ON d.doc_id = l.document_id WHERE d.type = ?',
+                's',
+                [$type]
+            ),
+        ];
+    }
+
+    if ($scope === 'batches') {
+        return [
+            'batches' => console_count_rows($conn, 'SELECT COUNT(*) FROM document_batches'),
+            'paper documents' => console_count_rows($conn, 'SELECT COUNT(*) FROM batch_papers'),
+            'mobile submission audit rows' => console_count_rows(
+                $conn,
+                'SELECT COUNT(*) FROM mobile_submission_logs l INNER JOIN batch_papers p ON p.doc_id = l.document_id'
+            ),
+        ];
+    }
+
+    if ($scope === 'borrowed') {
+        return ['borrowed-item records' => console_count_rows($conn, 'SELECT COUNT(*) FROM borrowed_items')];
+    }
+
+    if ($scope === 'sms') {
+        return ['SMS log records' => console_count_rows($conn, 'SELECT COUNT(*) FROM sms_logs')];
+    }
+
+    if ($scope === 'all') {
+        return [
+            'documents' => console_count_rows($conn, 'SELECT COUNT(*) FROM documents'),
+            'batches' => console_count_rows($conn, 'SELECT COUNT(*) FROM document_batches'),
+            'batch paper links' => console_count_rows($conn, 'SELECT COUNT(*) FROM batch_papers'),
+            'borrowed-item records' => console_count_rows($conn, 'SELECT COUNT(*) FROM borrowed_items'),
+            'SMS log records' => console_count_rows($conn, 'SELECT COUNT(*) FROM sms_logs'),
+            'mobile submission audit rows' => console_count_rows($conn, 'SELECT COUNT(*) FROM mobile_submission_logs'),
+        ];
+    }
+
+    throw new InvalidArgumentException('Choose incoming, outgoing, batches, borrowed, sms, or all.');
+}
+
+function console_clear_log_scope($conn, $scope)
+{
+    $counterTables = [];
+    if (!$conn->begin_transaction()) {
+        throw new RuntimeException('Could not start a safe transaction for the CMD log operation.');
+    }
+
+    try {
+        if (in_array($scope, ['incoming', 'outgoing'], true)) {
+            $type = ucfirst($scope);
+            console_execute_clear_query(
+                $conn,
+                'DELETE l FROM mobile_submission_logs l INNER JOIN documents d ON d.doc_id = l.document_id WHERE d.type = ?',
+                's',
+                [$type]
+            );
+            console_execute_clear_query($conn, 'DELETE FROM documents WHERE type = ?', 's', [$type]);
+            console_execute_clear_query($conn, 'DELETE FROM document_batches WHERE document_type = ?', 's', [$type]);
+            $counterTables = ['documents', 'mobile_submission_logs', 'document_batches', 'batch_papers'];
+        } elseif ($scope === 'batches') {
+            console_execute_clear_query(
+                $conn,
+                'DELETE l FROM mobile_submission_logs l INNER JOIN batch_papers p ON p.doc_id = l.document_id'
+            );
+            console_execute_clear_query(
+                $conn,
+                'DELETE d FROM documents d INNER JOIN batch_papers p ON p.doc_id = d.doc_id'
+            );
+            console_execute_clear_query($conn, 'DELETE FROM document_batches');
+            $counterTables = ['documents', 'mobile_submission_logs', 'document_batches', 'batch_papers'];
+        } elseif ($scope === 'borrowed') {
+            console_execute_clear_query($conn, 'DELETE FROM borrowed_items');
+            $counterTables = ['borrowed_items'];
+        } elseif ($scope === 'sms') {
+            console_execute_clear_query($conn, 'DELETE FROM sms_logs');
+            $counterTables = ['sms_logs'];
+        } elseif ($scope === 'all') {
+            console_execute_clear_query($conn, 'DELETE FROM mobile_submission_logs');
+            console_execute_clear_query($conn, 'DELETE FROM documents');
+            console_execute_clear_query($conn, 'DELETE FROM document_batches');
+            console_execute_clear_query($conn, 'DELETE FROM borrowed_items');
+            console_execute_clear_query($conn, 'DELETE FROM sms_logs');
+            $counterTables = ['documents', 'document_batches', 'batch_papers', 'borrowed_items', 'sms_logs', 'mobile_submission_logs'];
+        } else {
+            throw new InvalidArgumentException('Choose incoming, outgoing, batches, borrowed, sms, or all.');
+        }
+
+        if (!$conn->commit()) {
+            throw new RuntimeException('The CMD log data deletion could not be committed.');
+        }
+    } catch (Throwable $error) {
+        $conn->rollback();
+        throw $error;
+    }
+
+    $counterResults = [];
+    // Keep IDs stable whenever another category still has rows in a shared table.
+    foreach ($counterTables as $table) {
+        $remaining = console_count_rows($conn, 'SELECT COUNT(*) FROM ' . $table);
+        if ($remaining > 0) {
+            $counterResults[$table] = 'kept at its current sequence (' . number_format($remaining) . ' rows remain)';
+            continue;
+        }
+        if (!$conn->query('ALTER TABLE ' . $table . ' AUTO_INCREMENT = 1')) {
+            throw new RuntimeException(
+                'The records were deleted, but the ' . $table . ' auto-increment could not be reset. Check the MySQL permissions and error log.'
+            );
+        }
+        $counterResults[$table] = 'reset to 1';
+    }
+
+    return $counterResults;
+}
+
+function print_console_warning($scope, $preview)
+{
+    $scopeLabel = strtoupper($scope);
+    $border = str_repeat('!', 72);
+    echo "\r\n+" . $border . "+\r\n";
+    echo "|  !!! WARNING: PERMANENT DATA DELETION - NOT A SCREEN CLEAR !!!\r\n";
+    echo "|  Target: " . $scopeLabel . "\r\n";
+    echo "+" . $border . "+\r\n";
+    foreach ($preview as $label => $count) {
+        echo '  ' . ucfirst($label) . ': ' . number_format($count) . "\r\n";
+    }
+    if (in_array($scope, ['incoming', 'outgoing'], true)) {
+        echo "  Linked batch records and mobile submission audit rows are included.\r\n";
+        echo "  Incoming and Outgoing share document IDs. The document counter can\r\n";
+        echo "  reset only when no documents of either direction remain.\r\n";
+    } elseif ($scope === 'batches') {
+        echo "  Batch paper documents and their mobile audit rows are included.\r\n";
+        echo "  The shared document counter resets only if no documents remain.\r\n";
+    } elseif ($scope === 'borrowed') {
+        echo "  Borrower/category setup and all other log types will be kept.\r\n";
+    } elseif ($scope === 'sms') {
+        echo "  SMS/provider settings and all other log types will be kept.\r\n";
+    } else {
+        echo "  All documents, batches, borrowed-item records, SMS logs, and\r\n";
+        echo "  mobile submission audit rows will be deleted.\r\n";
+        echo "  Admin accounts, settings, categories, and API tokens will be kept.\r\n";
+    }
+    echo "  Empty affected tables will have their auto-increment reset to 1.\r\n";
+    echo "  Type YES, then type DELETE " . $scopeLabel . " to confirm twice.\r\n";
+    echo "  Type /cancel at either prompt to keep all data.\r\n";
+    echo "+" . $border . "+\r\n\r\n";
 }
 
 function print_monitor_heading($tableWidth)
@@ -126,8 +318,53 @@ function print_command_prompt()
     fflush(STDOUT);
 }
 
-function handle_monitor_command($command, $conn, $widths, $tableWidth, &$lastDocumentId)
+function handle_monitor_command($command, $conn, $widths, $tableWidth, &$lastDocumentId, &$pendingClear)
 {
+    if ($pendingClear !== null) {
+        if (time() > $pendingClear['expires_at']) {
+            $pendingClear = null;
+            echo "\r\n  WARNING: Data-clear confirmation expired. No data was changed.\r\n\r\n";
+            return true;
+        }
+        if (strtolower(trim($command)) === '/cancel' || strtoupper(trim($command)) === 'NO') {
+            $pendingClear = null;
+            echo "\r\n  Data-clear cancelled. No data was changed.\r\n\r\n";
+            return true;
+        }
+        if ($pendingClear['stage'] === 'yes') {
+            if (strtoupper(trim($command)) !== 'YES') {
+                $pendingClear = null;
+                echo "\r\n  WARNING: Confirmation did not match. Data-clear cancelled; no data was changed.\r\n\r\n";
+                return true;
+            }
+            $pendingClear['stage'] = 'phrase';
+            echo "\r\n  SECOND CONFIRMATION: Type " . $pendingClear['phrase'] . " exactly to permanently delete these records, or /cancel.\r\n\r\n";
+            return true;
+        }
+        if (strtoupper(trim($command)) !== $pendingClear['phrase']) {
+            $pendingClear = null;
+            echo "\r\n  WARNING: Final confirmation did not match. Data-clear cancelled; no data was changed.\r\n\r\n";
+            return true;
+        }
+
+        $scope = $pendingClear['scope'];
+        $pendingClear = null;
+        try {
+            $counterResults = console_clear_log_scope($conn, $scope);
+            $lastDocumentId = latest_document_id($conn);
+            echo "\r\n  DATA CLEAR COMPLETE: " . strtoupper($scope) . " records were deleted.\r\n";
+            foreach ($counterResults as $table => $result) {
+                echo '  ' . $table . ' auto-increment: ' . $result . ".\r\n";
+            }
+            echo "\r\n";
+        } catch (Throwable $error) {
+            error_log('CMD log data clear failed: ' . $error->getMessage());
+            echo "\r\n  WARNING: " . $error->getMessage() . "\r\n";
+            echo "  Check the database before retrying; the deletion may already have committed if only a counter reset failed.\r\n\r\n";
+        }
+        return true;
+    }
+
     $parts = preg_split('/\s+/', trim($command));
     $name = strtolower($parts[0] ?? '');
     $argument = $parts[1] ?? null;
@@ -145,6 +382,10 @@ function handle_monitor_command($command, $conn, $widths, $tableWidth, &$lastDoc
         echo "  /find TEXT     Search sender, subject, recipient, status, or reference\r\n";
         echo "  /status        Show monitor state and document totals\r\n";
         echo "  /clear         Clear the CMD window and redraw the latest table\r\n";
+        echo "  /clear SCOPE   Clear a data log after two confirmations\r\n";
+        echo "  /purge SCOPE   Permanently clear a data log; requires two confirmations\r\n";
+        echo "                 SCOPE: incoming, outgoing, batches, borrowed, sms, all\r\n";
+        echo "  /cancel        Cancel a pending data-clear confirmation\r\n";
         echo "  /pause         Stop monitoring and close this CMD window\r\n";
         echo "  /exit          Exit the monitor\r\n\r\n";
         return true;
@@ -196,6 +437,31 @@ function handle_monitor_command($command, $conn, $widths, $tableWidth, &$lastDoc
         return true;
     }
 
+    if ($name === '/purge' || ($name === '/clear' && count($parts) > 1)) {
+        $supportedScopes = ['incoming', 'outgoing', 'batches', 'borrowed', 'sms', 'all'];
+        if (count($parts) !== 2 || !in_array(strtolower($argument ?? ''), $supportedScopes, true)) {
+            echo "\r\n  Usage: /clear|/purge incoming|outgoing|batches|borrowed|sms|all\r\n";
+            echo "  This permanently deletes selected records and requires two confirmations.\r\n\r\n";
+            return true;
+        }
+        $scope = strtolower($argument);
+        try {
+            $preview = console_clear_preview($conn, $scope);
+        } catch (Throwable $error) {
+            error_log('CMD log data clear preview failed: ' . $error->getMessage());
+            echo "\r\n  WARNING: Could not prepare this data-clear request. No data was changed.\r\n\r\n";
+            return true;
+        }
+        print_console_warning($scope, $preview);
+        $pendingClear = [
+            'scope' => $scope,
+            'phrase' => 'DELETE ' . strtoupper($scope),
+            'stage' => 'yes',
+            'expires_at' => time() + 120,
+        ];
+        return true;
+    }
+
     if ($name === '/clear' && count($parts) === 1) {
         if (PHP_OS_FAMILY === 'Windows') {
             system('cls');
@@ -223,6 +489,7 @@ function handle_monitor_command($command, $conn, $widths, $tableWidth, &$lastDoc
 $widths = [6, 16, 9, 16, 22, 16, 12];
 $tableWidth = array_sum($widths) + (count($widths) * 3) + 1;
 $lastDocumentId = latest_document_id($conn);
+$pendingClear = null;
 if (defined('STDIN')) {
     stream_set_blocking(STDIN, false);
 }
@@ -240,7 +507,7 @@ while (true) {
     if (defined('STDIN')) {
         $command = fgets(STDIN);
         if ($command !== false && trim($command) !== '') {
-            if (!handle_monitor_command(trim($command), $conn, $widths, $tableWidth, $lastDocumentId)) {
+            if (!handle_monitor_command(trim($command), $conn, $widths, $tableWidth, $lastDocumentId, $pendingClear)) {
                 break;
             }
             print_command_prompt();

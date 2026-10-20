@@ -226,6 +226,18 @@ commit.
 - Added a dedicated security guide covering the access model, existing
   controls, deployment requirements, and important limitations.
 
+## V1.18 — CMD log data maintenance
+
+- Added CMD-only `/clear SCOPE` and `/purge SCOPE` commands for Incoming,
+  Outgoing, batches, borrowed items, SMS logs, or all listed log data.
+- Show the affected record counts and a prominent warning before deletion.
+  Data removal requires typing `YES` followed by a scope-specific phrase;
+  `/cancel` aborts and confirmations expire after two minutes.
+- Reset affected auto-increment counters when their tables are empty. Incoming
+  and Outgoing share document IDs, so their sequence is not reset while other
+  documents remain. Admin accounts, settings, categories, and API tokens are
+  not removed by `/clear all`.
+
 ## Earlier chat requests included in the project snapshot
 
 These requests were part of the same project conversation. They do not all
