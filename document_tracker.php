@@ -79,6 +79,7 @@ $apiUrl = ($apiPath === '' ? '' : '/' . $apiPath) . '/mobile-api.php';
                     </dl>
                     <p class="footer">Status updates are recorded by the office. This page refreshes automatically every minute.</p>
                     <button type="button" id="refreshTracker">Refresh status</button>
+                    <button type="button" id="returnFromTracker">Return</button>
                 </section>
             <?php endif; ?>
         </div>
@@ -114,6 +115,13 @@ async function refreshDocumentStatus() {
 }
 
 document.getElementById('refreshTracker').addEventListener('click', refreshDocumentStatus);
+document.getElementById('returnFromTracker').addEventListener('click', function () {
+    if (window.history.length > 1) {
+        window.history.back();
+    } else {
+        window.location.href = './';
+    }
+});
 refreshDocumentStatus();
 window.setInterval(refreshDocumentStatus, 60000);
 </script>

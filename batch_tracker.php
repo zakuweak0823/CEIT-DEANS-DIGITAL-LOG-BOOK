@@ -118,6 +118,7 @@ if (!$storageError && preg_match('/^[a-f0-9]{64}$/', $trackingToken)) {
                 <?php endif; ?>
                 <p class="small text-secondary mt-4 mb-0 no-print">Contact the CEIT Dean's Office for assistance with this batch.</p>
             <?php endif; ?>
+            <button type="button" class="btn btn-outline-success mt-3 no-print" onclick="if (window.history.length > 1) window.history.back(); else window.location.href = './';">Return</button>
         </div>
     </div>
 </main>
