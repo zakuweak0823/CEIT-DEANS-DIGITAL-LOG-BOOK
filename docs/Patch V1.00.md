@@ -158,7 +158,7 @@ commit.
 
 ## V1.14 — Clear submitter fields and reliable QR tracking
 
-**Git commit:** See the V1.14 entry in the README patch history.
+**Git commit:** [`e51c23c`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/e51c23c)
 
 - Renamed the Student/Faculty category to **Submitter type** in the mobile
   form and shared Admin Settings labels, distinguishing it from the required
