@@ -26,6 +26,7 @@
 - [Overview](#overview)
 - [Highlights](#highlights)
 - [Start here](#start-here)
+- [Quick start](#quick-start)
 - [What you can do](#what-you-can-do)
 - [Technology](#technology)
 - [Get started](#get-started)
@@ -33,6 +34,7 @@
 - [Mobile app](#mobile-app)
 - [Project layout](#project-layout)
 - [Patch history](#patch-history)
+- [Security features](#security-features)
 - [Security before deployment](#security-before-deployment)
 - [Security guide](docs/SECURITY.md)
 - [Troubleshooting](#troubleshooting)
@@ -53,6 +55,30 @@ PHP API and MySQL database.
 | Move the app and records to another computer | [Transfer instructions](docs/WINDOWS-SETUP.md#move-the-application-and-database) |
 | Run or build the mobile client | [Mobile app instructions](#mobile-app) |
 | Deploy outside a trusted local network | Read [Security before deployment](#security-before-deployment) first. |
+
+## Quick start
+
+The shortest path to a working admin portal on a Windows computer:
+
+1. **Install XAMPP** (Apache, MySQL, PHP 8+) and copy this project folder into
+   `C:\xampp\htdocs\`.
+2. **Start Apache and MySQL** from the XAMPP Control Panel.
+3. **Create the database:** open <http://localhost/phpmyadmin>, choose
+   **Import**, and import [`database/schema.sql`](database/schema.sql).
+4. **Start the portal:** double-click [`start-office-server.bat`](start-office-server.bat).
+   Approve the Windows firewall prompt for **Private networks** only.
+5. **Sign in** at `http://localhost/<your-folder-name>/login` with the seeded
+   `admin` / `admin` account.
+6. **Change the password immediately:** open **Administrator accounts →
+   Change your password** and choose a unique password of at least 12
+   characters.
+7. **Create staff accounts** (optional) under **Administrator accounts** so
+   each person signs in with their own credentials.
+8. **Review Settings:** disable unauthenticated mobile kiosk access unless the
+   network is fully trusted (see [Security before deployment](#security-before-deployment)).
+
+Mobile app, phone QR scanning, and moving to another computer are covered in
+the sections below and in the [Windows setup guide](docs/WINDOWS-SETUP.md).
 
 ## Highlights
 
@@ -258,10 +284,42 @@ back it up, run
 once, then sign in as `admin` and change its password from
 **Administrator accounts**.
 
-The Super Admin can create, reset, and remove standard administrator accounts.
-The login page's **Forgot your password?** link explains how to request a
-Super Admin reset. If the Super Admin account itself is inaccessible, the
-system administrator must recover it through trusted database access.
+The login page has a **Show / Hide password** button (the eye icon inside the
+password field) so you can check what you typed before signing in. It only
+changes how the field is displayed in your browser; the password is never
+stored or sent until you press **Sign In**.
+
+#### Administrator accounts and password recovery
+
+| Role | What it can do |
+| --- | --- |
+| **Super Admin** | Everything a standard admin can do, plus open **Administrator accounts** to create, reset, and remove standard administrator accounts and change its own password. |
+| **Admin** | Use the logbook (documents, bulk documents, borrowed items, reports, settings). Cannot manage accounts. |
+
+**Create a staff account:** sign in as Super Admin → **Administrator accounts**
+→ enter a username (3–100 letters, numbers, `.`, `_`, or `-`) and a password
+of at least 12 characters, confirmed twice → **Create account**. Share the initial password through a
+secure channel, such as in person.
+
+**A standard admin forgot their password:**
+
+1. On the login page, they choose **Forgot your password?** and follow the
+   on-screen steps.
+2. They ask a Super Admin to reset it.
+3. The Super Admin opens **Administrator accounts**, selects **Reset password**
+   for that account, enters a new temporary password (12+ characters) twice,
+   and chooses **Save password**.
+4. The Super Admin shares the temporary password securely. Resetting a
+   password signs that account out of any existing sessions.
+
+**The Super Admin forgot their password:** the web portal cannot reset a Super
+Admin password. The trusted system administrator must recover it through
+direct database access (for example, phpMyAdmin) after backing up the
+database. Store the Super Admin credentials in an approved password manager or
+sealed offline record so this is rarely needed.
+
+Password reset by email is intentionally not provided: admin accounts have no
+recovery email address and the system does not require SMTP to be configured.
 
 ### 3. Configure workspace and communication settings (optional)
 
@@ -495,6 +553,10 @@ another server, set `VITE_API_ENDPOINT` at build time to the complete
 │   ├── mobile_submission_console.php
 │   └── start_mobile_submission_log.bat
 ├── start-office-server.bat           # Double-click Windows launcher
+├── auth.php                          # Sessions, CSRF checks, and role enforcement
+├── login.php / forgot_password.php   # Sign-in (with show/hide password) and recovery guidance
+├── users.php                         # Super Admin account management
+├── sla_support.php                   # Overdue-record time limits
 ├── db.php                            # Database connection and query helpers
 ├── header.php / footer.php           # Shared admin layout
 ├── dashboard.php                     # Admin dashboard
@@ -553,6 +615,102 @@ redesign. Some iterations were consolidated into later commits rather than
 saved as separate Git patches. See [Patch V1.00.md](docs/Patch%20V1.00.md) for the
 expanded notes.
 
+## Security features
+
+A summary of the protections built into the system, grouped by type. See the
+[Security guide](docs/SECURITY.md) for operational detail.
+
+### Authentication and accounts
+
+- **Password hashing:** passwords are stored with PHP `password_hash()` and
+  checked with `password_verify()`; plaintext passwords are never stored for
+  new or reset accounts. The seeded plaintext `admin` password is upgraded to
+  a hash on first successful use.
+- **Password strength:** new and reset administrator passwords must be at least
+  12 characters.
+- **Role-based access control:** Super Admin and Admin roles are re-verified
+  against the database on every protected request. Account management is
+  restricted to Super Admins.
+- **Account safeguards:** Super Admin accounts cannot be reset or deleted
+  through the portal, and an administrator cannot delete their own account.
+- **Controlled recovery:** there is no self-service reset link that an attacker
+  could abuse; resets require a Super Admin or trusted database access.
+
+### Session security
+
+- **Hardened cookies:** session cookies are `HttpOnly` (not readable by page
+  scripts) and `SameSite=Lax`, and `Secure` when served over HTTPS.
+- **Session fixation protection:** the session ID is regenerated on sign-in and
+  after a password change.
+- **Password-bound sessions:** each session is tied to the account's current
+  password hash, so a password reset immediately signs out existing sessions.
+- **Sign-out:** signing out destroys the server-side session.
+
+### Request and input protection
+
+- **CSRF protection:** every admin form submission (POST) must include a
+  random per-session token, compared in constant time.
+- **SQL injection prevention:** database values are bound through MySQLi
+  prepared statements.
+- **XSS prevention:** user-supplied values are HTML-escaped (UTF-8, quotes
+  included) when displayed.
+- **Server-side validation:** usernames, passwords, IDs, counts, lengths,
+  phone numbers, and settings are validated on the server, not only in the
+  browser.
+- **Strict database errors:** the database layer reports errors as exceptions
+  and logs them server-side instead of showing raw errors to users.
+
+### Public tracking and mobile access
+
+- **Unguessable tracking tokens:** QR tracking tokens are 64 hexadecimal
+  characters generated from 32 cryptographically random bytes. The public
+  tracker returns limited status fields only, never admin pages.
+- **Tracking on/off switch:** QR document tracking can be disabled in Admin
+  Settings.
+- **Mobile kiosk switch:** unauthenticated mobile access is a setting that
+  administrators can turn off.
+- **Mobile API tokens:** bearer tokens are random, expire after 30 days, and
+  only their SHA-256 digests are stored in the database.
+- **CORS allow-list:** the mobile API sends cross-origin headers only for a
+  small set of configured app origins.
+- **Receipt integrity:** once bulk-paper intake is confirmed, the expected
+  count cannot be edited and the batch or its papers cannot be deleted, and
+  scans are read-only.
+
+### Data, network, and operations
+
+- **Destructive-action confirmations:** deleting records requires a
+  confirmation dialog, and CMD-log data clearing requires typing `YES` plus an
+  exact second phrase within two minutes.
+- **No-cache responses:** live-activity, dashboard, and health endpoints send
+  `Cache-Control: no-store` so sensitive data is not cached by the browser.
+- **Restricted routing:** only explicitly listed pages are served through
+  clean URLs, and database files are blocked from direct web access by
+  [`database/.htaccess`](database/.htaccess).
+- **Private-network firewall rule:** the Windows launcher opens Apache only on
+  Private networks, never Public ones.
+- **Secrets kept out of Git:** `.env` files, database exports, the local CA
+  certificate, dependency folders, and build output are ignored by Git.
+- **Privacy-conscious assistant:** the Admin Assistant runs in the browser,
+  does not read record contents or call external services, and never submits
+  forms.
+- **Outage resilience:** database disconnections show a recovery page instead
+  of exposing connection details.
+
+### Known limitations
+
+Be aware of what is **not** included, and mitigate it with your network and
+hosting setup:
+
+- No multi-factor authentication and no automated email password resets.
+- No built-in login rate limiting or account lockout; restrict access to a
+  trusted network.
+- No application-set security headers such as CSP or HSTS; add them at the web
+  server or reverse proxy when deploying beyond a local network.
+- The mobile kiosk mode is intentionally unauthenticated when enabled.
+- The seeded `admin` / `admin` login is public knowledge until changed.
+- The local development HTTPS certificate is for trusted LAN use only.
+
 ## Security before deployment
 
 - Read the detailed [Security guide](docs/SECURITY.md) before enabling
@@ -582,6 +740,9 @@ expanded notes.
 | Mobile app cannot reach the API | Keep Apache/MySQL running and verify the Vite proxy or `VITE_API_ENDPOINT`. On Android emulators, use `10.0.2.2` rather than `localhost`. |
 | `npm run dev:lan` says the LAN certificate files are missing | Run it as `npm run dev:lan` inside `mobile-ui`; its `predev:lan` setup creates a host-specific certificate with XAMPP OpenSSL. If setup reports OpenSSL or permission errors, verify XAMPP is above this project in `htdocs`, `apache\bin\openssl.exe` exists, and the account can write to Apache's `conf\ssl.crt` and `conf\ssl.key` folders. Then download the public CA from Admin Settings and install/trust it on the phone. |
 | Document tracker says “Failed to fetch” | Open the QR link on the same HTTPS Apache address and project-folder path used by the office. Confirm Admin Settings → Document status tracking has the correct Tracker base URL, and that Apache/PHP and MySQL are running. Do not use the Vite `:5173` URL as the tracker URL; it serves the mobile app, while the QR status API is served by Apache. |
+| I forgot my admin password | Standard admin: ask a Super Admin to reset it under **Administrator accounts**. Super Admin: the system administrator must recover it through database access. See [Administrator accounts and password recovery](#administrator-accounts-and-password-recovery). |
+| The Show password button does nothing | Hard-refresh the login page (Ctrl+F5) to clear cached scripts and styles, and confirm JavaScript is enabled in the browser. |
+| Sign-in is rejected after a password reset | Existing sessions are signed out when a password changes. Sign in again with the new password. |
 | SMS sending fails | Check cURL, Communication Settings, provider credentials, and provider account status. |
 | Android build cannot find a device | Open the Android project in Android Studio, install the required SDK components, and start an emulator or connect a device. |
 
