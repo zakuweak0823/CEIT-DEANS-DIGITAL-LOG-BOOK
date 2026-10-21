@@ -56,10 +56,10 @@ PHP API and MySQL database.
 
 ## Highlights
 
-- **One office workflow:** incoming and outgoing documents, bulk-paper batches,
+- **One office workflow:** incoming and outgoing documents, bulk documents,
   borrowed items, SMS records, and reports share one PHP/MySQL database.
 - **Traceable handoffs:** office-issued QR tokens let submitters check limited
-  document or batch status without exposing the admin workspace.
+  document or bulk submission status without exposing the admin workspace.
 - **Purpose-built admin workspace:** separate priority indicators, direct
   record actions, responsive tables, top-of-screen submission alerts, and
   configurable themes and Compact Mode.
@@ -73,11 +73,11 @@ PHP API and MySQL database.
 
 | Area | Capabilities |
 | --- | --- |
-| **Dashboard** | Review activity summaries, daily counts, pending incoming work, and recent records. |
+| **Dashboard** | Review activity summaries, daily counts, pending incoming work, document and borrowed item analytics, and recent records. The Overdue records panel flags documents and borrowed items that stay open longer than the time limits set under Settings. |
 | **Incoming documents** | Record the submitter's name and submitter type separately; optionally note the submitting department or office; issue office-verified QR tracking codes; search records; and prepare documents for release. |
 | **Outgoing documents** | Track outgoing records and release status, manage each document directly, and send client notifications. |
-| **Bulk papers** | Register batches, associate paper-level records, separate Priority from Standard batches, scan office QR codes, record received counts, and follow release status. |
-| **Borrowed items** | Manage item categories, borrowers, due dates, and return status. |
+| **Bulk Documents** | Register bulk submissions, associate document-level records, separate Priority from Standard submissions, scan office QR codes, record received counts, and follow release status. |
+| **Borrowed Items** | Manage item categories, borrowers, and return status. |
 | **Records and reports** | Search logbook records; generate Incoming, Outgoing, Borrowed Items, SMS Logs, or All Reports; filter results by text/status; print a formal portrait document or export a formatted Excel workbook. |
 | **SMS and notifications** | Configure SMS and email, send client updates, review delivery logs, and choose browser alerts and sounds. New-submission alerts appear in a neat top-of-screen notification. |
 | **Admin Assistant** | Get privacy-friendly workflow guidance from a clickable side-peeking launcher and links to admin tools. Optional form assistance previews changes and requires approval before filling fields; it never submits forms. Toggle it in Settings. |
@@ -251,7 +251,17 @@ The schema seeds an initial admin account for local setup:
 
 The application upgrades the seeded plaintext password to a password hash
 when it is first used. Change the default password immediately after signing
-in, and never reuse it on a deployed system.
+in, and never reuse it on a deployed system. On a fresh installation, use
+**Administrator accounts → Change your password**. For an existing database,
+back it up, run
+[`database/promote_admin_to_super_admin.sql`](database/promote_admin_to_super_admin.sql)
+once, then sign in as `admin` and change its password from
+**Administrator accounts**.
+
+The Super Admin can create, reset, and remove standard administrator accounts.
+The login page's **Forgot your password?** link explains how to request a
+Super Admin reset. If the Super Admin account itself is inaccessible, the
+system administrator must recover it through trusted database access.
 
 ### 3. Configure workspace and communication settings (optional)
 
@@ -474,7 +484,8 @@ another server, set `VITE_API_ENDPOINT` at build time to the complete
 │   ├── images/                       # Logos and other web images
 │   └── js/                           # Browser-ready JavaScript bundles
 ├── database/
-│   └── schema.sql                    # Fresh-install schema and initial admin seed
+│   ├── schema.sql                    # Fresh-install schema and initial Super Admin seed
+│   └── promote_admin_to_super_admin.sql # Existing-install role upgrade
 ├── docs/
 │   ├── SECURITY.md                   # Security model and deployment checklist
 │   ├── WINDOWS-SETUP.md              # Windows setup and computer transfer

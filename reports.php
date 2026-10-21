@@ -643,11 +643,11 @@ function reportTitle(string $type): string
                     </div>
                     <div class="col-md-3">
                         <label class="form-label" for="from">From</label>
-                        <input type="date" id="from" name="from" class="form-control" value="<?php echo sanitize($from); ?>">
+                        <input type="date" id="from" name="from" class="form-control" max="<?php echo sanitize($to); ?>" value="<?php echo sanitize($from); ?>">
                     </div>
                     <div class="col-md-3">
                         <label class="form-label" for="to">To</label>
-                        <input type="date" id="to" name="to" class="form-control" value="<?php echo sanitize($to); ?>">
+                        <input type="date" id="to" name="to" class="form-control" min="<?php echo sanitize($from); ?>" value="<?php echo sanitize($to); ?>">
                     </div>
                     <div class="col-md-2 d-grid">
                         <button type="submit" name="generate" value="1" class="btn btn-primary"><i class="bi bi-bar-chart-line me-1" aria-hidden="true"></i>Generate report</button>
@@ -657,7 +657,7 @@ function reportTitle(string $type): string
                         <button type="button" class="btn btn-sm btn-outline-secondary date-preset" data-range="today">Today</button>
                         <button type="button" class="btn btn-sm btn-outline-secondary date-preset" data-range="week">This week</button>
                         <button type="button" class="btn btn-sm btn-outline-secondary date-preset" data-range="month">This month</button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary date-preset" data-range="30days">Last 30 days</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary date-preset" data-range="year">This year</button>
                     </div>
                 </form>
             </div>
@@ -854,7 +854,7 @@ function reportTitle(string $type): string
                                             <td><?php echo sanitize((string)$row['item_name']); ?></td>
                                             <td><?php echo sanitize((string)$row['borrower']); ?></td>
                                             <td data-csv-value="<?php echo sanitize((string)$row['date_borrowed']); ?>"><?php echo sanitize(date('M j, Y', strtotime((string)$row['date_borrowed']))); ?></td>
-                                            <td><span class="badge text-bg-<?php echo $row['status'] === 'Returned' ? 'success' : 'warning'; ?>"><?php echo sanitize((string)$row['status']); ?></span></td>
+                                            <td><span class="badge <?php echo admin_status_badge_class($row['status']); ?>"><?php echo sanitize((string)$row['status']); ?></span></td>
                                         <?php elseif ($reportType === 'SMS Logs'): ?>
                                             <td class="report-date-cell" data-csv-value="<?php echo sanitize((string)$row['date_sent']); ?>">
                                                 <span class="report-date-part"><?php echo sanitize(date('M j, Y', strtotime((string)$row['date_sent']))); ?></span>
@@ -862,7 +862,7 @@ function reportTitle(string $type): string
                                             </td>
                                             <td><?php echo sanitize((string)$row['recipient']); ?></td>
                                             <td class="report-message"><?php echo sanitize((string)$row['message']); ?></td>
-                                            <td><span class="badge text-bg-<?php echo $row['status'] === 'Failed' ? 'danger' : ($row['status'] === 'Pending' ? 'warning' : 'success'); ?>"><?php echo sanitize((string)$row['status']); ?></span></td>
+                                            <td><span class="badge <?php echo admin_status_badge_class($row['status']); ?>"><?php echo sanitize((string)$row['status']); ?></span></td>
                                         <?php elseif ($reportType === 'All Reports'): ?>
                                             <td class="report-date-cell" data-csv-value="<?php echo sanitize((string)$row['report_date']); ?>">
                                                 <span class="report-date-part"><?php echo sanitize(date('M j, Y', strtotime((string)$row['report_date']))); ?></span>
@@ -871,7 +871,7 @@ function reportTitle(string $type): string
                                             <td><span class="badge rounded-pill text-bg-light border"><?php echo sanitize((string)$row['report_category']); ?></span></td>
                                             <td class="report-message"><span class="report-print-cell" title="<?php echo sanitize((string)$row['report_record']); ?>"><?php echo sanitize((string)$row['report_record']); ?></span></td>
                                             <td class="report-message"><span class="report-print-cell" title="<?php echo sanitize((string)$row['report_details']); ?>"><?php echo sanitize((string)$row['report_details']); ?></span></td>
-                                            <td><span class="badge text-bg-<?php echo $row['status'] === 'Failed' ? 'danger' : ($row['status'] === 'Pending' || $row['status'] === 'Borrowed' ? 'warning' : ($row['status'] === 'Returned' || $row['status'] === 'Released' || $row['status'] === 'Sent' ? 'success' : 'primary')); ?>"><?php echo sanitize((string)$row['status']); ?></span></td>
+                                            <td><span class="badge <?php echo admin_status_badge_class($row['status']); ?>"><?php echo sanitize((string)$row['status']); ?></span></td>
                                         <?php else: ?>
                                             <td class="report-date-cell" data-csv-value="<?php echo sanitize((string)$row['date_created']); ?>">
                                                 <span class="report-date-part"><?php echo sanitize(date('M j, Y', strtotime((string)$row['date_created']))); ?></span>
@@ -880,7 +880,7 @@ function reportTitle(string $type): string
                                             <td><?php echo sanitize((string)$row['sender']); ?></td>
                                             <td><?php echo sanitize((string)$row['recipient']); ?></td>
                                             <td><?php echo sanitize((string)$row['subject']); ?></td>
-                                            <td><span class="badge text-bg-<?php echo $row['status'] === 'Pending' ? 'warning' : ($row['status'] === 'Released' ? 'success' : 'primary'); ?>"><?php echo sanitize((string)$row['status']); ?></span></td>
+                                            <td><span class="badge <?php echo admin_status_badge_class($row['status']); ?>"><?php echo sanitize((string)$row['status']); ?></span></td>
                                         <?php endif; ?>
                                     </tr>
                                 <?php endforeach; ?>
@@ -1034,8 +1034,8 @@ document.querySelectorAll('.date-preset').forEach(function (button) {
             start.setDate(today.getDate() - daysSinceMonday);
         } else if (button.dataset.range === 'month') {
             start.setDate(1);
-        } else if (button.dataset.range === '30days') {
-            start.setDate(today.getDate() - 29);
+        } else if (button.dataset.range === 'year') {
+            start.setMonth(0, 1);
         }
         document.getElementById('from').value = toIsoDate(start);
         document.getElementById('to').value = toIsoDate(today);

@@ -15,7 +15,7 @@
     </div>
 </div>
 <?php else: ?>
-<footer class="bg-white border-top py-3<?php echo $currentPage === 'login.php' ? ' login-page-footer' : ''; ?>">
+<footer class="bg-white border-top py-3<?php echo $isLoginPage ? ' login-page-footer' : ''; ?>">
     <div class="container text-center small text-muted">
         &copy; <?php echo date('Y'); ?> Cavite State University - CEIT Deans Office Digital Logbook. Admin web interface only.
     </div>
@@ -419,16 +419,16 @@ if (document.body.classList.contains('admin-body')) {
                     links: [{ label: 'Outgoing Documents', href: 'outgoing' }]
                 },
                 {
-                    match: /\b(batch|bulk paper|tracking qr|batch qr)\b/i,
-                    text: 'Batch Papers is for registering and managing groups of papers. Open Batch Tracker when you need to check a tracking link or QR status.',
+                    match: /\b(batch|bulk|bulk documents?|tracking qr|batch qr)\b/i,
+                    text: 'Bulk Documents is for registering and managing groups of documents. Open Bulk Documents Tracker when you need to check a tracking link or QR status.',
                     links: [
-                        { label: 'Batch Papers', href: 'batch_papers' },
-                        { label: 'Batch Tracker', href: 'batch_tracker' }
+                        { label: 'Bulk Documents', href: 'batch_papers' },
+                        { label: 'Bulk Documents Tracker', href: 'batch_tracker' }
                     ]
                 },
                 {
-                    match: /\b(borrow|borrowed|return|overdue|item)\b/i,
-                    text: 'Use Borrowed Items to check current loans, due dates, and return actions. Item Categories lets you manage the inventory categories.',
+                    match: /\b(loan|loans|borrow|borrowed|return|overdue|item)\b/i,
+                    text: 'Use Borrowed Items to check current borrowed items, due dates, and return actions. Item Categories lets you manage the inventory categories.',
                     links: [
                         { label: 'Borrowed Items', href: 'borrowed' },
                         { label: 'Item Categories', href: 'item_categories' }
@@ -470,7 +470,7 @@ if (document.body.classList.contains('admin-body')) {
                 },
                 {
                     match: /\b(help|what can you do|how do i use)\b/i,
-                    text: 'I can guide you to logbook pages and explain common admin workflows. Try asking about pending documents, registering a record, batches, borrowed items, reports, settings, or server recovery.',
+                    text: 'I can guide you to logbook pages and explain common admin workflows. Try asking about pending documents, registering a record, bulk documents, borrowed items, reports, settings, or server recovery.',
                     links: []
                 }
             ];
@@ -547,7 +547,7 @@ if (document.body.classList.contains('admin-body')) {
                     return;
                 }
                 addMessage(
-                    'I can help find admin pages and explain common workflows, but I do not read document records or handle account actions. Try asking about pending documents, incoming or outgoing records, batches, borrowed items, reports, settings, or server recovery.',
+                    'I can help find admin pages and explain common workflows, but I do not read document records or handle account actions. Try asking about pending documents, incoming or outgoing records, bulk documents, borrowed items, reports, settings, or server recovery.',
                     true,
                     [
                         { label: 'Pending Inbox', href: 'incoming?status=Pending' },

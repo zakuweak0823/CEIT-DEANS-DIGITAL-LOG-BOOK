@@ -167,5 +167,5 @@ ALTER TABLE borrowed_items ADD COLUMN IF NOT EXISTS returned_date DATE DEFAULT N
 
 -- Insert a default admin user with username "admin" and password "admin".
 -- The application will migrate the password to a secure hash on the first login.
-INSERT INTO users (username, password, role) VALUES ('admin', 'admin', 'admin')
+INSERT INTO users (username, password, role) VALUES ('admin', 'admin', 'super_admin')
 ON DUPLICATE KEY UPDATE username = VALUES(username);

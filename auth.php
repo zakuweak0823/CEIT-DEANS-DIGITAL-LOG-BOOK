@@ -29,8 +29,70 @@ function ensure_admin()
         header('Location: login');
         exit;
     }
+
+    global $conn;
+    $stmt = safe_query($conn, 'SELECT role, password FROM users WHERE username = ? LIMIT 1', 's', [$_SESSION['admin']]);
+    if ($stmt === false) {
+        http_response_code(503);
+        exit('Administrator access could not be verified. Try again shortly.');
+    }
+
+    $result = mysqli_stmt_get_result($stmt);
+    $user = $result === false ? null : mysqli_fetch_assoc($result);
+    mysqli_stmt_close($stmt);
+    if (!$user || !in_array($user['role'], ['admin', 'super_admin'], true)) {
+        unset($_SESSION['admin'], $_SESSION['admin_role'], $_SESSION['admin_password_hash']);
+        header('Location: login');
+        exit;
+    }
+
+    if (empty($_SESSION['admin_password_hash'])
+        || !hash_equals((string)$user['password'], (string)$_SESSION['admin_password_hash'])
+    ) {
+        unset($_SESSION['admin'], $_SESSION['admin_role'], $_SESSION['admin_password_hash']);
+        header('Location: login');
+        exit;
+    }
+
+    $_SESSION['admin_role'] = $user['role'];
     verify_csrf_request();
 }
+
+function ensure_super_admin()
+{
+    ensure_admin();
+    if (($_SESSION['admin_role'] ?? '') !== 'super_admin') {
+        http_response_code(403);
+        exit('Super Admin access is required to manage administrator accounts.');
+    }
+}
+
+function admin_status_badge_class($status): string
+{
+    $status = strtolower(trim((string)$status));
+    if (in_array($status, ['pending', 'queued', 'borrowed'], true)) {
+        return 'admin-status-pending';
+    }
+    if ($status === 'for release') {
+        return 'admin-status-in-progress';
+    }
+    if ($status === 'received') {
+        return 'admin-status-received';
+    }
+    if (in_array($status, ['released', 'returned', 'delivered', 'sent', 'success'], true)) {
+        return 'admin-status-complete';
+    }
+    if (in_array($status, ['failed', 'not returned', 'overdue'], true)) {
+        return 'admin-status-error';
+    }
+    return 'admin-status-neutral';
+}
+
+function admin_password_meets_minimum_length($password): bool
+{
+    return is_string($password) && preg_match_all('/./us', $password) >= 12;
+}
+
 function csrf_token()
 {
     // Reuse one unpredictable token for this session's rendered forms.

@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">DIT Logbook</string>
-    <string name="title_activity_main">DIT Logbook</string>
+    <string name="app_name">CEIT Digital Logbook</string>
+    <string name="title_activity_main">CEIT Digital Logbook</string>
     <string name="package_name">com.ditlogbook.mobile</string>
     <string name="custom_url_scheme">com.ditlogbook.mobile</string>
 </resources>

@@ -50,7 +50,7 @@ if (isset($_POST['save'])) {
             $message = show_alert('Borrowed item recorded successfully.');
             $item = $borrower = $borrower_phone = '';
         } else {
-            $message = show_alert('Failed to save borrowed item.', 'danger');
+            $message = show_alert('Failed to save the borrowed item.', 'danger');
             $showAddModal = true;
         }
     }
@@ -78,7 +78,7 @@ if (isset($_POST['update'])) {
                 ? show_alert('Borrowed item updated successfully.')
                 : show_alert('Returned items cannot be edited.', 'warning');
         } else {
-            $message = show_alert('Failed to update borrowed item.', 'danger');
+            $message = show_alert('Failed to update the borrowed item.', 'danger');
         }
     } else {
         $message = show_alert($borrower_phone === null || ($borrower_phone !== '' && !is_valid_contact_number($borrower_phone))
@@ -164,10 +164,10 @@ if ($stmt !== false) {
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3">
             <div>
                 <h2 class="mb-1 text-primary">Borrowed Items</h2>
-                <p class="text-muted mb-0">Track borrowed items and mark them returned when they come back.</p>
+                <p class="text-muted mb-0">Track borrowed items and mark them as returned.</p>
             </div>
             <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#borrowedForm">
-                <i class="bi bi-plus-lg"></i> Add New
+                <i class="bi bi-plus-lg"></i> Add Borrowed Item
             </button>
         </div>
     </div>
@@ -176,19 +176,19 @@ if ($stmt !== false) {
             <div class="card-body">
                 <form method="GET" class="row g-2 mb-3 align-items-end">
                     <div class="col-12 col-md">
-                        <label class="form-label small fw-semibold mb-1" for="borrowedSearch">Search items</label>
+                        <label class="form-label small fw-semibold mb-1" for="borrowedSearch">Search borrowed items</label>
                         <input type="search" id="borrowedSearch" name="search" class="form-control" placeholder="Item, borrower, or category" value="<?php echo sanitize($search); ?>">
                     </div>
                     <div class="col-12 col-md-3">
                         <label class="form-label small fw-semibold mb-1" for="borrowedStatus">Status</label>
                         <select id="borrowedStatus" name="status" class="form-select">
-                            <?php foreach (['All' => 'All items', 'Unreturned' => 'Unreturned', 'Returned' => 'Returned'] as $value => $label): ?>
+                            <?php foreach (['All' => 'All items', 'Unreturned' => 'Not Returned', 'Returned' => 'Returned'] as $value => $label): ?>
                                 <option value="<?php echo $value; ?>"<?php echo $statusFilter === $value ? ' selected' : ''; ?>><?php echo $label; ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="col-12 col-md-auto d-flex gap-2">
-                        <button class="btn btn-primary flex-grow-1" type="submit"><i class="bi bi-search me-1"></i> Filter</button>
+                        <button class="btn btn-primary flex-grow-1" type="submit"><i class="bi bi-funnel me-1"></i> Filter</button>
                         <?php if ($search !== '' || $statusFilter !== 'All'): ?>
                             <a class="btn btn-outline-secondary" href="borrowed">Clear</a>
                         <?php endif; ?>
@@ -209,7 +209,7 @@ if ($stmt !== false) {
                         </thead>
                         <tbody>
                             <?php if (count($borrowedItems) === 0): ?>
-                                <tr><td colspan="6" class="text-center text-muted py-4">No matching items. Try changing the search or status filter.</td></tr>
+                                <tr><td colspan="6" class="text-center text-muted py-4">No matching borrowed items. Try changing the search or status filter.</td></tr>
                             <?php else: ?>
                                 <?php foreach ($borrowedItems as $itemRow): ?>
                                     <tr>
@@ -222,14 +222,13 @@ if ($stmt !== false) {
                                             <?php endif; ?>
                                         </td>
                                         <td class="small">
-                                            <div><span class="text-muted">Borrowed</span> <?php echo sanitize(date('M j, Y', strtotime($itemRow['date_borrowed']))); ?></div>
+                                            <div><span class="text-muted">Date borrowed</span> <?php echo sanitize(date('M j, Y', strtotime($itemRow['date_borrowed']))); ?></div>
                                             <?php if (!empty($itemRow['returned_date'])): ?>
                                                 <div class="text-success"><span>Returned</span> <?php echo sanitize(date('M j, Y', strtotime($itemRow['returned_date']))); ?></div>
                                             <?php endif; ?>
                                         </td>
                                         <td>
-                                            <?php $statusBadgeClass = $itemRow['display_status'] === 'Returned' ? 'text-bg-success' : 'text-bg-warning'; ?>
-                                            <span class="badge rounded-pill <?php echo $statusBadgeClass; ?>"><?php echo sanitize($itemRow['display_status']); ?></span>
+                                            <span class="badge rounded-pill <?php echo admin_status_badge_class($itemRow['display_status']); ?>"><?php echo sanitize($itemRow['display_status'] === 'Unreturned' ? 'Not Returned' : $itemRow['display_status']); ?></span>
                                         </td>
                                         <td>
                                             <div class="table-actions">
@@ -240,13 +239,13 @@ if ($stmt !== false) {
                                                     <form method="POST">
                                                         <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                                                         <input type="hidden" name="id" value="<?php echo (int)$itemRow['item_id']; ?>">
-                                                        <button type="submit" name="mark_returned" class="btn btn-sm btn-success" data-confirm-title="Mark item as returned?" data-confirm-message="This will record the item as returned and set its return date to today." data-confirm-button="Mark returned"><i class="bi bi-check2-circle me-1"></i>Mark returned</button>
+                                                        <button type="submit" name="mark_returned" class="btn btn-sm btn-success" data-confirm-title="Mark item as returned?" data-confirm-message="This records the item as returned and sets the return date to today." data-confirm-button="Mark Returned"><i class="bi bi-check2-circle me-1"></i>Mark Returned</button>
                                                     </form>
                                                 <?php else: ?>
                                                     <form method="POST">
                                                         <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                                                         <input type="hidden" name="id" value="<?php echo (int)$itemRow['item_id']; ?>">
-                                                        <button type="submit" name="mark_unreturned" class="btn btn-sm btn-outline-warning" data-confirm-title="Mark item as unreturned?" data-confirm-message="This will clear the return date and move the item back to the unreturned list." data-confirm-button="Mark unreturned"><i class="bi bi-arrow-counterclockwise me-1"></i>Mark unreturned</button>
+                                                        <button type="submit" name="mark_unreturned" class="btn btn-sm btn-outline-secondary" data-confirm-title="Mark item as not returned?" data-confirm-message="This clears the return date and moves the item back to the not returned list." data-confirm-button="Mark Not Returned"><i class="bi bi-arrow-counterclockwise me-1"></i>Mark Not Returned</button>
                                                     </form>
                                                 <?php endif; ?>
                                             </div>

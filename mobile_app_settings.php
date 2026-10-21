@@ -5,8 +5,8 @@ function mobile_app_settings_defaults(): array
         'theme' => 'classic',
         'headerTitle' => 'CEIT Digital Logbook',
         'officeName' => "Dean's Office",
-        'welcomeHeading' => "Welcome to the CEIT Dean's Office",
-        'welcomeMessage' => 'Keep document submissions, Bulk Papers, and borrowed items organized in one place.',
+        'welcomeHeading' => 'Office Logbook',
+        'welcomeMessage' => 'Submit and track documents, submit bulk documents, and record borrowed items.',
         'confirmationSound' => true,
         'pullToRefreshSound' => true,
     ];

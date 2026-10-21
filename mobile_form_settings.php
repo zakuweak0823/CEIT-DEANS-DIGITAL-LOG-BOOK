@@ -2,10 +2,10 @@
 function mobile_form_label_defaults(): array
 {
     return [
-        'sender' => 'Submitter type',
-        'documentType' => 'Document type',
-        'contactNumber' => 'Client contact number',
-        'remarks' => 'Remarks',
+        'sender' => 'Role',
+        'documentType' => 'Document name',
+        'contactNumber' => 'Contact number',
+        'remarks' => 'Remarks (optional)',
         'senderEnabled' => true,
     ];
 }

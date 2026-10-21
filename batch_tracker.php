@@ -74,25 +74,25 @@ if (!$storageError && preg_match('/^[a-f0-9]{64}$/', $trackingToken)) {
             <p class="small fw-semibold text-uppercase text-success mb-2">CEIT Dean's Office</p>
             <?php if ($storageError): ?>
                 <h1 class="h3 text-danger">Tracker temporarily unavailable</h1>
-                <p class="mb-0 text-secondary">The batch tracker could not load its storage. Please try again later or contact the office.</p>
+                <p class="mb-0 text-secondary">The bulk submission tracker could not load its storage. Please try again later or contact the office.</p>
             <?php elseif ($batch === null): ?>
-                <h1 class="h3 text-success">Batch not found</h1>
+                <h1 class="h3 text-success">Bulk submission not found</h1>
                 <p class="mb-0 text-secondary">This tracking link is invalid or no longer available. Please ask the office for an updated QR code.</p>
             <?php else: ?>
                 <h1 class="h3 text-success"><?php echo $batch['receivedAt'] !== null ? 'Bulk paper receipt' : 'Batch paper tracker'; ?></h1>
-                <p class="text-secondary mb-4 no-print">Current batch details and tracking status. This page refreshes every minute.</p>
+                <p class="text-secondary mb-4 no-print">Current bulk submission details and tracking status. This page refreshes every minute.</p>
                 <dl class="row small mb-4">
-                    <dt class="col-5 col-sm-4">Batch</dt>
+                    <dt class="col-5 col-sm-4">Bulk submission</dt>
                     <dd class="col-7 col-sm-8"><?php echo sanitize($batch['code']); ?></dd>
                     <dt class="col-5 col-sm-4">Type</dt>
                     <dd class="col-7 col-sm-8"><?php echo sanitize($batch['type']); ?></dd>
                     <dt class="col-5 col-sm-4">Status</dt>
-                    <dd class="col-7 col-sm-8"><span class="badge <?php echo $batch['status'] === 'Released' ? 'text-bg-success' : ($batch['status'] === 'For Release' ? 'text-bg-primary' : 'text-bg-warning'); ?>"><?php echo sanitize($batch['status']); ?></span><?php echo $batch['isPriority'] ? ' <span class="badge text-bg-warning">Priority</span>' : ''; ?></dd>
+                    <dd class="col-7 col-sm-8"><span class="badge <?php echo admin_status_badge_class($batch['status']); ?>"><?php echo sanitize($batch['status']); ?></span><?php echo $batch['isPriority'] ? ' <span class="badge text-bg-warning">Priority</span>' : ''; ?></dd>
                     <dt class="col-5 col-sm-4">Date recorded</dt>
                     <dd class="col-7 col-sm-8"><?php echo sanitize(date('M j, Y', strtotime($batch['date']))); ?></dd>
                 </dl>
                 <div class="rounded-3 border bg-light p-3 mb-3">
-                    <span class="text-secondary">Expected papers</span>
+                    <span class="text-secondary">Expected documents</span>
                     <strong class="ms-2"><?php echo $batch['intakeExpectedCount'] !== null ? $batch['intakeExpectedCount'] : $batch['paperCount']; ?></strong>
                 </div>
                 <?php if ($batch['receivedAt'] !== null): ?>
@@ -116,11 +116,33 @@ if (!$storageError && preg_match('/^[a-f0-9]{64}$/', $trackingToken)) {
                         <p class="mb-0 mt-1 small">The count above was submitted by the sender and has not yet been verified by staff.</p>
                     </div>
                 <?php endif; ?>
-                <p class="small text-secondary mt-4 mb-0 no-print">Contact the CEIT Dean's Office for assistance with this batch.</p>
+                <p class="small text-secondary mt-4 mb-0 no-print">Contact the CEIT Dean's Office for assistance with this bulk submission.</p>
             <?php endif; ?>
-            <button type="button" class="btn btn-outline-success mt-3 no-print" onclick="if (window.history.length > 1) window.history.back(); else window.location.href = './';">Return</button>
+            <a class="btn btn-outline-success mt-3 no-print" id="returnLink" href="./">Return</a>
         </div>
     </div>
 </main>
+<script>
+(function () {
+    const link = document.getElementById('returnLink');
+    if (!link) return;
+    const sameHost = (value) => {
+        if (!value) return null;
+        try {
+            const url = new URL(value, window.location.href);
+            if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hostname !== window.location.hostname) return null;
+            if (window.location.protocol === 'https:' && url.protocol === 'http:' && url.port === '') url.protocol = 'https:';
+            return url;
+        } catch (error) {
+            return null;
+        }
+    };
+    const requested = sameHost(new URLSearchParams(window.location.search).get('return') || '');
+    const referrer = document.referrer ? sameHost(document.referrer) : null;
+    const target = requested || (referrer && !/tracker/i.test(referrer.pathname) ? referrer : null);
+    if (target) link.href = target.href;
+    else if (window.location.port === '5173') link.href = '/';
+})();
+</script>
 </body>
 </html>

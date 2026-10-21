@@ -5,6 +5,7 @@ require_once 'mobile_form_settings.php';
 require_once 'mobile_app_settings.php';
 require_once 'batch_support.php';
 require_once 'document_tracking.php';
+require_once 'sla_support.php';
 ensure_admin();
 
 if (isset($_GET['download_network_repair']) && $_GET['download_network_repair'] === '1') {
@@ -120,6 +121,24 @@ if (isset($_POST['save_mobile_access'])) {
             $formSettingsNotice = 'Document tracking settings saved.';
         }
     }
+} elseif (isset($_POST['save_sla_settings'])) {
+    $formSettingsNoticeScope = 'sla';
+    $slaDefaults = sla_settings_defaults();
+    $slaSubmitted = [
+        'enabled' => ($_POST['sla_enabled'] ?? '') === '1',
+        'incomingDays' => sla_clamp_days($_POST['sla_incoming_days'] ?? '', 0),
+        'outgoingDays' => sla_clamp_days($_POST['sla_outgoing_days'] ?? '', 0),
+        'loanDays' => sla_clamp_days($_POST['sla_loan_days'] ?? '', 0),
+    ];
+    if (in_array(0, [$slaSubmitted['incomingDays'], $slaSubmitted['outgoingDays'], $slaSubmitted['loanDays']], true)) {
+        $formSettingsNotice = 'Enter whole numbers of days from 1 to 365 for every limit.';
+        $formSettingsNoticeType = 'danger';
+    } elseif (save_sla_settings($conn, $slaSubmitted)) {
+        $formSettingsNotice = 'Service level agreement settings saved.';
+    } else {
+        $formSettingsNotice = 'Service level agreement settings could not be saved. Check the server log and try again.';
+        $formSettingsNoticeType = 'danger';
+    }
 } elseif (isset($_POST['save_batch_workflow'])) {
     $formSettingsNoticeScope = 'workflow';
     $confirmationMode = $_POST['intake_confirmation_mode'] ?? '';
@@ -130,9 +149,9 @@ if (isset($_POST['save_mobile_access'])) {
     } elseif (save_batch_workflow_settings($conn, [
         'intake_confirmation_mode' => $confirmationMode,
     ])) {
-        $formSettingsNotice = 'Bulk-paper workflow settings saved.';
+        $formSettingsNotice = 'Bulk documents workflow settings saved.';
     } else {
-        $formSettingsNotice = 'Bulk-paper workflow settings could not be saved. Check the server log and try again.';
+        $formSettingsNotice = 'Bulk documents workflow settings could not be saved. Check the server log and try again.';
         $formSettingsNoticeType = 'danger';
     }
 } elseif (isset($_POST['save_form_labels'])) {
@@ -205,6 +224,7 @@ if (isset($_POST['save_mobile_access'])) {
 $mobileFormLabels = get_mobile_form_labels($conn);
 $mobileAppSettings = get_mobile_app_settings($conn);
 $batchWorkflowSettings = get_batch_workflow_settings($conn);
+$slaSettings = get_sla_settings($conn);
 try {
     $documentTrackingSettings = get_document_tracking_settings($conn);
 } catch (Throwable $error) {
@@ -268,6 +288,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                         <input class="form-check-input" type="checkbox" role="switch" name="mobile_kiosk_enabled" id="mobile_kiosk_enabled" value="1" <?php echo $mobileKioskEnabled ? 'checked' : ''; ?>>
                         <label class="form-check-label fw-semibold" for="mobile_kiosk_enabled">Enable mobile logbook access without sign-in</label>
                     </div>
+                    <p class="form-text mt-2">The current mobile app has no sign-in screen. Turning this off blocks the app from accessing the mobile logbook.</p>
                     <div class="alert alert-warning mt-3" role="note">
                         When enabled, anyone who can reach this server can view and change logbook records through the mobile app. Use only on a trusted office device and network, not on public or shared networks.
                     </div>
@@ -316,7 +337,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
         <section class="card shadow-sm" aria-labelledby="form-label-settings-title">
             <div class="card-header bg-white px-3 px-md-4 py-3">
                 <h5 class="mb-1 text-primary" id="form-label-settings-title">Shared form labels</h5>
-                <p class="mb-0 small text-muted">Customize field names used by document and bulk-paper forms in the admin portal and mobile app.</p>
+                <p class="mb-0 small text-muted">Customize the field names used by the document and bulk documents forms in the admin portal and mobile app.</p>
             </div>
             <div class="card-body p-3 p-md-4">
                 <?php if ($formSettingsNotice !== '' && $formSettingsNoticeScope === 'form'): ?>
@@ -344,7 +365,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                         <div class="col-12">
                             <div class="form-check form-switch mb-3">
                                 <input class="form-check-input" type="checkbox" role="switch" id="formSenderEnabled" name="sender_enabled" value="1" <?php echo $mobileFormLabels['senderEnabled'] ? 'checked' : ''; ?>>
-                                <label class="form-check-label fw-semibold" for="formSenderEnabled">Show and require the submitter type in mobile document and Bulk Papers forms</label>
+                                <label class="form-check-label fw-semibold" for="formSenderEnabled">Show and require the submitter type in the mobile document and bulk documents forms</label>
                             </div>
                             <div class="form-text mb-3">When off, the field is hidden and mobile submissions save the type as Other.</div>
                         </div>
@@ -417,10 +438,51 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
     </div>
 
     <div class="col-12">
+        <section class="card shadow-sm" id="sla-settings" aria-labelledby="sla-settings-title">
+            <div class="card-header bg-white px-3 px-md-4 py-3">
+                <h5 class="mb-1 text-primary" id="sla-settings-title">Time limits for records</h5>
+                <p class="mb-0 small text-muted">Set how many days a record may stay open. Records that exceed a limit are flagged as overdue on the dashboard and in the sidebar.</p>
+            </div>
+            <div class="card-body p-3 p-md-4">
+                <?php if ($formSettingsNotice !== '' && $formSettingsNoticeScope === 'sla'): ?>
+                    <div class="alert alert-<?php echo sanitize($formSettingsNoticeType); ?>" role="status"><?php echo sanitize($formSettingsNotice); ?></div>
+                <?php endif; ?>
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" role="switch" id="slaEnabled" name="sla_enabled" value="1" <?php echo $slaSettings['enabled'] ? 'checked' : ''; ?>>
+                        <label class="form-check-label fw-semibold" for="slaEnabled">Flag overdue records</label>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-12 col-md-4">
+                            <label class="form-label fw-semibold" for="slaIncomingDays">Incoming documents pending (days)</label>
+                            <input class="form-control" type="number" id="slaIncomingDays" name="sla_incoming_days" min="1" max="365" step="1" value="<?php echo (int)$slaSettings['incomingDays']; ?>" required>
+                            <div class="form-text">Overdue when still Pending after this many days.</div>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label fw-semibold" for="slaOutgoingDays">Outgoing documents awaiting release (days)</label>
+                            <input class="form-control" type="number" id="slaOutgoingDays" name="sla_outgoing_days" min="1" max="365" step="1" value="<?php echo (int)$slaSettings['outgoingDays']; ?>" required>
+                            <div class="form-text">Overdue when still For Release after this many days.</div>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label fw-semibold" for="slaLoanDays">Borrowed items (days)</label>
+                            <input class="form-control" type="number" id="slaLoanDays" name="sla_loan_days" min="1" max="365" step="1" value="<?php echo (int)$slaSettings['loanDays']; ?>" required>
+                            <div class="form-text">Overdue when not returned after this many days.</div>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary mt-3" type="submit" name="save_sla_settings" value="1">
+                        <i class="bi bi-check2 me-1" aria-hidden="true"></i>Save time limits
+                    </button>
+                </form>
+            </div>
+        </section>
+    </div>
+
+    <div class="col-12">
         <section class="card shadow-sm" aria-labelledby="batch-workflow-settings-title">
             <div class="card-header bg-white px-3 px-md-4 py-3">
-                <h5 class="mb-1 text-primary" id="batch-workflow-settings-title">Bulk-paper intake and QR</h5>
-                <p class="mb-0 small text-muted">Choose how Admin records receipt. Batch QR codes use a tracking link that can be read by standard QR scanners.</p>
+                <h5 class="mb-1 text-primary" id="batch-workflow-settings-title">Bulk documents intake and QR</h5>
+                <p class="mb-0 small text-muted">Choose how the admin records receipt. Bulk submission QR codes use a tracking link that standard QR scanners can read.</p>
             </div>
             <div class="card-body p-3 p-md-4">
                 <?php if ($formSettingsNotice !== '' && $formSettingsNoticeScope === 'workflow'): ?>
@@ -439,7 +501,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                         </div>
                     </div>
                     <button class="btn btn-primary mt-3" type="submit" name="save_batch_workflow" value="1">
-                        <i class="bi bi-check2 me-1" aria-hidden="true"></i>Save bulk-paper settings
+                        <i class="bi bi-check2 me-1" aria-hidden="true"></i>Save bulk documents settings
                     </button>
                 </form>
             </div>

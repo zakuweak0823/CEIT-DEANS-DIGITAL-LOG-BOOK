@@ -43,11 +43,13 @@ $apiUrl = ($apiPath === '' ? '' : '/' . $apiPath) . '/mobile-api.php';
         dl { display: grid; grid-template-columns: minmax(7.5rem, .7fr) 1fr; gap: .9rem 1rem; margin: 0; }
         dt { color: #527066; font-size: .9rem; }
         dd { margin: 0; color: #183b30; font-weight: 650; overflow-wrap: anywhere; }
-        .status { display: inline-flex; align-items: center; border-radius: 999px; padding: .4rem .75rem; background: #fef3c7; color: #92400e; font-size: .88rem; }
+        .status { display: inline-flex; align-items: center; border-radius: 999px; padding: .4rem .75rem; background: #fef9c3; color: #1f2937; font-size: .88rem; }
         .status.is-done { background: #dcfce7; color: #166534; }
         .footer { margin: 1.25rem 0 0; color: #687d75; font-size: .85rem; line-height: 1.5; }
         button { min-height: 2.8rem; margin-top: 1.25rem; padding: .7rem 1rem; border: 0; border-radius: .85rem; background: #065f46; color: white; font: inherit; font-weight: 700; cursor: pointer; }
-        button:focus-visible { outline: 3px solid #6ee7b7; outline-offset: 3px; }
+        button:focus-visible, .return-link:focus-visible { outline: 3px solid #6ee7b7; outline-offset: 3px; }
+        .return-link { display: inline-flex; align-items: center; justify-content: center; min-height: 2.8rem; margin: 1.25rem 0 0 .6rem; padding: .7rem 1rem; border: 1px solid #86efac; border-radius: .85rem; background: #fff; color: #065f46; font-weight: 700; text-decoration: none; }
+        .return-link:hover { background: #f0fdf4; }
         [hidden] { display: none !important; }
         @media (max-width: 420px) { .brand, .body { padding: 1.2rem; } dl { grid-template-columns: 1fr; gap: .3rem; } dd { margin-bottom: .55rem; } }
     </style>
@@ -79,9 +81,9 @@ $apiUrl = ($apiPath === '' ? '' : '/' . $apiPath) . '/mobile-api.php';
                     </dl>
                     <p class="footer">Status updates are recorded by the office. This page refreshes automatically every minute.</p>
                     <button type="button" id="refreshTracker">Refresh status</button>
-                    <button type="button" id="returnFromTracker">Return</button>
                 </section>
             <?php endif; ?>
+            <a class="return-link" id="returnLink" href="./">Return</a>
         </div>
     </article>
 </main>
@@ -115,16 +117,31 @@ async function refreshDocumentStatus() {
 }
 
 document.getElementById('refreshTracker').addEventListener('click', refreshDocumentStatus);
-document.getElementById('returnFromTracker').addEventListener('click', function () {
-    if (window.history.length > 1) {
-        window.history.back();
-    } else {
-        window.location.href = './';
-    }
-});
 refreshDocumentStatus();
 window.setInterval(refreshDocumentStatus, 60000);
 </script>
 <?php endif; ?>
+<script>
+(function () {
+    const link = document.getElementById('returnLink');
+    if (!link) return;
+    const sameHost = (value) => {
+        if (!value) return null;
+        try {
+            const url = new URL(value, window.location.href);
+            if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hostname !== window.location.hostname) return null;
+            if (window.location.protocol === 'https:' && url.protocol === 'http:' && url.port === '') url.protocol = 'https:';
+            return url;
+        } catch (error) {
+            return null;
+        }
+    };
+    const requested = sameHost(new URLSearchParams(window.location.search).get('return') || '');
+    const referrer = document.referrer ? sameHost(document.referrer) : null;
+    const target = requested || (referrer && !/tracker/i.test(referrer.pathname) ? referrer : null);
+    if (target) link.href = target.href;
+    else if (window.location.port === '5173') link.href = '/';
+})();
+</script>
 </body>
 </html>

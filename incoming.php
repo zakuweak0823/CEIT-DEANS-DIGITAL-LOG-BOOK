@@ -244,10 +244,10 @@ if ($stmt !== false) {
             </div>
             <div class="d-flex flex-wrap gap-2">
             <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#incomingForm">
-                <i class="bi bi-plus-lg"></i> Add New
+                <i class="bi bi-plus-lg"></i> Add Document
             </button>
             <a class="btn btn-primary" href="quick_document">
-                <i class="bi bi-lightning-charge"></i> Quick Submit Records
+                <i class="bi bi-lightning-charge"></i> Quick Submit
             </a>
             </div>
         </div>
@@ -269,7 +269,7 @@ if ($stmt !== false) {
                 <form method="GET" class="row g-2 mb-3">
                     <?php if ($submitterFilter !== 'All'): ?><input type="hidden" name="submitter" value="<?php echo sanitize($submitterFilter); ?>"><?php endif; ?>
                     <div class="col-12 col-md-7">
-                        <input type="search" name="search" class="form-control" placeholder="Search incoming documents" value="<?php echo sanitize($search); ?>">
+                        <input type="search" name="search" class="form-control" placeholder="Search by subject, name, or reference" value="<?php echo sanitize($search); ?>">
                     </div>
                     <div class="col-12 col-md-3">
                         <label class="visually-hidden" for="incomingStatusFilter">Filter by status</label>
@@ -289,12 +289,12 @@ if ($stmt !== false) {
                     <table class="table align-middle mb-0 incoming-documents-table">
                         <thead class="table-light">
                             <tr>
-                                <th>Date Submitted</th>
+                                <th>Date</th>
                                 <th>Submitted By</th>
-                                <th>Reference / QR Tracking</th>
+                                <th>Reference</th>
                                 <th>Subject</th>
                                 <th>Recipient</th>
-                                <th>Client Contact</th>
+                                <th>Contact Number</th>
                                 <th>Status</th>
                                 <th>Priority</th>
                                 <th>Actions</th>
@@ -306,7 +306,7 @@ if ($stmt !== false) {
                             <?php else: ?>
                                 <?php foreach ($documents as $document): ?>
                                     <tr>
-                                        <td><?php echo sanitize($document['date_created']); ?></td>
+                                        <td><?php echo sanitize(date('M j, Y', strtotime($document['date_created']))); ?><div class="small text-muted"><?php echo sanitize(date('g:i A', strtotime($document['date_created']))); ?></div></td>
                                         <td>
                                             <div class="table-cell-badges">
                                                 <span class="badge text-bg-light border"><?php echo sanitize($document['submitter_type']); ?></span>
@@ -335,10 +335,10 @@ if ($stmt !== false) {
                                             </div>
                                         </td>
                                         <td><?php echo sanitize($document['subject']); ?></td>
-                                        <td><?php echo sanitize($document['recipient']); ?></td>
+                                        <td><?php echo sanitize(trim((string)($document['recipient'] ?? '')) !== '' ? $document['recipient'] : 'Not provided'); ?></td>
                                         <td><?php echo sanitize($document['client_phone'] ?? 'Not provided'); ?></td>
                                         <td>
-                                            <span class="badge <?php echo $document['status'] === 'Pending' ? 'text-bg-warning' : ($document['status'] === 'For Release' ? 'text-bg-primary' : 'text-bg-secondary'); ?>">
+                                            <span class="badge <?php echo admin_status_badge_class($document['status']); ?>">
                                                 <?php echo sanitize($document['status']); ?>
                                             </span>
                                         </td>

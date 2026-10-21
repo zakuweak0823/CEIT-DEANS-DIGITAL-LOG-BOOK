@@ -3,6 +3,8 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 $adminName = $_SESSION['admin'] ?? null;
+$adminRole = $_SESSION['admin_role'] ?? 'admin';
+$isLoginPage = in_array(basename($_SERVER['SCRIPT_FILENAME'] ?? $_SERVER['PHP_SELF'] ?? ''), ['login.php', 'forgot_password.php'], true);
 $showAdminLoginArrival = $adminName !== null && !empty($_SESSION['admin_login_arrival']);
 if ($showAdminLoginArrival) {
     unset($_SESSION['admin_login_arrival']);
@@ -16,13 +18,14 @@ $pageTitles = [
     'quick_document.php' => 'Quick Submit Records',
     'incoming.php' => 'Incoming Documents',
     'outgoing.php' => 'Outgoing Documents',
-    'batch_papers.php' => 'Batch Papers',
-    'batch_tracker.php' => 'Batch Tracker',
+    'batch_papers.php' => 'Bulk Documents',
+    'batch_tracker.php' => 'Bulk Documents Tracker',
     'borrowed.php' => 'Borrowed Items',
     'item_categories.php' => 'Item Categories',
     'sms.php' => 'SMS Logs',
     'notification_settings.php' => 'Communication Settings',
     'settings.php' => 'Settings',
+    'users.php' => 'Administrator accounts',
     'reports.php' => 'Reports',
     'records.php' => 'Document Records',
 ];
@@ -36,6 +39,15 @@ $sidebarActiveClass = static function (string $page) use ($currentPage): string 
 $isDocumentReportActive = $currentPage === 'reports.php' && !in_array($currentReportType, ['Borrowed Items', 'SMS Logs'], true);
 $isSmsReportActive = $currentPage === 'reports.php' && $currentReportType === 'SMS Logs';
 $pendingDocumentCount = null;
+$slaOverdueBadgeCount = 0;
+if ($adminName && isset($conn) && function_exists('safe_query') && !$isLoginPage) {
+    require_once __DIR__ . '/sla_support.php';
+    $slaHeaderOverdue = get_sla_overdue($conn, get_sla_settings($conn), 1);
+    $slaOverdueBadgeCount = (int)$slaHeaderOverdue['documentCount'] + (int)$slaHeaderOverdue['loanCount'];
+}
+$slaOverdueBadge = $slaOverdueBadgeCount > 0
+    ? '<span class="sidebar-overdue-badge" title="Overdue records">' . ($slaOverdueBadgeCount > 99 ? '99+' : $slaOverdueBadgeCount) . '</span>'
+    : '';
 $latestDocumentId = null;
 if ($adminName && isset($conn) && function_exists('safe_query')) {
     $pendingCountStatement = safe_query(
@@ -62,14 +74,14 @@ if ($adminName && isset($conn) && function_exists('safe_query')) {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <title>CEIT Deans Office Digital Logbook</title>
+    <title>CEIT Dean's Office Digital Logbook</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <!-- Bump this asset version when shared styles change to refresh browser caches. -->
-    <link rel="stylesheet" href="assets/css/style.css?v=responsive-admin-tables-5">
+    <link rel="stylesheet" href="assets/css/style.css?v=workspace-consistency-7">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body<?php echo $adminName ? ' class="admin-body' . ($showAdminLoginArrival ? ' admin-login-arrival' : '') . (($_GET['embed'] ?? '') === '1' ? ' admin-embedded-body' : '') . '" data-latest-document-id="' . (int)($latestDocumentId ?? 0) . '" data-document-activity-ready="' . ($latestDocumentId === null ? 'false' : 'true') . '"' : ($currentPage === 'login.php' ? ' class="login-page"' : ''); ?>>
+<body<?php echo $adminName ? ' class="admin-body' . ($showAdminLoginArrival ? ' admin-login-arrival' : '') . (($_GET['embed'] ?? '') === '1' ? ' admin-embedded-body' : '') . '" data-latest-document-id="' . (int)($latestDocumentId ?? 0) . '" data-document-activity-ready="' . ($latestDocumentId === null ? 'false' : 'true') . '"' : ($isLoginPage ? ' class="login-page"' : ''); ?>>
 <?php if ($adminName): ?>
 <script>
 try {
@@ -84,8 +96,8 @@ try {
     <?php if ($showAdminLoginArrival): ?>
         <div class="admin-login-transition" role="status" aria-live="polite">
             <span class="admin-login-transition-mark"><img src="assets/images/CVSU.jpeg" alt=""></span>
-            <span class="admin-login-transition-title">Welcome back</span>
-            <span class="admin-login-transition-caption">Opening your workspace</span>
+            <span class="admin-login-transition-title">Sign-in complete</span>
+            <span class="admin-login-transition-caption">Opening the dashboard</span>
             <span class="admin-login-transition-progress" aria-hidden="true"></span>
         </div>
     <?php endif; ?>
@@ -152,12 +164,12 @@ try {
         </div>
         <div class="sidebar-nav px-3 py-3">
             <div class="sidebar-section text-uppercase fw-semibold text-muted mb-2">Workspace</div>
-            <a href="dashboard" class="sidebar-link<?php echo $sidebarActiveClass('dashboard.php'); ?>"<?php echo $currentPage === 'dashboard.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-speedometer2 me-2"></i>Dashboard</a>
+                    <a href="dashboard" class="sidebar-link<?php echo $sidebarActiveClass('dashboard.php'); ?>"<?php echo $currentPage === 'dashboard.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-speedometer2 me-2"></i>Dashboard<?php echo $slaOverdueBadge; ?></a>
             <div class="sidebar-section text-uppercase fw-semibold text-muted mt-4 mb-2">Documents</div>
             <a href="quick_document" class="sidebar-link<?php echo $isQuickDocumentActive ? ' active' : ''; ?>"<?php echo $isQuickDocumentActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-lightning-charge me-2"></i>Quick Submit Records</a>
             <a href="incoming" class="sidebar-link<?php echo $sidebarActiveClass('incoming.php'); ?>"<?php echo $currentPage === 'incoming.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-arrow-in-down me-2"></i>Incoming Documents</a>
             <a href="outgoing" class="sidebar-link<?php echo $sidebarActiveClass('outgoing.php'); ?>"<?php echo $currentPage === 'outgoing.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-arrow-up me-2"></i>Outgoing Documents</a>
-            <a href="batch_papers" class="sidebar-link<?php echo $sidebarActiveClass('batch_papers.php'); ?>"<?php echo $currentPage === 'batch_papers.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-files me-2"></i>Batch Papers</a>
+            <a href="batch_papers" class="sidebar-link<?php echo $sidebarActiveClass('batch_papers.php'); ?>"<?php echo $currentPage === 'batch_papers.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-files me-2"></i>Bulk Documents</a>
             <div class="sidebar-section text-uppercase fw-semibold text-muted mt-4 mb-2">Borrowed Items</div>
             <a href="borrowed" class="sidebar-link<?php echo $sidebarActiveClass('borrowed.php'); ?>"<?php echo $currentPage === 'borrowed.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-seam me-2"></i>Borrowed Items</a>
             <a href="item_categories" class="sidebar-link<?php echo $sidebarActiveClass('item_categories.php'); ?>"<?php echo $currentPage === 'item_categories.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-tags me-2"></i>Item Categories</a>
@@ -196,11 +208,14 @@ try {
                             <span class="admin-avatar rounded-circle d-inline-flex align-items-center justify-content-center" aria-hidden="true"><?php echo sanitize($adminInitial); ?></span>
                             <span class="admin-profile-copy">
                                 <strong><?php echo sanitize($adminName); ?></strong>
-                                <small>Administrator</small>
+                                <small><?php echo $adminRole === 'super_admin' ? 'Super Admin' : 'Administrator'; ?></small>
                             </span>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><a class="dropdown-item<?php echo $currentPage === 'settings.php' ? ' active' : ''; ?>" href="settings"<?php echo $currentPage === 'settings.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-gear me-2" aria-hidden="true"></i>Settings</a></li>
+                            <?php if ($adminRole === 'super_admin'): ?>
+                                <li><a class="dropdown-item<?php echo $currentPage === 'users.php' ? ' active' : ''; ?>" href="users"<?php echo $currentPage === 'users.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-people me-2" aria-hidden="true"></i>Administrator accounts</a></li>
+                            <?php endif; ?>
                             <li><hr class="dropdown-divider"></li>
                             <li class="px-3 py-2 admin-mode-menu-item">
                                 <div class="d-flex align-items-start gap-2">
@@ -255,15 +270,18 @@ try {
                 <div class="admin-quick-access-grid">
                     <a href="incoming"<?php echo $currentPage === 'incoming.php' && ($_GET['status'] ?? '') !== 'Pending' ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-arrow-in-down" aria-hidden="true"></i><span>Incoming</span></a>
                     <a href="outgoing"<?php echo $currentPage === 'outgoing.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-arrow-up" aria-hidden="true"></i><span>Outgoing</span></a>
-                    <a href="batch_papers"<?php echo $currentPage === 'batch_papers.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-files" aria-hidden="true"></i><span>Batch papers</span></a>
-                    <a href="batch_tracker"<?php echo $currentPage === 'batch_tracker.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-diagram-3" aria-hidden="true"></i><span>Batch tracker</span></a>
-                    <a href="borrowed"<?php echo $currentPage === 'borrowed.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-seam" aria-hidden="true"></i><span>Borrowed items</span></a>
+                    <a href="batch_papers"<?php echo $currentPage === 'batch_papers.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-files" aria-hidden="true"></i>                    <span>Bulk Documents</span></a>
+                                        <a href="batch_tracker"<?php echo $currentPage === 'batch_tracker.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-diagram-3" aria-hidden="true"></i><span>Bulk Documents Tracker</span></a>
+                                        <a href="borrowed"<?php echo $currentPage === 'borrowed.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-seam" aria-hidden="true"></i><span>Borrowed Items</span></a>
                     <a href="item_categories"<?php echo $currentPage === 'item_categories.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-tags" aria-hidden="true"></i><span>Categories</span></a>
                     <a href="sms"<?php echo $currentPage === 'sms.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots" aria-hidden="true"></i><span>SMS logs</span></a>
                     <a href="notification_settings"<?php echo $currentPage === 'notification_settings.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots" aria-hidden="true"></i><span>Communication</span></a>
                     <a href="reports?report_type=All%20Reports&amp;generate=1"<?php echo $isDocumentReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-file-earmark-bar-graph" aria-hidden="true"></i><span>All Reports</span></a>
                     <a href="reports?report_type=SMS%20Logs&amp;generate=1"<?php echo $currentPage === 'reports.php' && $currentReportType === 'SMS Logs' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-left-text" aria-hidden="true"></i><span>SMS reports</span></a>
                     <a href="settings"<?php echo $currentPage === 'settings.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-gear" aria-hidden="true"></i><span>Settings</span></a>
+                    <?php if ($adminRole === 'super_admin'): ?>
+                        <a href="users"<?php echo $currentPage === 'users.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-people" aria-hidden="true"></i><span>Administrator accounts</span></a>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -278,12 +296,12 @@ try {
             <div class="offcanvas-body px-0">
                 <div class="sidebar-nav px-3">
                     <div class="sidebar-section text-uppercase fw-semibold text-muted mb-2">Workspace</div>
-                    <a href="dashboard" class="sidebar-link<?php echo $sidebarActiveClass('dashboard.php'); ?>"<?php echo $currentPage === 'dashboard.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-speedometer2 me-2"></i>Dashboard</a>
+                                    <a href="dashboard" class="sidebar-link<?php echo $sidebarActiveClass('dashboard.php'); ?>"<?php echo $currentPage === 'dashboard.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-speedometer2 me-2"></i>Dashboard<?php echo $slaOverdueBadge; ?></a>
                     <div class="sidebar-section text-uppercase fw-semibold text-muted mt-4 mb-2">Documents</div>
                     <a href="quick_document" class="sidebar-link<?php echo $isQuickDocumentActive ? ' active' : ''; ?>"<?php echo $isQuickDocumentActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-lightning-charge me-2"></i>Quick Submit Records</a>
                     <a href="incoming" class="sidebar-link<?php echo $sidebarActiveClass('incoming.php'); ?>"<?php echo $currentPage === 'incoming.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-arrow-in-down me-2"></i>Incoming Documents</a>
                     <a href="outgoing" class="sidebar-link<?php echo $sidebarActiveClass('outgoing.php'); ?>"<?php echo $currentPage === 'outgoing.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-arrow-up me-2"></i>Outgoing Documents</a>
-                    <a href="batch_papers" class="sidebar-link<?php echo $sidebarActiveClass('batch_papers.php'); ?>"<?php echo $currentPage === 'batch_papers.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-files me-2"></i>Batch Papers</a>
+                    <a href="batch_papers" class="sidebar-link<?php echo $sidebarActiveClass('batch_papers.php'); ?>"<?php echo $currentPage === 'batch_papers.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-files me-2"></i>Bulk Documents</a>
                     <div class="sidebar-section text-uppercase fw-semibold text-muted mt-4 mb-2">Borrowed Items</div>
                     <a href="borrowed" class="sidebar-link<?php echo $sidebarActiveClass('borrowed.php'); ?>"<?php echo $currentPage === 'borrowed.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-seam me-2"></i>Borrowed Items</a>
                     <a href="item_categories" class="sidebar-link<?php echo $currentPage === 'item_categories.php' ? ' active' : ''; ?>"<?php echo $currentPage === 'item_categories.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-tags me-2"></i>Item Categories</a>
@@ -298,20 +316,20 @@ try {
         </div>
         <main class="admin-content container-fluid">
 <?php else: ?>
-<nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm<?php echo $currentPage === 'login.php' ? ' login-page-navbar' : ''; ?>">
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm<?php echo $isLoginPage ? ' login-page-navbar' : ''; ?>">
     <div class="container">
-        <a class="navbar-brand d-flex align-items-center" href="dashboard">
-            <?php if ($currentPage === 'login.php'): ?>
+        <a class="navbar-brand d-flex align-items-center" href="<?php echo $isLoginPage ? 'login' : 'dashboard'; ?>">
+            <?php if ($isLoginPage): ?>
                 <img class="login-brand-logo me-3" src="assets/images/CVSU.jpeg" alt="">
             <?php else: ?>
                 <span class="brand-icon me-2">CVSU</span>
             <?php endif; ?>
             <div>
-                <div class="fw-bold">CEIT Deans Office Digital Logbook</div>
+                <div class="fw-bold">CEIT Dean's Office Digital Logbook</div>
                 <small class="text-light opacity-75">Dean's Office</small>
             </div>
         </a>
-        <?php if ($currentPage !== 'login.php'): ?>
+        <?php if (!$isLoginPage): ?>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu" aria-controls="navMenu" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
@@ -326,5 +344,5 @@ try {
         <?php endif; ?>
     </div>
 </nav>
-<main class="<?php echo $currentPage === 'login.php' ? 'login-page-main' : 'container my-5'; ?>">
+<main class="<?php echo $isLoginPage ? 'login-page-main' : 'container my-5'; ?>">
 <?php endif; ?>

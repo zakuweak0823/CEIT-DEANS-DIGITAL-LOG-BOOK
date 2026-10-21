@@ -14,6 +14,7 @@ $adminPages = [
     'reports',
     'records',
     'login',
+    'forgot_password',
     'logout',
 ];
 
@@ -23,7 +24,7 @@ $requestMethod = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 
 // Canonicalize browser navigation, but never redirect POSTs that carry form submissions.
 if (in_array($requestMethod, ['GET', 'HEAD'], true)
-    && preg_match('~/(dashboard|quick_document|incoming|outgoing|batch_papers|batch_tracker|document_tracker|borrowed|item_categories|sms|notification_settings|settings|reports|records|login|logout)\.php$~i', $requestPath, $matches)
+    && preg_match('~/(dashboard|quick_document|incoming|outgoing|batch_papers|batch_tracker|document_tracker|borrowed|item_categories|sms|notification_settings|settings|reports|records|login|forgot_password|users|logout)\.php$~i', $requestPath, $matches)
 ) {
     $query = (string)($_SERVER['QUERY_STRING'] ?? '');
     $cleanPath = $matches[1] === 'document_tracker'
@@ -47,7 +48,7 @@ if ($page === 'document-tracker') {
     return true;
 }
 
-if (in_array($page, $adminPages, true)) {
+if (in_array($page, array_merge($adminPages, ['users']), true)) {
     $scriptPath = __DIR__ . DIRECTORY_SEPARATOR . $page . '.php';
     if (!is_file($scriptPath)) {
         http_response_code(404);

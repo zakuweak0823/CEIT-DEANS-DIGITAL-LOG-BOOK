@@ -12,14 +12,17 @@ import {
   BiChevronLeft,
   BiLayer,
   BiCheckCircle,
+  BiError,
+  BiErrorCircle,
+  BiSearch,
 } from 'react-icons/bi';
 
 const sections = [
-  { key: 'incoming', label: 'Submit Documents', icon: BiArchiveIn, exampleLabel: 'Submit Document' },
-  { key: 'outgoing', label: 'Released Documents', icon: BiArchiveOut, exampleLabel: 'Released Documents' },
-  { key: 'batches', label: 'Bulk Papers', icon: BiLayer, exampleLabel: 'Register Bulk Papers' },
-  { key: 'borrowed', label: 'Borrowed Items', icon: BiBox, exampleLabel: 'Borrow Item' },
-  { key: 'reports', label: 'Reports', icon: BiFile, exampleLabel: 'Generate Report' },
+  { key: 'incoming', label: 'Incoming documents', icon: BiArchiveIn },
+  { key: 'outgoing', label: 'Outgoing documents', icon: BiArchiveOut },
+  { key: 'batches', label: 'Bulk Documents', icon: BiLayer },
+  { key: 'borrowed', label: 'Borrowed Items', icon: BiBox },
+  { key: 'reports', label: 'Reports', icon: BiFile },
 ];
 
 const API_ENDPOINT = import.meta.env.DEV
@@ -44,35 +47,61 @@ const playSwipeTone = () => {
 };
 
 const statusClasses = {
-  Received: 'bg-emerald-100 text-emerald-800',
-  'For Release': 'bg-amber-100 text-amber-800',
-  Released: 'bg-emerald-100 text-emerald-800',
-  Pending: 'bg-amber-100 text-amber-700',
-  'Not Returned': 'bg-rose-100 text-rose-700',
-  Returned: 'bg-emerald-100 text-emerald-800',
-  Delivered: 'bg-lime-100 text-lime-700',
-  Failed: 'bg-rose-100 text-rose-700',
+  'For Release': 'border border-teal-200 bg-teal-100 text-teal-800',
+  Released: 'border border-green-200 bg-green-100 text-green-800',
+  Received: 'border border-lime-200 bg-lime-100 text-emerald-900',
+  Pending: 'border border-yellow-300 bg-yellow-100 text-slate-800',
+  Queued: 'border border-yellow-300 bg-yellow-100 text-slate-800',
+  Borrowed: 'border border-yellow-300 bg-yellow-100 text-slate-800',
+  'Not Returned': 'border border-rose-200 bg-rose-100 text-rose-700',
+  Returned: 'border border-green-200 bg-green-100 text-green-800',
+  Delivered: 'border border-green-200 bg-green-100 text-green-800',
+  Sent: 'border border-green-200 bg-green-100 text-green-800',
+  Failed: 'border border-rose-200 bg-rose-100 text-rose-700',
 };
+const neutralBadgeClass = 'border border-slate-200 bg-slate-100 text-slate-700';
+const statusLabel = (status) => status;
 
 const defaultFormLabels = {
-  sender: 'Submitter type',
-  documentType: 'Document type',
-  contactNumber: 'Client contact number',
-  remarks: 'Remarks',
+  sender: 'Role',
+  documentType: 'Document name',
+  contactNumber: 'Contact number',
+  remarks: 'Remarks (optional)',
   senderEnabled: true,
 };
 const defaultMobileSettings = {
   theme: 'classic',
   headerTitle: 'CEIT Digital Logbook',
   officeName: "Dean's Office",
-  welcomeHeading: "Welcome to the CEIT Dean's Office",
-  welcomeMessage: 'Keep document submissions, Bulk Papers, and borrowed items organized in one place.',
+  welcomeHeading: 'Office logbook',
+  welcomeMessage: 'Submit and track documents, submit bulk documents, and record borrowed items.',
   confirmationSound: true,
   pullToRefreshSound: true,
 };
 
-const inputClass = 'w-full rounded-3xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100';
+const inputClass = 'block w-full min-h-12 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200';
+const labelClass = 'block text-sm font-semibold text-emerald-900';
+const helperClass = 'mt-1 block text-xs text-slate-600';
 const buttonClass = 'inline-flex min-h-12 items-center justify-center rounded-2xl bg-emerald-900 px-5 py-3.5 text-base font-semibold text-white transition hover:bg-emerald-700 active:scale-[0.99]';
+const secondaryButtonClass = 'inline-flex min-h-12 w-full items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3.5 text-base font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-60 sm:w-auto sm:min-w-36';
+const formPrimaryClass = 'w-full disabled:cursor-wait disabled:opacity-70 sm:w-auto sm:min-w-48';
+const formActionsClass = 'sticky bottom-0 mt-5 flex flex-col-reverse gap-3 border-t border-emerald-100 bg-white/95 px-4 pb-4 pt-3 backdrop-blur sm:flex-row sm:justify-end sm:px-0 sm:pb-0';
+const MIN_RECORD_DATE = '2020-01-01';
+const cardClass = 'rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm';
+const sectionTitleClass = 'text-left text-lg font-semibold text-emerald-950';
+const emptyStateClass = 'rounded-2xl border border-emerald-200 bg-white p-5 text-left text-sm text-slate-600 shadow-sm';
+const badgeClass = 'inline-flex shrink-0 cursor-default select-none items-center rounded-full px-2.5 py-1 text-xs font-semibold';
+const cardActionClass = 'mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-200 disabled:cursor-wait disabled:opacity-60 sm:w-auto';
+const parseDocumentPages = (value) => {
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
 const todayLocalDate = () => {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -107,7 +136,7 @@ const verifyOfficeTrackerQr = async (payload, trackerBaseUrl, batchTrackerBaseUr
     trackerUrl = batchTrackerBaseUrl ? new URL(batchTrackerBaseUrl) : null;
     trackerType = 'batch';
   } else {
-    throw new Error('This QR code was not issued by the CEIT Dean’s Office document or batch tracker.');
+    throw new Error('This QR code was not issued by the CEIT Dean’s Office document or bulk submission tracker.');
   }
   if (!trackerUrl) {
     throw new Error('The office tracker URL is not configured. Contact the office to update its tracker settings.');
@@ -139,7 +168,7 @@ const verifyOfficeTrackerQr = async (payload, trackerBaseUrl, batchTrackerBaseUr
     activeTrackerUrl.host = window.location.host;
     activeTrackerUrl.protocol = window.location.protocol;
   }
-  activeTrackerUrl.search = new URLSearchParams({ token }).toString();
+  activeTrackerUrl.search = new URLSearchParams({ token, return: `${window.location.origin}${window.location.pathname}` }).toString();
   return activeTrackerUrl;
 };
 
@@ -228,7 +257,7 @@ function App() {
   const [borrowedSubmitting, setBorrowedSubmitting] = useState(false);
   const [batchSubmitting, setBatchSubmitting] = useState(false);
   const isFormSubmitting = incomingSubmitting || borrowedSubmitting || batchSubmitting;
-  const [batchForm, setBatchForm] = useState({ type: '', submitterName: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', remarks: '' });
+  const [batchForm, setBatchForm] = useState({ type: '', submitterName: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', documentPages: [], remarks: '' });
   const [editingBatchId, setEditingBatchId] = useState(null);
   const [batchStatusBusyId, setBatchStatusBusyId] = useState(null);
   const [reportForm, setReportForm] = useState({ type: 'Incoming', from: '', to: '' });
@@ -639,7 +668,7 @@ function App() {
   const openRecordModal = (formType) => {
     if (formType === 'batches') {
       setEditingBatchId(null);
-      setBatchForm({ type: '', submitterName: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', remarks: '' });
+      setBatchForm({ type: '', submitterName: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', documentPages: [], remarks: '' });
     }
     setRecordModal(formType);
   };
@@ -649,15 +678,19 @@ function App() {
     event.preventDefault();
     if (incomingSubmitting) return;
     if (!incomingForm.submitterName.trim()) {
-      showActionFeedback({ title: 'Enter the submitter’s name', description: 'A name is required so office staff can distinguish who submitted documents of the same type.', tone: 'warning' });
+      showActionFeedback({ title: 'Name required', description: 'Enter the name of the person submitting the document.', tone: 'warning' });
+      return;
+    }
+    if (!incomingForm.date || incomingForm.date < todayLocalDate()) {
+      showActionFeedback({ title: 'Check the date submitted', description: 'The date cannot be earlier than today.', tone: 'warning' });
       return;
     }
     if (incomingForm.submitterName.trim().length > 255) {
-      showActionFeedback({ title: 'Submitter name is too long', description: 'Enter a name using no more than 255 characters.', tone: 'warning' });
+      showActionFeedback({ title: 'Name is too long', description: 'Enter a name of no more than 255 characters.', tone: 'warning' });
       return;
     }
     if (incomingModalMode === 'standard' && !isValidContactNumber(incomingForm.clientPhone)) {
-      showActionFeedback({ title: 'Check the contact number', description: 'Enter the required 11-digit contact number using numbers only.', tone: 'warning' });
+      showActionFeedback({ title: 'Check the contact number', description: 'Enter an 11-digit contact number using numbers only.', tone: 'warning' });
       return;
     }
     setIncomingSubmitting(true);
@@ -700,7 +733,7 @@ function App() {
         }
         const clientPhone = incomingModalMode === 'standard' ? incomingForm.clientPhone : '';
         const incomingStatus = 'Pending';
-        setIncomingItems((prev) => [{ id: result.id, reference: result.reference, date: incomingForm.date, from: formLabels.senderEnabled ? incomingForm.from : '', submitterName: incomingForm.submitterName.trim(), subject: incomingForm.subject, recipient: '', clientPhone, status: incomingStatus }, ...prev]);
+        setIncomingItems((prev) => [{ id: result.id, reference: result.reference, date: incomingForm.date, from: formLabels.senderEnabled ? incomingForm.from : '', submitterName: incomingForm.submitterName.trim(), subject: incomingForm.subject, recipient: 'Dean’s Office', clientPhone, status: incomingStatus }, ...prev]);
         setReportItems((prev) => [
           { id: result.id, date: incomingForm.date, type: 'Incoming', from: formLabels.senderEnabled ? incomingForm.from : '', subject: incomingForm.subject, status: incomingStatus },
           ...prev,
@@ -711,8 +744,8 @@ function App() {
           setActiveForm(null);
           setIncomingModalMode(null);
           setSubmissionSuccess({
-            title: incomingModalMode === 'quick' ? 'Quick submission received' : 'Document submitted',
-            description: 'Your document is now recorded and awaiting office review.',
+            title: incomingModalMode === 'quick' ? 'Quick submission recorded' : 'Document submitted',
+            description: 'The document has been recorded and is awaiting office review.',
             details: [
               { label: 'Submitted by', value: incomingForm.submitterName.trim() },
               { label: formLabels.documentType, value: incomingForm.subject },
@@ -726,11 +759,11 @@ function App() {
           });
         });
       } else {
-        showActionFeedback({ title: 'Document was not submitted', description: result.message || 'The office server could not save this document.', tone: 'danger' });
+        showActionFeedback({ title: 'Document not submitted', description: result.message || 'The office server could not save this document.', tone: 'danger' });
       }
     } catch (error) {
       console.error('Incoming submission error:', error);
-      showActionFeedback({ title: 'Document submission problem', description: error.message, tone: 'danger' });
+      showActionFeedback({ title: 'Document not submitted', description: error.message, tone: 'danger' });
     } finally {
       setIncomingSubmitting(false);
     }
@@ -738,7 +771,7 @@ function App() {
 
   const handlePrepareIncoming = async (item) => {
     if (!item.id) {
-      showActionFeedback({ title: 'Cannot prepare this document', description: 'This record cannot be prepared from mobile. Reload the logbook and try again.', tone: 'warning' });
+      showActionFeedback({ title: 'Cannot prepare this document', description: 'This record cannot be prepared from the mobile app. Reload the logbook and try again.', tone: 'warning' });
       return;
     }
     setReleaseDocumentId(item.id);
@@ -757,7 +790,7 @@ function App() {
       incrementDocumentStatusCount('Pending', -1);
       incrementDocumentStatusCount('For Release');
       setReleaseDocumentId(null);
-      showActionFeedback({ title: 'Document prepared for release', description: 'The document was moved to Outgoing Documents and is now marked For Release.', tone: 'success' });
+      showActionFeedback({ title: 'Document prepared for release', description: 'The document was moved to Outgoing documents and is now marked For Release.', tone: 'success' });
     } catch (error) {
       setReleaseDocumentId(null);
       showActionFeedback({ title: 'Could not prepare document', description: error.message, tone: 'danger' });
@@ -807,7 +840,7 @@ function App() {
       if (!response.ok || !result.success) throw new Error(result.message || 'SMS could not be sent');
       const smsStatus = String(result.sms?.status || '').toLowerCase();
       showActionFeedback({
-        title: ['pending', 'queued', 'sent'].includes(smsStatus) ? 'SMS accepted — delivery pending' : 'SMS notification sent',
+        title: ['pending', 'queued', 'sent'].includes(smsStatus) ? 'SMS accepted for delivery' : 'SMS notification sent',
         description: result.sms?.message || 'The SMS request was accepted.',
         tone: ['pending', 'queued', 'sent'].includes(smsStatus) ? 'warning' : 'success',
       });
@@ -821,7 +854,7 @@ function App() {
   const handleClientStatusLookup = async (event) => {
     event.preventDefault();
     if (!isValidContactNumber(clientStatusPhone)) {
-      setClientStatusError('Enter the same 11-digit contact number given to the office.');
+      setClientStatusError('Enter the 11-digit contact number you gave to the office.');
       setClientStatusSearched(false);
       return;
     }
@@ -849,7 +882,7 @@ function App() {
     event.preventDefault();
     if (borrowedSubmitting) return;
     if (borrowedForm.phone !== '' && !isValidContactNumber(borrowedForm.phone)) {
-      showActionFeedback({ title: 'Check the borrower contact number', description: 'Enter exactly 11 digits using numbers only, or leave it blank.', tone: 'warning' });
+      showActionFeedback({ title: 'Check the contact number', description: 'Enter exactly 11 digits using numbers only, or leave the field blank.', tone: 'warning' });
       return;
     }
     setBorrowedSubmitting(true);
@@ -888,17 +921,17 @@ function App() {
             details: [
               { label: 'Item', value: borrowedForm.item },
               { label: 'Borrower', value: borrowedForm.borrower },
-              { label: 'Status', value: borrowedStatus },
+              { label: 'Status', value: statusLabel(borrowedStatus) },
             ],
             reference: result.id ? `Record #${result.id}` : '',
           });
         });
       } else {
-        showActionFeedback({ title: 'Borrowed item was not recorded', description: result.message || 'The office server could not save this item.', tone: 'danger' });
+        showActionFeedback({         title: 'Borrowed item not recorded', description: result.message || 'The office server could not save this borrowed item.', tone: 'danger' });
       }
     } catch (error) {
-      console.error('Borrowed submission error:', error);
-      showActionFeedback({ title: 'Borrowed item submission problem', description: error.message, tone: 'danger' });
+              console.error('Borrowed item submission error:', error);
+              showActionFeedback({ title: 'Borrowed item not recorded', description: error.message, tone: 'danger' });
     } finally {
       setBorrowedSubmitting(false);
     }
@@ -926,10 +959,10 @@ function App() {
           ? { ...current, status: 'Returned' }
           : current
       )));
-      showActionFeedback({ title: 'Item marked as returned', description: `${item.item} is now recorded as Returned.`, tone: 'success' });
+      showActionFeedback({       title: 'Item marked as returned', description: `${item.item} is now recorded as Returned.`, tone: 'success' });
     } catch (error) {
-      console.error('Borrowed item return update failed:', error);
-      showActionFeedback({ title: 'Could not update borrowed item', description: error.message || 'Could not update the borrowed item.', tone: 'danger' });
+            console.error('Borrowed item return update failed:', error);
+            showActionFeedback({ title: 'Borrowed item not updated', description: error.message || 'The borrowed item could not be updated.', tone: 'danger' });
     } finally {
       setBorrowedBusyId(null);
     }
@@ -945,16 +978,16 @@ function App() {
         body: JSON.stringify({ action: 'set_batch_status', batch_id: batch.id }),
       });
       const result = await readApiResponse(response);
-      if (!response.ok || !result.success) throw new Error(result.message || 'Batch status could not be changed');
+      if (!response.ok || !result.success) throw new Error(result.message || 'The bulk submission status could not be changed.');
       setBatchItems((items) => items.map((item) => item.id === batch.id ? { ...item, status: result.status } : item));
       setReloadCount((count) => count + 1);
       showActionFeedback({
-        title: 'Batch status updated',
-        description: `${batch.batchCode} and its linked papers are now ${result.status}.`,
+        title: 'Bulk submission status updated',
+        description: `${batch.batchCode} and its linked documents are now ${result.status}.`,
         tone: 'success',
       });
     } catch (error) {
-      showActionFeedback({ title: 'Could not update batch status', description: error.message, tone: 'danger' });
+      showActionFeedback({ title: 'Bulk submission status not updated', description: error.message, tone: 'danger' });
     } finally {
       setBatchStatusBusyId(null);
     }
@@ -965,19 +998,31 @@ function App() {
     if (batchSubmitting) return;
     const batchType = batchForm.type.trim();
     if (!batchType || batchType.length > 255) {
-      showActionFeedback({ title: 'Check the batch type', description: 'Enter a batch or document name of up to 255 characters.', tone: 'warning' });
+      showActionFeedback({ title: 'Check the bulk submission type', description: 'Enter a bulk submission type of up to 255 characters.', tone: 'warning' });
       return;
     }
     const submitterName = batchForm.submitterName.trim();
     if (!submitterName || submitterName.length > 255) {
-      showActionFeedback({ title: 'Check the submitter name', description: 'Enter the name of the person submitting this batch (up to 255 characters).', tone: 'warning' });
+      showActionFeedback({ title: 'Check the name', description: 'Enter a name of no more than 255 characters.', tone: 'warning' });
+      return;
+    }
+    if (!batchForm.date || (!editingBatchId && batchForm.date < todayLocalDate()) || batchForm.date < MIN_RECORD_DATE) {
+      showActionFeedback({ title: 'Check the date submitted', description: 'The date cannot be earlier than today.', tone: 'warning' });
       return;
     }
     const paperCount = Number(batchForm.paperCount);
-    if (!Number.isInteger(paperCount) || paperCount < 1 || paperCount > 9999) {
-      showActionFeedback({ title: 'Check the paper count', description: 'Enter a paper count between 1 and 9,999.', tone: 'warning' });
+    if (!Number.isInteger(paperCount) || paperCount < 1 || paperCount > 3) {
+      showActionFeedback({ title: 'Check the number of documents', description: 'Enter a number between 1 and 3.', tone: 'warning' });
       return;
     }
+    const pageValues = Array.from({ length: paperCount }, (_, index) => String(batchForm.documentPages?.[index] ?? '').trim());
+    const pagesInvalid = pageValues.some((value) => value !== '' && (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > 9999));
+    if (pagesInvalid) {
+      showActionFeedback({ title: 'Check the pages per document', description: 'Leave a document blank, or enter a number between 1 and 9,999.', tone: 'warning' });
+      return;
+    }
+    const documentPages = pageValues.some((value) => value !== '') ? pageValues.map((value) => (value === '' ? null : Number(value))) : [];
+    const totalPages = documentPages.reduce((sum, value) => sum + (value || 0), 0);
     setBatchSubmitting(true);
     try {
       const response = await apiFetch({
@@ -993,6 +1038,7 @@ function App() {
           sender_type: formLabels.senderEnabled ? batchForm.senderType : '',
           remarks: batchForm.remarks,
           paper_count: paperCount,
+          document_pages: documentPages,
         }),
       });
       const result = await readApiResponse(response);
@@ -1001,15 +1047,16 @@ function App() {
       let successNotice;
       if (editingBatchId) {
         setBatchItems((items) => items.map((batch) => batch.id === editingBatchId
-          ? { ...batch, documentType: batchForm.documentType, batchType, submitterName, batchDate: batchForm.date, senderType: batchForm.senderType, paperCount, remarks: batchForm.remarks }
+          ? { ...batch, documentType: batchForm.documentType, batchType, submitterName, batchDate: batchForm.date, senderType: batchForm.senderType, paperCount, documentPages, remarks: batchForm.remarks }
           : batch));
         successNotice = {
-          title: 'Bulk paper details updated',
+          title: 'Bulk submission updated',
           description: 'Your changes have been saved to the office records.',
           details: [
-            { label: 'Batch type', value: batchType },
+            { label: 'Bulk submission type', value: batchType },
             { label: 'Submitted by', value: submitterName },
-            { label: 'Paper count', value: String(paperCount) },
+            { label: 'Number of documents', value: String(paperCount) },
+            ...(totalPages ? [{ label: 'Total pages', value: String(totalPages) }] : []),
           ],
         };
       } else {
@@ -1029,32 +1076,33 @@ function App() {
               color: { dark: '#064e3b', light: '#ffffff' },
             });
           } catch (error) {
-            console.error('Batch tracking QR could not be generated:', error);
-            trackerQrError = 'The batch was saved, but its QR image could not be generated. Show the batch code to office staff to reprint the QR.';
+            console.error('Bulk submission tracking QR could not be generated:', error);
+            trackerQrError = 'The bulk submission was saved, but its QR image could not be generated. Show the bulk submission code to office staff to reprint the QR.';
           }
         }
         if (mobileSettings.confirmationSound) playConfirmTone();
         setBatchItems((previous) => [savedBatch, ...previous]);
         successNotice = {
-          title: 'Bulk papers submitted',
-          description: 'The batch has been recorded and is ready for office tracking.',
+          title: 'Bulk submission saved',
+          description: 'The bulk submission has been recorded and is ready for office tracking.',
           details: [
-            { label: 'Batch type', value: savedBatch.batchType },
+            { label: 'Bulk submission type', value: savedBatch.batchType },
             { label: 'Submitted by', value: savedBatch.submitterName },
             { label: 'Status', value: savedBatch.status },
-            { label: 'Paper count', value: String(savedBatch.paperCount) },
+            { label: 'Number of documents', value: String(savedBatch.paperCount) },
+            ...(totalPages ? [{ label: 'Total pages', value: String(totalPages) }] : []),
           ],
-          reference: savedBatch.batchCode ? `Batch ${savedBatch.batchCode}` : '',
+          reference: savedBatch.batchCode ? `Bulk submission ${savedBatch.batchCode}` : '',
           trackerUrl,
           trackerQrImage,
           trackerQrError,
-          trackerQrLabel: 'Scan this office-issued QR code to track the batch status.',
-          trackerLinkLabel: 'Open the batch tracker',
+          trackerQrLabel: 'Scan this office-issued QR code to track the bulk submission.',
+          trackerLinkLabel: 'Open the bulk submission tracker',
           trackerDisabled: !savedBatch.trackingToken,
         };
       }
       closePopup(() => {
-        setBatchForm({ type: '', submitterName: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', remarks: '' });
+        setBatchForm({ type: '', submitterName: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', documentPages: [], remarks: '' });
         setEditingBatchId(null);
         setActiveForm(null);
         setRecordModal(null);
@@ -1062,7 +1110,7 @@ function App() {
         setSubmissionSuccess(successNotice);
       });
     } catch (error) {
-      showActionFeedback({ title: `Bulk papers ${editingBatchId ? 'were not updated' : 'were not saved'}`, description: error.message, tone: 'danger' });
+      showActionFeedback({ title: editingBatchId ? 'The bulk submission was not updated' : 'The bulk submission was not saved', description: error.message, tone: 'danger' });
     } finally {
       setBatchSubmitting(false);
     }
@@ -1070,6 +1118,10 @@ function App() {
 
   const handleGenerateReport = async (event) => {
     event.preventDefault();
+    if (reportForm.from && reportForm.to && reportForm.to < reportForm.from) {
+      showActionFeedback({ title: 'Check the date range', description: 'The “To” date cannot be earlier than the “From” date.', tone: 'warning' });
+      return;
+    }
     setReportFilters(reportForm);
     setReportLoading(true);
     try {
@@ -1079,10 +1131,10 @@ function App() {
         body: JSON.stringify({ action: 'get_report', report_type: reportForm.type, from: reportForm.from, to: reportForm.to }),
       });
       const result = await readApiResponse(response);
-      if (!response.ok || !result.success) throw new Error(result.message || 'Report could not be generated');
+      if (!response.ok || !result.success) throw new Error(result.message || 'The report could not be generated.');
       setReportItems(result.records.map((row) => ({ ...row, from: '' })));
     } catch (error) {
-      showActionFeedback({ title: 'Report could not be generated', description: error.message, tone: 'danger' });
+      showActionFeedback({ title: 'Report not generated', description: error.message, tone: 'danger' });
     } finally {
       setReportLoading(false);
     }
@@ -1106,15 +1158,15 @@ function App() {
         <form onSubmit={handleSubmitIncoming} className="mobile-modal-scroll min-h-0 flex-1 overflow-y-auto rounded-3xl border border-emerald-200 bg-white p-4 shadow-sm sm:p-6">
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="space-y-2">
-              <span className="text-sm font-semibold text-emerald-900">Date</span>
-              <input type="date" className={inputClass} value={incomingForm.date} onChange={(event) => setIncomingForm({ ...incomingForm, date: event.target.value })} required />
+              <span className={labelClass}>Date submitted</span>
+              <input type="date" min={todayLocalDate()} className={inputClass} value={incomingForm.date} onChange={(event) => setIncomingForm({ ...incomingForm, date: event.target.value })} required />
             </label>
             <label className="space-y-2 sm:col-span-2">
-              <span className="text-sm font-semibold text-emerald-900">Name of person submitting</span>
-              <input type="text" maxLength={255} autoComplete="name" className={inputClass} value={incomingForm.submitterName} onChange={(event) => setIncomingForm({ ...incomingForm, submitterName: event.target.value })} placeholder="Enter your full name" required />
+              <span className={labelClass}>Name</span>
+              <input type="text" maxLength={255} autoComplete="name" className={inputClass} value={incomingForm.submitterName} onChange={(event) => setIncomingForm({ ...incomingForm, submitterName: event.target.value })} placeholder="Full name" required />
             </label>
             <fieldset className="min-w-0 space-y-2" hidden={!formLabels.senderEnabled}>
-              <legend className="text-sm font-semibold text-emerald-900">{formLabels.sender}</legend>
+              <legend className={labelClass}>{formLabels.sender}</legend>
               <div className="grid grid-cols-2 gap-2">
                 {['Student', 'Faculty'].map((senderType) => {
                   const selected = incomingForm.from === senderType;
@@ -1137,23 +1189,23 @@ function App() {
               </div>
             </fieldset>
             <label className="space-y-2">
-              <span className="text-sm font-semibold text-emerald-900">{formLabels.documentType}</span>
-              <input type="text" className={inputClass} value={incomingForm.subject} onChange={(event) => setIncomingForm({ ...incomingForm, subject: event.target.value })} placeholder={`Enter ${formLabels.documentType.toLowerCase()}`} required />
+              <span className={labelClass}>{formLabels.documentType}</span>
+              <input type="text" maxLength={255} className={inputClass} value={incomingForm.subject} onChange={(event) => setIncomingForm({ ...incomingForm, subject: event.target.value })} placeholder="e.g. Transcript request" required />
             </label>
             {formType === 'standard' && (
               <label className="space-y-2 sm:col-span-2">
-                <span className="text-sm font-semibold text-emerald-900">{formLabels.contactNumber} (required)</span>
-                <input type="tel" inputMode="numeric" autoComplete="tel-national" pattern="[0-9]{11}" title="Enter exactly 11 digits." className={inputClass} value={incomingForm.clientPhone} onChange={(event) => setIncomingForm({ ...incomingForm, clientPhone: contactNumberDigits(event.target.value) })} placeholder="09123456789" required />
+                <span className={labelClass}>{formLabels.contactNumber}</span>
+                <input type="tel" inputMode="numeric" autoComplete="tel-national" pattern="[0-9]{11}" title="Enter exactly 11 digits." className={inputClass} value={incomingForm.clientPhone} onChange={(event) => setIncomingForm({ ...incomingForm, clientPhone: contactNumberDigits(event.target.value) })} placeholder="11-digit number, e.g. 09123456789" required />
               </label>
             )}
           </div>
 
-          <div className="sticky bottom-0 mt-5 flex flex-col gap-3 border-t border-emerald-100 bg-white/95 px-4 pb-4 pt-3 backdrop-blur sm:flex-row sm:justify-end sm:px-0 sm:pb-0">
-            <button type="button" onClick={() => closePopup(() => setIncomingModalMode(null))} disabled={isFormSubmitting} className="min-h-12 rounded-3xl border border-emerald-200 bg-emerald-50 px-5 py-3.5 text-base font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60">
+          <div className={formActionsClass}>
+            <button type="button" onClick={() => closePopup(() => setIncomingModalMode(null))} disabled={isFormSubmitting} className={secondaryButtonClass}>
               Cancel
             </button>
-            <button type="submit" disabled={incomingSubmitting || !isOnline} className={`${buttonClass} disabled:cursor-wait disabled:opacity-70`} aria-live="polite">
-              {incomingSubmitting ? <><span className="loading-spinner" aria-hidden="true" />Submitting…</> : !isOnline ? 'Connection required' : formType === 'quick' ? 'Quick Submit' : 'Submit Document'}
+            <button type="submit" disabled={incomingSubmitting || !isOnline} className={`${buttonClass} ${formPrimaryClass}`} aria-live="polite">
+              {incomingSubmitting ? <><span className="loading-spinner" aria-hidden="true" />Submitting…</> : !isOnline ? 'Connection required' : 'Submit'}
             </button>
           </div>
         </form>
@@ -1165,37 +1217,78 @@ function App() {
         <form onSubmit={handleSubmitBatch} className="mobile-modal-scroll min-h-0 flex-1 overflow-y-auto rounded-3xl border border-emerald-200 bg-white p-4 shadow-sm sm:p-6">
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="space-y-2">
-              <span className="text-sm font-semibold text-emerald-900">Batch type / document name</span>
-              <input type="text" maxLength={255} className={inputClass} value={batchForm.type} onChange={(event) => setBatchForm({ ...batchForm, type: event.target.value })} placeholder="e.g. Transcript request documents" required />
+              <span className={labelClass}>Date submitted</span>
+              <input type="date" min={editingBatchId ? MIN_RECORD_DATE : todayLocalDate()} className={inputClass} value={batchForm.date} onChange={(event) => setBatchForm({ ...batchForm, date: event.target.value })} required />
             </label>
+            <label className="space-y-2 sm:col-span-2">
+              <span className={labelClass}>Name</span>
+              <input type="text" maxLength={255} autoComplete="name" className={inputClass} value={batchForm.submitterName} onChange={(event) => setBatchForm({ ...batchForm, submitterName: event.target.value })} placeholder="Full name" required />
+            </label>
+            <fieldset className="min-w-0 space-y-2" hidden={!formLabels.senderEnabled}>
+              <legend className={labelClass}>{formLabels.sender}</legend>
+              <div className="grid grid-cols-2 gap-2">
+                {['Student', 'Faculty'].map((senderType) => {
+                  const selected = batchForm.senderType === senderType;
+                  return (
+                    <label key={senderType} className={`flex min-h-12 cursor-pointer items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-semibold transition focus-within:ring-2 focus-within:ring-emerald-200 ${selected ? 'border-emerald-700 bg-emerald-50 text-emerald-900' : 'border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50'}`}>
+                      <input
+                        type="radio"
+                        name="batch_sender_type"
+                        value={senderType}
+                        checked={selected}
+                        onChange={() => setBatchForm({ ...batchForm, senderType })}
+                        className="h-4 w-4 shrink-0 accent-emerald-800"
+                        required={formLabels.senderEnabled}
+                        disabled={!formLabels.senderEnabled}
+                      />
+                      <span>{senderType}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
             <label className="space-y-2">
-              <span className="text-sm font-semibold text-emerald-900">Date</span>
-              <input type="date" className={inputClass} value={batchForm.date} onChange={(event) => setBatchForm({ ...batchForm, date: event.target.value })} required />
+              <span className={labelClass}>{formLabels.documentType}</span>
+              <input type="text" maxLength={255} className={inputClass} value={batchForm.type} onChange={(event) => setBatchForm({ ...batchForm, type: event.target.value })} placeholder="e.g. Transcript request" required />
             </label>
             <label className="space-y-2 sm:col-span-2">
-              <span className="text-sm font-semibold text-emerald-900">Name of person submitting</span>
-              <input type="text" maxLength={255} autoComplete="name" className={inputClass} value={batchForm.submitterName} onChange={(event) => setBatchForm({ ...batchForm, submitterName: event.target.value })} placeholder="Enter the submitter’s full name" required />
+              <span className={labelClass}>Number of documents</span>
+              <input type="number" inputMode="numeric" min="1" max="3" className={inputClass} value={batchForm.paperCount} onChange={(event) => setBatchForm({ ...batchForm, paperCount: event.target.value })} readOnly={Boolean(editingBatchId && batchItems.find((batch) => batch.id === editingBatchId)?.receivedAt)} required />
+              {editingBatchId && batchItems.find((batch) => batch.id === editingBatchId)?.receivedAt && <span className={helperClass}>The expected count is locked because staff have confirmed receipt.</span>}
             </label>
-            <label className="space-y-2" hidden={!formLabels.senderEnabled}>
-              <span className="text-sm font-semibold text-emerald-900">{formLabels.sender}</span>
-              <select className={inputClass} value={batchForm.senderType} onChange={(event) => setBatchForm({ ...batchForm, senderType: event.target.value })} required={formLabels.senderEnabled} disabled={!formLabels.senderEnabled}>
-                <option value="Student">Student</option>
-                <option value="Faculty">Faculty</option>
-              </select>
-            </label>
-            <label className="space-y-2 sm:col-span-2">
-              <span className="text-sm font-semibold text-emerald-900">Number of papers</span>
-              <input type="number" inputMode="numeric" min="1" max="9999" className={inputClass} value={batchForm.paperCount} onChange={(event) => setBatchForm({ ...batchForm, paperCount: event.target.value })} readOnly={Boolean(editingBatchId && batchItems.find((batch) => batch.id === editingBatchId)?.receivedAt)} required />
-              {editingBatchId && batchItems.find((batch) => batch.id === editingBatchId)?.receivedAt && <span className="block text-xs text-amber-800">The expected count is locked because staff have confirmed receipt.</span>}
-            </label>
+            <div className="space-y-2 sm:col-span-2">
+              <span className={labelClass}>Pages per document <span className="font-normal text-slate-500">(optional)</span></span>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {Array.from({ length: Math.min(Math.max(Math.floor(Number(batchForm.paperCount)) || 0, 0), 3) }, (_, index) => (
+                  <label key={index} className="block space-y-1">
+                    <span className="text-xs font-medium text-slate-600">Document {index + 1}</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="1"
+                      max="9999"
+                      placeholder="Pages"
+                      aria-label={`Pages in document ${index + 1}`}
+                      className={inputClass}
+                      value={batchForm.documentPages?.[index] ?? ''}
+                      onChange={(event) => {
+                        const next = [...(batchForm.documentPages || [])];
+                        next[index] = event.target.value;
+                        setBatchForm({ ...batchForm, documentPages: next });
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
           <label className="mt-4 block space-y-2">
-            <span className="text-sm font-semibold text-emerald-900">{formLabels.remarks}</span>
-            <textarea className={inputClass} rows="2" value={batchForm.remarks} onChange={(event) => setBatchForm({ ...batchForm, remarks: event.target.value })} />
+            <span className={labelClass}>{formLabels.remarks}</span>
+            <textarea className={inputClass} rows="2" maxLength={500} value={batchForm.remarks} onChange={(event) => setBatchForm({ ...batchForm, remarks: event.target.value })} placeholder="Any additional notes" />
           </label>
-          <div className="sticky bottom-0 mt-5 flex flex-col gap-3 border-t border-emerald-100 bg-white/95 px-4 pb-4 pt-3 backdrop-blur sm:flex-row sm:justify-end sm:px-0 sm:pb-0">
-            <button type="button" disabled={batchSubmitting} onClick={() => closePopup(() => { setRecordModal(null); setActiveForm(null); })} className="inline-flex min-h-14 w-full items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 px-6 py-4 text-base font-semibold text-emerald-700 disabled:opacity-60 sm:w-auto sm:min-w-36">Cancel</button>
-            <button type="submit" disabled={batchSubmitting || !isOnline} className={`${buttonClass} min-h-14 w-full px-6 py-4 text-base disabled:cursor-wait disabled:opacity-70 sm:w-auto sm:min-w-48`} aria-live="polite">{batchSubmitting ? <><span className="loading-spinner" aria-hidden="true" />Saving…</> : !isOnline ? 'Connection required' : editingBatchId ? 'Save Bulk Papers Changes' : 'Save Bulk Papers'}</button>
+          <div className={formActionsClass}>
+            <button type="button" disabled={batchSubmitting} onClick={() => closePopup(() => { setRecordModal(null); setActiveForm(null); })} className={secondaryButtonClass}>Cancel</button>
+            <button type="submit" disabled={batchSubmitting || !isOnline} className={`${buttonClass} ${formPrimaryClass}`} aria-live="polite">{batchSubmitting ? <><span className="loading-spinner" aria-hidden="true" />Saving…</> : !isOnline ? 'Connection required' : (editingBatchId ? 'Save changes' : 'Submit')}</button>
           </div>
         </form>
       );
@@ -1206,28 +1299,28 @@ function App() {
         <form onSubmit={handleSubmitBorrowed} className="mobile-modal-scroll min-h-0 flex-1 overflow-y-auto rounded-3xl border border-emerald-200 bg-white p-4 shadow-sm sm:p-6">
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="space-y-2">
-              <span className="text-sm font-semibold text-emerald-900">Item</span>
-              <input type="text" className={inputClass} value={borrowedForm.item} onChange={(event) => setBorrowedForm({ ...borrowedForm, item: event.target.value })} placeholder="Item name" required />
+              <span className={labelClass}>Item name</span>
+              <input type="text" maxLength={255} className={inputClass} value={borrowedForm.item} onChange={(event) => setBorrowedForm({ ...borrowedForm, item: event.target.value })} placeholder="e.g. Projector" required />
             </label>
             <label className="space-y-2">
-              <span className="text-sm font-semibold text-emerald-900">Borrower Name</span>
-              <input type="text" className={inputClass} value={borrowedForm.borrower} onChange={(event) => setBorrowedForm({ ...borrowedForm, borrower: event.target.value })} placeholder="Borrower name" required />
+              <span className={labelClass}>Name</span>
+              <input type="text" maxLength={255} autoComplete="name" className={inputClass} value={borrowedForm.borrower} onChange={(event) => setBorrowedForm({ ...borrowedForm, borrower: event.target.value })} placeholder="Full name" required />
             </label>
             <label className="space-y-2">
-              <span className="text-sm font-semibold text-emerald-900">Borrower Phone (optional)</span>
-              <input type="tel" inputMode="numeric" autoComplete="tel-national" pattern="[0-9]{11}" title="Enter exactly 11 digits." className={inputClass} value={borrowedForm.phone} onChange={(event) => setBorrowedForm({ ...borrowedForm, phone: contactNumberDigits(event.target.value) })} placeholder="09123456789" />
+              <span className={labelClass}>Contact number (optional)</span>
+              <input type="tel" inputMode="numeric" autoComplete="tel-national" pattern="[0-9]{11}" title="Enter exactly 11 digits." className={inputClass} value={borrowedForm.phone} onChange={(event) => setBorrowedForm({ ...borrowedForm, phone: contactNumberDigits(event.target.value) })} placeholder="11-digit number, e.g. 09123456789" />
             </label>
           </div>
-          <p className="mt-4 rounded-2xl bg-emerald-50 px-4 py-3 text-center text-sm text-emerald-800">
-            Borrowed date is recorded automatically. You can mark the item returned when it comes back.
+          <p className={helperClass}>
+            The borrowed date is recorded automatically. Mark the item as returned when it is brought back.
           </p>
 
-          <div className="sticky bottom-0 mt-5 flex flex-col gap-3 border-t border-emerald-100 bg-white/95 px-4 pb-4 pt-3 backdrop-blur sm:flex-row sm:justify-end sm:px-0 sm:pb-0">
-            <button type="button" disabled={borrowedSubmitting} onClick={() => closePopup(() => { setRecordModal(null); setActiveForm(null); })} className="inline-flex min-h-14 w-full items-center justify-center rounded-3xl border border-emerald-200 bg-emerald-50 px-6 py-4 text-base font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60 sm:w-auto sm:min-w-36">
+          <div className={formActionsClass}>
+            <button type="button" disabled={borrowedSubmitting} onClick={() => closePopup(() => { setRecordModal(null); setActiveForm(null); })} className={secondaryButtonClass}>
               Cancel
             </button>
-            <button type="submit" disabled={borrowedSubmitting || !isOnline} className={`${buttonClass} min-h-14 w-full px-6 py-4 text-base disabled:cursor-wait disabled:opacity-70 sm:w-auto sm:min-w-48`} aria-live="polite">
-            {borrowedSubmitting ? <><span className="loading-spinner" aria-hidden="true" />Saving…</> : !isOnline ? 'Connection required' : 'Record Item'}
+            <button type="submit" disabled={borrowedSubmitting || !isOnline} className={`${buttonClass} ${formPrimaryClass}`} aria-live="polite">
+            {borrowedSubmitting ? <><span className="loading-spinner" aria-hidden="true" />Saving…</> : !isOnline ? 'Connection required' : 'Save'}
             </button>
           </div>
         </form>
@@ -1242,29 +1335,27 @@ function App() {
       return (
         <>
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-center text-lg font-semibold text-emerald-950">Incoming documents</p>
-            </div>
-            <button className={buttonClass} onClick={() => openIncomingModal('standard')}>+ Add New</button>
+            <p className={sectionTitleClass}>Incoming documents</p>
+            <button className={buttonClass} onClick={() => openIncomingModal('standard')}>Submit a document</button>
           </div>
 
           <div className="space-y-2">
-            {incomingItems.length === 0 ? <p className="rounded-2xl border border-emerald-200 bg-white p-5 text-center text-sm text-emerald-700">No incoming documents yet.</p> : incomingItems.map((item) => (
-              <article key={item.id || `${item.date}-${item.subject}-${item.recipient}`} className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
+            {incomingItems.length === 0 ? <p className={emptyStateClass}>No incoming documents yet.</p> : incomingItems.map((item) => (
+              <article key={item.id || `${item.date}-${item.subject}-${item.recipient}`} className={cardClass}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="break-words text-center font-semibold text-emerald-950">{item.subject}</p>
-                    <p className="mt-1 text-center text-sm font-medium text-emerald-800">Submitted by {item.submitterName || 'Name not recorded'}</p>
-                    <p className="mt-1 text-center text-sm text-emerald-700">
+                    <p className="break-words text-left font-semibold text-emerald-950">{item.subject}</p>
+                    <p className="mt-1 text-left text-sm font-medium text-emerald-800">Submitted by {item.submitterName || 'Name not recorded'}</p>
+                    <p className="mt-1 text-left text-sm text-slate-600">
                       {item.from ? `From ${item.from}` : ''}
                       {item.from && item.recipient ? ' · ' : ''}
                       {item.recipient ? `To ${item.recipient}` : ''}
                     </p>
                   </div>
-                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[item.status] || 'bg-gray-100 text-gray-700'}`}>{item.status}</span>
+                  <span className={`${badgeClass} ${statusClasses[item.status] || neutralBadgeClass}`}>{item.status}</span>
                 </div>
-                <p className="mt-3 text-center text-xs text-emerald-600">{item.reference ? `${item.reference} · ` : ''}Submitted {String(item.date).slice(0, 10)}</p>
-                {item.id && item.status === 'Pending' && <button type="button" className="mt-3 rounded-lg border border-emerald-700 px-3 py-2 text-xs font-semibold text-emerald-800 disabled:cursor-wait disabled:opacity-50" disabled={releaseBusy || !isOnline} onClick={() => handlePrepareIncoming(item)}>{releaseBusy && releaseDocumentId === item.id ? 'Preparing…' : 'Prepare for release'}</button>}
+                <p className="mt-3 text-left text-xs text-slate-600">{item.reference ? `${item.reference} · ` : ''}Submitted {String(item.date).slice(0, 10)}</p>
+                {item.id && item.status === 'Pending' && <button type="button" className={cardActionClass} disabled={releaseBusy || !isOnline} onClick={() => handlePrepareIncoming(item)}>{releaseBusy && releaseDocumentId === item.id ? 'Preparing…' : 'Prepare for release'}</button>}
               </article>
             ))}
           </div>
@@ -1276,36 +1367,36 @@ function App() {
       return (
         <>
           <div className="mb-3">
-            <p className="text-center text-lg font-semibold text-emerald-950">Outgoing documents</p>
-            <p className="mt-1 text-center text-sm text-emerald-700">Documents prepared for release from incoming submissions appear here.</p>
+            <p className={sectionTitleClass}>Outgoing documents</p>
+            <p className="mt-1 text-left text-sm text-slate-600">Documents prepared for release appear here.</p>
           </div>
 
           <div className="space-y-2">
-            {outgoingItems.length === 0 ? <p className="rounded-2xl border border-emerald-200 bg-white p-5 text-center text-sm text-emerald-700">No documents are prepared for release yet. Prepare a pending submission from Incoming Documents.</p> : outgoingItems.map((item) => (
-              <article key={item.id || `${item.date}-${item.subject}-${item.to}`} className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
+            {outgoingItems.length === 0 ? <p className={emptyStateClass}>No documents are prepared for release yet. Prepare a pending document from Incoming documents.</p> : outgoingItems.map((item) => (
+              <article key={item.id || `${item.date}-${item.subject}-${item.to}`} className={cardClass}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="break-words text-center font-semibold text-emerald-950">{item.subject}</p>
-                    <p className="mt-1 text-center text-sm text-emerald-700">Recipient: {item.to}</p>
-                    {item.clientPhone && <p className="mt-1 text-center text-xs text-emerald-600">Client contact: {item.clientPhone}</p>}
+                    <p className="break-words text-left font-semibold text-emerald-950">{item.subject}</p>
+                    <p className="mt-1 text-left text-sm text-slate-600">Recipient: {item.to}</p>
+                    {item.clientPhone && <p className="mt-1 text-left text-xs text-slate-600">Contact number: {item.clientPhone}</p>}
                   </div>
-                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[item.status] || 'bg-gray-100 text-gray-700'}`}>{item.status}</span>
+                  <span className={`${badgeClass} ${statusClasses[item.status] || neutralBadgeClass}`}>{item.status}</span>
                 </div>
-                <p className="mt-3 text-center text-xs text-emerald-600">Date: {String(item.date).slice(0, 10)}</p>
-                {item.remarks && <p className="mt-2 whitespace-pre-wrap break-words text-sm text-emerald-700">{item.remarks}</p>}
+                <p className="mt-3 text-left text-xs text-slate-600">Date: {String(item.date).slice(0, 10)}</p>
+                {item.remarks && <p className="mt-2 whitespace-pre-wrap break-words text-left text-sm text-slate-600">{item.remarks}</p>}
                 {item.id && (
                   <button
                     type="button"
-                    className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-wait disabled:opacity-60 sm:w-auto"
+                    className={cardActionClass}
                     disabled={releaseBusy || !isOnline}
                     onClick={() => handleSetOutgoingStatus(item, item.status === 'Released' ? 'For Release' : 'Released')}
                   >
-                    {releaseBusy && releaseDocumentId === item.id ? 'Updating…' : item.status === 'Released' ? 'Set For Release' : 'Mark Released'}
+                    {releaseBusy && releaseDocumentId === item.id ? 'Updating…' : item.status === 'Released' ? 'Set as For Release' : 'Mark as Released'}
                   </button>
                 )}
                 {item.id && item.status === 'Released' && item.clientPhone ? (
-                  <button type="button" className="mt-3 rounded-lg border border-emerald-700 px-3 py-2 text-xs font-semibold text-emerald-800 disabled:cursor-wait disabled:opacity-50" disabled={smsBusyId === item.id || !isOnline} onClick={() => handleNotifyClient(item)}>{smsBusyId === item.id ? 'Sending…' : 'Send SMS'}</button>
-                ) : item.status === 'Released' ? <p className="mt-2 text-xs text-emerald-600">No client contact saved.</p> : null}
+                  <button type="button" className={`${cardActionClass} sm:ml-2`} disabled={smsBusyId === item.id || !isOnline} onClick={() => handleNotifyClient(item)}>{smsBusyId === item.id ? 'Sending…' : 'Send SMS'}</button>
+                ) : item.status === 'Released' ? <p className="mt-2 text-left text-xs text-slate-600">No contact number saved.</p> : null}
               </article>
             ))}
           </div>
@@ -1317,34 +1408,32 @@ function App() {
       return (
         <>
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-center text-lg font-semibold text-emerald-950">Borrowed items</p>
-            </div>
-            {!activeForm && <button className={`${buttonClass} min-h-14 min-w-40 text-center`} onClick={() => openRecordModal('borrowed')}>+ Add item</button>}
+            <p className={sectionTitleClass}>Borrowed items</p>
+                        {!activeForm && <button className={buttonClass} onClick={() => openRecordModal('borrowed')}>Add borrowed item</button>}
           </div>
 
           <div className="space-y-2">
-            {borrowedItems.length === 0 ? <p className="rounded-2xl border border-emerald-200 bg-white p-5 text-center text-sm text-emerald-700">No borrowed items recorded yet.</p> : borrowedItems.map((item) => (
-              <article key={item.id ?? `${item.item}-${item.borrower}-${item.borrowed}`} className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
+            {borrowedItems.length === 0 ? <p className={emptyStateClass}>No borrowed items recorded yet.</p> : borrowedItems.map((item) => (
+              <article key={item.id ?? `${item.item}-${item.borrower}-${item.borrowed}`} className={cardClass}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="break-words text-center font-semibold text-emerald-950">{item.item}</p>
-                    <p className="mt-1 text-center text-sm text-emerald-700">Borrowed by {item.borrower}</p>
+                    <p className="break-words text-left font-semibold text-emerald-950">{item.item}</p>
+                    <p className="mt-1 text-left text-sm text-slate-600">Borrowed by {item.borrower}</p>
                   </div>
-                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[item.status] || 'bg-gray-100 text-gray-700'}`}>{item.status}</span>
+                  <span className={`${badgeClass} ${statusClasses[item.status] || neutralBadgeClass}`}>{statusLabel(item.status)}</span>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-emerald-600">
-                  <span>Borrowed {String(item.borrowed).slice(0, 10)}</span>
-                  <span>{item.returned ? `Returned ${String(item.returned).slice(0, 10)}` : 'Awaiting return'}</span>
+                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
+                  <span>Borrowed on {String(item.borrowed).slice(0, 10)}</span>
+                  <span>{item.returned ? `Returned on ${String(item.returned).slice(0, 10)}` : 'Not yet returned'}</span>
                 </div>
                 {item.status !== 'Returned' && item.id && (
                   <button
                     type="button"
                     onClick={() => handleMarkBorrowedReturned(item)}
                     disabled={borrowedBusyId !== null || !isOnline}
-                    className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 focus:outline-none focus:ring-4 focus:ring-emerald-200 disabled:cursor-wait disabled:opacity-60 sm:w-auto"
+                    className={cardActionClass}
                   >
-                    {borrowedBusyId === item.id ? 'Updating…' : 'Mark returned'}
+                    {borrowedBusyId === item.id ? 'Updating…' : 'Mark as returned'}
                   </button>
                 )}
               </article>
@@ -1358,53 +1447,52 @@ function App() {
       return (
         <>
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-center text-lg font-semibold text-emerald-950">Bulk Papers</p>
-            </div>
-            {!activeForm && <button className={`${buttonClass} min-h-14 min-w-40 text-center`} onClick={() => openRecordModal('batches')}>+ Add Bulk Papers</button>}
+            <p className={sectionTitleClass}>Bulk Documents</p>
+            {!activeForm && <button className={buttonClass} onClick={() => openRecordModal('batches')}>Bulk documents</button>}
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-2">
             {batchItems.length === 0 ? (
-              <div className="rounded-3xl border border-emerald-200 bg-white px-5 py-10 text-center text-sm text-emerald-700">No bulk papers have been recorded.</div>
+              <p className={emptyStateClass}>No bulk documents have been recorded yet.</p>
             ) : batchItems.map((batch) => (
-              <article key={batch.id || batch.batchCode} className="rounded-3xl border border-emerald-200 bg-white p-5 shadow-sm">
+              <article key={batch.id || batch.batchCode} className={cardClass}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="font-semibold text-emerald-950">{batch.batchCode}</p>
-                    <p className="mt-1 text-sm text-emerald-700">
+                    <p className="mt-1 text-sm text-slate-600">
                       {batch.batchDate}
                       {(batch.senderType || batch.sender) ? ` · From ${batch.senderType || batch.sender}` : ''}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-2">
-                    {Number(batch.isPriority) === 1 && <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">Priority</span>}
-                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClasses[batch.status] || 'bg-amber-100 text-amber-700'}`}>{batch.status || 'Pending'}</span>
+                    {Number(batch.isPriority) === 1 && <span className={`${badgeClass} border border-rose-200 bg-rose-100 text-rose-700`}>Priority</span>}
+                    <span className={`${badgeClass} ${statusClasses[batch.status] || statusClasses.Pending}`}>{batch.status || 'Pending'}</span>
                   </div>
                 </div>
-                <p className="mt-2 text-sm font-semibold text-emerald-900">{batch.batchType || 'Bulk papers'} · {batch.paperCount} expected</p>
-                <p className="mt-1 text-sm text-emerald-700">Submitted by {batch.submitterName || 'Name not recorded'}</p>
+                <p className="mt-2 text-sm font-semibold text-emerald-900">{batch.batchType || 'Bulk submission'} · {batch.paperCount} expected{parseDocumentPages(batch.documentPages).reduce((sum, value) => sum + (Number(value) || 0), 0) ? ` · ${parseDocumentPages(batch.documentPages).reduce((sum, value) => sum + (Number(value) || 0), 0)} pages` : ''}</p>
+                <p className="mt-1 text-sm text-slate-600">Submitted by {batch.submitterName || 'Name not recorded'}</p>
                 {batch.receivedAt
-                  ? <p className={`mt-1 text-sm font-medium ${Number(batch.receivedPaperCount) === Number(batch.intakeExpectedCount) ? 'text-emerald-700' : 'text-rose-700'}`}>{batch.receivedPaperCount} physically received · {String(batch.receivedAt).slice(0, 16)}</p>
-                  : <p className="mt-1 text-sm text-amber-700">Awaiting office count confirmation</p>}
-                <p className="mt-2 text-sm text-emerald-700">Recipient: {batch.recipientContactType || 'Unassigned'}{batch.recipient ? ` · ${batch.recipient}` : ''}</p>
-                {batch.remarks && <p className="mt-2 break-words text-sm text-emerald-700">{batch.remarks}</p>}
+                  ? <p className={`mt-1 text-sm font-medium ${Number(batch.receivedPaperCount) === Number(batch.intakeExpectedCount) ? 'text-emerald-700' : 'text-rose-700'}`}>{batch.receivedPaperCount} received · {String(batch.receivedAt).slice(0, 16)}</p>
+                  : <p className="mt-1 text-sm text-slate-600">Awaiting office count confirmation</p>}
+                <p className="mt-2 text-sm text-slate-600">Recipient: {batch.recipientContactType || 'Unassigned'}{batch.recipient ? ` · ${batch.recipient}` : ''}</p>
+                {batch.remarks && <p className="mt-2 break-words text-sm text-slate-600">{batch.remarks}</p>}
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                 {batch.id && batch.status !== 'Released' && (
                   <button
                     type="button"
                     disabled={batchStatusBusyId !== null || !isOnline}
-                    className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60"
+                    className="inline-flex min-h-11 w-full items-center justify-center rounded-2xl bg-emerald-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60 sm:w-auto"
                     onClick={() => handleSetBatchStatus(batch)}
                   >
                     {batchStatusBusyId === batch.id
                       ? 'Updating…'
-                      : batch.status === 'For Release' ? 'Mark Released' : 'Move to For Release'}
+                      : batch.status === 'For Release' ? 'Mark as Released' : 'Move to For Release'}
                   </button>
                 )}
                 {batch.id && (
                   <button
                     type="button"
-                    className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100"
+                    className="inline-flex min-h-11 w-full items-center justify-center rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-200 sm:w-auto"
                     onClick={() => {
                       setEditingBatchId(batch.id);
                       setBatchForm({
@@ -1414,14 +1502,16 @@ function App() {
                         date: String(batch.batchDate || '').slice(0, 10),
                         senderType: batch.senderType || 'Student',
                         paperCount: String(batch.paperCount || 1),
+                        documentPages: parseDocumentPages(batch.documentPages).map((value) => (value ? String(value) : '')),
                         remarks: batch.remarks || '',
                       });
                       setRecordModal('batches');
                     }}
                   >
-                    Edit Bulk Papers
+                    Edit bulk submission
                   </button>
                 )}
+                </div>
               </article>
             ))}
           </div>
@@ -1432,32 +1522,35 @@ function App() {
     if (selectedSection === 'reports') {
       return (
         <>
-          <form onSubmit={handleGenerateReport} className="grid gap-4 rounded-3xl border border-emerald-200 bg-white p-4 shadow-sm sm:grid-cols-[1.6fr_1fr] sm:p-6">
+          <form onSubmit={handleGenerateReport} className="grid gap-4 rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm sm:grid-cols-[1.6fr_1fr] sm:p-6">
             <div className="grid gap-4">
-              <div>
-                <p className="text-sm font-semibold text-emerald-700">Select Report Type</p>
+              <label className="space-y-2">
+                <span className={labelClass}>Report type</span>
                 <select className={inputClass} value={reportForm.type} onChange={(event) => setReportForm({ ...reportForm, type: event.target.value })}>
                   <option value="All">All</option>
                   <option value="Incoming">Incoming</option>
                   <option value="Outgoing">Released</option>
-                  <option value="Borrowed">Borrowed</option>
-                  <option value="SMS Logs">SMS Logs</option>
+                  <option value="Borrowed">Borrowed Items</option>
+                  <option value="SMS Logs">SMS logs</option>
                 </select>
-              </div>
+              </label>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="space-y-2">
-                  <span className="text-sm font-semibold text-emerald-700">From</span>
-                  <input type="date" className={inputClass} value={reportForm.from} onChange={(event) => setReportForm({ ...reportForm, from: event.target.value })} />
+                  <span className={labelClass}>From (optional)</span>
+                  <input type="date" min={MIN_RECORD_DATE} max={reportForm.to || todayLocalDate()} className={inputClass} value={reportForm.from} onChange={(event) => {
+                    const from = event.target.value;
+                    setReportForm({ ...reportForm, from, to: from && reportForm.to && reportForm.to < from ? from : reportForm.to });
+                  }} />
                 </label>
                 <label className="space-y-2">
-                  <span className="text-sm font-semibold text-emerald-700">To</span>
-                  <input type="date" className={inputClass} value={reportForm.to} onChange={(event) => setReportForm({ ...reportForm, to: event.target.value })} />
+                  <span className={labelClass}>To (optional)</span>
+                  <input type="date" min={reportForm.from || MIN_RECORD_DATE} max={todayLocalDate()} className={inputClass} value={reportForm.to} onChange={(event) => setReportForm({ ...reportForm, to: event.target.value })} />
                 </label>
               </div>
             </div>
             <div className="flex items-end">
-              <button type="submit" disabled={reportLoading || !isOnline} className="w-full rounded-3xl bg-emerald-900 px-5 py-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-70" aria-live="polite">
-                {reportLoading ? <><span className="loading-spinner" aria-hidden="true" />Generating…</> : !isOnline ? 'Connection required' : 'Filter Report'}
+              <button type="submit" disabled={reportLoading || !isOnline} className={`${buttonClass} w-full disabled:cursor-wait disabled:opacity-70`} aria-live="polite">
+                {reportLoading ? <><span className="loading-spinner" aria-hidden="true" />Generating…</> : !isOnline ? 'Connection required' : 'Generate report'}
               </button>
             </div>
           </form>
@@ -1466,7 +1559,7 @@ function App() {
             <div className="grid grid-cols-2 gap-3 border-b border-emerald-200 px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-500 sm:grid-cols-4 sm:gap-4 sm:tracking-[0.2em]">
               <span>Date</span>
               <span>Type</span>
-              <span>Document type</span>
+              <span>Document name</span>
               <span>Status</span>
             </div>
             <div className="space-y-2 p-4">
@@ -1480,10 +1573,10 @@ function App() {
                 reportResult.map((item) => (
                   <div key={`${item.date}-${item.subject}-${item.type}`} className="grid grid-cols-2 gap-3 rounded-2xl bg-emerald-50 px-3 py-3 text-sm text-emerald-900 shadow-sm sm:grid-cols-4 sm:gap-4 sm:rounded-3xl sm:px-4 sm:py-4">
                     <span className="break-words">{item.date}</span>
-                    <span className="break-words">{item.type}</span>
+                    <span className="break-words">{item.type === 'Borrowed' ? 'Borrowed Item' : item.type}</span>
                     <span className="break-words">{item.subject}</span>
-                    <span className={`inline-flex w-fit items-center justify-center rounded-full px-3 py-1 text-xs font-semibold ${statusClasses[item.status] || 'bg-gray-100 text-gray-700'}`}>
-                      {item.status}
+                    <span className={`${badgeClass} w-fit justify-center ${statusClasses[item.status] || neutralBadgeClass}`}>
+                      {statusLabel(item.status)}
                     </span>
                   </div>
                 ))
@@ -1538,35 +1631,15 @@ function App() {
   if (loading && !apiData) {
     return (
       <div className="min-h-screen min-h-[100svh] overflow-x-clip text-emerald-950" aria-busy="true">
-        <div className="mobile-app-container mx-auto flex min-h-screen min-h-[100svh] max-w-6xl flex-col px-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-6 sm:pt-[max(1.25rem,env(safe-area-inset-top))] lg:px-8">
-          <header className="mobile-app-header flex w-full items-center justify-between gap-2 rounded-2xl border border-emerald-200 bg-white px-3 py-2.5 sm:gap-3 sm:px-4">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <img src={officeLogoUrl} alt="" className="app-header-logo" />
-              <div className="min-w-0">
-                <p className="truncate text-[10px] font-semibold uppercase text-emerald-600">CEIT Digital Logbook</p>
-                <p className="truncate text-sm font-semibold text-emerald-950">Dean&apos;s Office</p>
-              </div>
-            </div>
-            <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[10px] font-semibold text-emerald-800 sm:px-3 sm:py-1 sm:text-xs">
-              Office kiosk
-            </span>
-          </header>
-          <main className="flex flex-1 items-center justify-center py-8" aria-label="Loading office logbook">
-            <section className="w-full max-w-md rounded-3xl border border-emerald-200 bg-white/95 p-6 text-center shadow-lg shadow-emerald-950/5 sm:p-8" aria-busy="true">
-              <img src={officeLogoUrl} alt="" className="welcome-logo mx-auto rounded-xl bg-white p-1 ring-1 ring-emerald-200" />
-              <div className="mx-auto mt-6 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-800" role="status" aria-label="Loading">
-                <span className="h-6 w-6 animate-spin rounded-full border-[3px] border-emerald-200 border-t-emerald-800" />
-              </div>
-              <h1 className="mt-4 text-xl font-bold text-emerald-950 sm:text-2xl">Connecting to the office logbook</h1>
-              <p className="mt-2 text-sm leading-relaxed text-emerald-700">Please wait while we load the latest document statuses and office records.</p>
-              <div className="mt-6 space-y-2.5" aria-hidden="true">
-                <div className="loading-skeleton h-3 rounded-full" />
-                <div className="loading-skeleton mx-auto h-3 w-4/5 rounded-full" />
-                <div className="loading-skeleton mx-auto h-3 w-3/5 rounded-full" />
-              </div>
-            </section>
-          </main>
-        </div>
+        <main className="mx-auto flex min-h-screen min-h-[100svh] max-w-md flex-col items-center justify-center px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))] text-center" aria-label="Loading office logbook">
+          <div className="flex w-full flex-col items-center rounded-3xl border border-emerald-200 bg-white/95 px-6 py-8 shadow-lg shadow-emerald-950/10 backdrop-blur-sm">
+            <img src={officeLogoUrl} alt="" className="welcome-logo rounded-2xl bg-white p-1.5 ring-1 ring-emerald-200" />
+            <p className="mt-6 text-[11px] font-semibold uppercase tracking-wider text-emerald-700">CEIT Digital Logbook</p>
+            <h1 className="mt-1 text-xl font-bold text-emerald-950">Connecting to the office logbook</h1>
+            <p className="mt-2 text-sm leading-relaxed text-emerald-800">Loading the latest document records.</p>
+            <div className="boot-progress mt-8 w-40" role="status" aria-label="Loading" />
+          </div>
+        </main>
       </div>
     );
   }
@@ -1613,13 +1686,13 @@ function App() {
         <main className="welcome-main flex justify-center py-3 sm:py-4 lg:py-5">
           <div className="w-full">
             {refreshError && apiData && (
-              <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-center text-sm text-amber-900" role="status">
-                Could not reach the office server. Your screen is showing the last successful update; it will retry automatically.
+              <div className="mb-3 rounded-2xl border border-yellow-300 bg-yellow-50 px-4 py-3 text-left text-sm text-slate-800" role="status">
+                Could not reach the office server. The screen shows the last successful update, and the app will retry automatically.
               </div>
             )}
             {!isOnline && (
-              <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-center text-sm text-amber-900" role="alert">
-                Connection lost. Your entries are not saved offline. Reconnect before submitting.
+              <div className="mb-3 rounded-2xl border border-yellow-300 bg-yellow-50 px-4 py-3 text-left text-sm text-slate-800" role="alert">
+                Connection lost. Entries are not saved offline, so reconnect before submitting.
               </div>
             )}
             {!loading && !apiData && (
@@ -1636,13 +1709,13 @@ function App() {
               </div>
             )}
             {apiData && (
-              <section className="welcome-status-panel mb-3 rounded-2xl border border-emerald-200 bg-white p-3 shadow-sm sm:mb-4 sm:p-4" aria-labelledby="document-statuses-title">
+              <section className="welcome-status-panel mx-auto mb-3 w-full max-w-5xl rounded-2xl border border-emerald-200 bg-white p-3 shadow-sm sm:mb-4 sm:p-4" aria-labelledby="document-statuses-title">
                 <h2 id="document-statuses-title" className="welcome-status-heading mb-2 text-center text-sm font-bold text-emerald-950 sm:text-base">Document Status</h2>
                 <div className="welcome-status-grid grid gap-2">
                   {documentStatusCounts.map((item) => (
-                    <div key={item.status} className={`flex min-h-14 items-center justify-between gap-2 rounded-xl px-3 py-2 ${item.status === 'Pending' ? 'border border-amber-300 bg-amber-50' : 'bg-emerald-50'}`}>
-                      <span className="min-w-0 break-words text-xs font-semibold text-emerald-800 sm:text-sm">{item.status}</span>
-                      <span className={`inline-flex min-w-8 shrink-0 items-center justify-center rounded-full px-2 py-1 text-sm font-bold ${statusClasses[item.status] || 'bg-white text-emerald-800'}`}>
+                    <div key={item.status} data-status={item.status} className="status-tile flex min-h-14 items-center justify-between gap-2 rounded-xl px-3 py-2">
+                      <span className="status-tile-label min-w-0 break-words text-xs font-semibold sm:text-sm">{item.status}</span>
+                      <span className="status-tile-count inline-flex min-w-8 shrink-0 items-center justify-center rounded-full px-2 py-1 text-sm font-bold">
                         {Number(item.count) || 0}
                       </span>
                     </div>
@@ -1650,45 +1723,41 @@ function App() {
                 </div>
               </section>
             )}
-            <section className="welcome-card grid w-full items-stretch gap-4 rounded-3xl border border-emerald-200 bg-white p-3 shadow-sm sm:gap-6 sm:p-6 lg:grid-cols-[1fr_0.85fr] lg:gap-8 lg:p-8">
+            <section className="welcome-card mx-auto grid w-full max-w-5xl items-stretch gap-3 rounded-3xl border border-emerald-200 bg-white p-3 shadow-sm sm:gap-4 sm:p-5 lg:p-6" aria-label="Office logbook home">
               <div className="welcome-hero flex flex-col items-center justify-center rounded-2xl bg-emerald-50/70 p-5 text-center sm:p-8">
-                <img src={officeLogoUrl} alt="Cavite State University seal" className="welcome-logo rounded-xl bg-white p-1 ring-1 ring-emerald-200" />
-                <p className="mt-6 text-sm font-semibold text-emerald-700">{mobileSettings.officeName}</p>
-                <h1 className="mt-2 w-full max-w-xl text-center text-3xl font-bold leading-tight text-emerald-950 sm:text-4xl">
+                <h1 className="w-full max-w-xl text-center text-3xl font-bold leading-tight tracking-tight text-emerald-950 sm:text-4xl">
                   {mobileSettings.welcomeHeading}
                 </h1>
-                <p className="mt-3 max-w-lg text-center text-base leading-relaxed text-emerald-800">
+                <p className="mt-3 max-w-md text-center text-base leading-relaxed text-emerald-800/90">
                   {mobileSettings.welcomeMessage}
                 </p>
                 <button
                   type="button"
                   onClick={() => setLogbookPopupOpen(true)}
-                  className="mt-6 inline-flex min-h-14 w-full items-center justify-center gap-3 rounded-2xl bg-emerald-900 px-7 py-3.5 text-center text-base font-bold text-white shadow-md shadow-emerald-950/15 transition hover:-translate-y-0.5 hover:bg-emerald-800 hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-emerald-300 active:translate-y-0 active:scale-[0.99] sm:w-auto sm:min-w-60"
+                  className="mt-7 inline-flex min-h-14 w-full items-center justify-center gap-3 rounded-2xl bg-emerald-900 px-7 py-3.5 text-center text-base font-bold text-white shadow-md shadow-emerald-950/15 transition hover:bg-emerald-800 hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-emerald-300 active:scale-[0.99] sm:w-auto sm:min-w-60"
                 >
-                  Open Logbook <BiChevronLeft className="rotate-180" size={22} aria-hidden="true" />
+                  Open logbook <BiChevronLeft className="rotate-180" size={22} aria-hidden="true" />
                 </button>
-                <p className="mt-4 text-center text-sm text-emerald-600">
-                  {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-                </p>
               </div>
-              <aside className="welcome-guide rounded-2xl border border-emerald-200 bg-white p-4 sm:p-6" aria-label="Logbook tools guide">
-                <div className="quick-guide-heading mb-3 border-b border-emerald-200 pb-3 sm:mb-4">
+              <aside className="welcome-guide rounded-2xl border border-emerald-200 bg-white p-4 sm:p-5" aria-labelledby="quick-guide-title">
+                <div className="quick-guide-heading mb-3 border-b border-emerald-200 pb-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">Quick guide</p>
-                  <h2 className="mt-1 text-lg font-bold text-emerald-950">Choose the right tool</h2>
-                  <p className="mt-1 text-xs leading-relaxed text-emerald-700 sm:text-sm">A quick look at what you can do here.</p>
+                  <h2 id="quick-guide-title" className="mt-1 text-lg font-bold text-emerald-950">Available logbook tasks</h2>
+                  <p className="mt-1 text-sm leading-relaxed text-slate-600">Choose a task after selecting Open logbook.</p>
                 </div>
                 <div className="quick-guide-list">
                   {[
-                    { icon: BiArchiveIn, title: 'Submit document', detail: 'Record an incoming document for office review.' },
-                    { icon: BiFile, title: 'Quick submit', detail: 'Log one document without a contact number.' },
-                    { icon: BiLayer, title: 'Bulk Papers', detail: 'Register multiple papers together in one submission.' },
-                    { icon: BiBox, title: 'Borrow item', detail: 'Record borrowed items and track their return.' },
+                    { icon: BiArchiveIn, title: 'Submit a document', detail: 'Record a document for office review.' },
+                    { icon: BiFile, title: 'Quick submit', detail: 'Add a document using the short-entry form.' },
+                    { icon: BiLayer, title: 'Bulk documents', detail: 'Record several documents in one submission.' },
+                    { icon: BiBox, title: 'Borrowed items', detail: 'Record a borrowed item and mark it as returned later.' },
+                    { icon: BiSearch, title: 'Check document status', detail: 'Scan an office QR code or search by contact number.' },
                   ].map((item) => {
                     const Icon = item.icon;
                     return (
-                      <div key={item.title} className="quick-guide-item flex min-w-0 items-center gap-3 rounded-xl px-2.5 py-3 sm:gap-4 sm:px-3">
-                        <span className="quick-guide-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-800 sm:h-11 sm:w-11">
-                          <Icon size={23} aria-hidden="true" />
+                      <div key={item.title} className="quick-guide-item flex min-w-0 items-center gap-3 rounded-xl px-2 py-2.5">
+                        <span className="quick-guide-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-800">
+                          <Icon size={21} aria-hidden="true" />
                         </span>
                         <span className="min-w-0 text-left">
                           <span className="block text-sm font-semibold text-emerald-950">{item.title}</span>
@@ -1717,8 +1786,8 @@ function App() {
               <div className="mb-5 flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">CEIT Dean&apos;s Office</p>
-                  <h2 id="logbook-popup-title" className="mt-1 text-xl font-bold leading-tight text-emerald-950 sm:text-2xl">What would you like to do?</h2>
-                  <p className="mt-2 max-w-prose text-sm leading-relaxed text-emerald-700">Choose an office task. Each option opens only the form you need.</p>
+                  <h2 id="logbook-popup-title" className="mt-1 text-xl font-bold leading-tight text-emerald-950 sm:text-2xl">Office services</h2>
+                  <p className="mt-2 max-w-prose text-sm leading-relaxed text-emerald-700">Select a task to open the relevant form.</p>
                 </div>
                 <button
                   type="button"
@@ -1729,33 +1798,55 @@ function App() {
                   ×
                 </button>
               </div>
-              <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2">
+              <div className="space-y-4">
                 {[
-                  { key: 'submit', label: 'Submit document', detail: 'Send your document to the Dean’s Office.', icon: BiArchiveIn },
-                  { key: 'quick', label: 'Quick submit', detail: 'Get your document into the logbook in just a few steps.', icon: BiFile },
-                  { key: 'batch', label: 'Bulk Papers', detail: 'Register multiple papers together in one submission.', icon: BiLayer },
-                  { key: 'borrow', label: 'Borrow item', detail: 'Record who has the item and mark it returned when it comes back.', icon: BiBox },
-                  { key: 'status', label: 'Check status', detail: 'Scan an office QR code or search by contact number.', icon: BiArchiveOut },
-                ].map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.key}
-                      type="button"
-                      onClick={() => launchLogbookAction(item.key)}
-                      className={`group flex min-h-[5.5rem] items-center gap-3 rounded-2xl border border-emerald-200 bg-white p-3 text-center shadow-sm transition duration-150 hover:-translate-y-0.5 hover:border-emerald-400 hover:bg-emerald-50 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-emerald-200 active:translate-y-0 active:scale-[0.99] min-[480px]:p-4 ${item.key === 'status' ? 'min-[480px]:col-span-2 min-[480px]:mx-auto min-[480px]:w-[calc(50%-0.375rem)]' : ''}`}
-                    >
-                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-900 transition group-hover:bg-emerald-200 min-[480px]:h-12 min-[480px]:w-12">
-                        <Icon size={25} aria-hidden="true" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-center font-semibold text-emerald-950">{item.label}</span>
-                        <span className="mt-0.5 block text-center text-xs leading-relaxed text-emerald-700">{item.detail}</span>
-                      </span>
-                      <BiChevronLeft className="rotate-180 text-emerald-500 transition group-hover:translate-x-0.5 group-hover:text-emerald-800" size={20} aria-hidden="true" />
-                    </button>
-                  );
-                })}
+                  {
+                    group: 'Submit',
+                    items: [
+                      { key: 'submit', label: 'Submit a document', detail: 'Record a document for office review.', icon: BiArchiveIn },
+                      { key: 'quick', label: 'Quick submit', detail: 'Submit a document without a contact number.', icon: BiFile },
+                      { key: 'batch', label: 'Bulk documents', detail: 'Record several documents in one submission.', icon: BiLayer },
+                    ],
+                  },
+                  {
+                    group: 'Borrowing',
+                    items: [
+                      { key: 'borrow', label: 'Borrowed items', detail: 'Record a borrowed item and mark it as returned later.', icon: BiBox },
+                    ],
+                  },
+                  {
+                    group: 'Track',
+                    items: [
+                      { key: 'status', label: 'Check document status', detail: 'Scan an office QR code or search by contact number.', icon: BiSearch },
+                    ],
+                  },
+                ].map((section) => (
+                  <div key={section.group}>
+                    <p className="mb-2 px-1 text-[11px] font-bold uppercase tracking-[0.14em] text-emerald-700">{section.group}</p>
+                    <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
+                      {section.items.map((item) => {
+                        const Icon = item.icon;
+                        return (
+                          <button
+                            key={item.key}
+                            type="button"
+                            onClick={() => launchLogbookAction(item.key)}
+                            className="group flex min-h-[4.5rem] w-full items-center gap-3 border-b border-emerald-100 p-3 text-left transition duration-150 last:border-b-0 hover:bg-emerald-50 focus:outline-none focus-visible:bg-emerald-50 focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-emerald-200 active:bg-emerald-100 min-[480px]:px-4"
+                          >
+                            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-900 transition group-hover:bg-emerald-200">
+                              <Icon size={24} aria-hidden="true" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-left font-semibold text-emerald-950">{item.label}</span>
+                              <span className="mt-0.5 block text-left text-xs leading-relaxed text-slate-600">{item.detail}</span>
+                            </span>
+                            <BiChevronLeft className="rotate-180 text-emerald-500 transition group-hover:translate-x-0.5 group-hover:text-emerald-800" size={20} aria-hidden="true" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
               <div className="mt-5 flex justify-center border-t border-emerald-200 pt-4 sm:justify-end">
                 <button
@@ -1828,27 +1919,22 @@ function App() {
                     ×
                   </button>
                 </div>
-                <div className="text-center">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-600">
+                <div className="text-left">
+                  <h2 id="incoming-modal-title" className="text-left text-xl font-bold text-emerald-950 sm:text-2xl">
                     {incomingModalMode === 'quick'
-                      ? 'Fast entry · no contact details'
-                      : isBatchOrBorrowModal ? 'Office records' : 'Document submission'}
-                  </p>
-                  <h2 id="incoming-modal-title" className="mt-1 text-center text-xl font-bold text-emerald-950 sm:text-2xl">
-                    {incomingModalMode === 'quick'
-                      ? 'Quick Submit'
+                      ? 'Quick submit'
                       : isBatchOrBorrowModal
-                        ? recordModal === 'batches' ? 'Register Bulk Papers' : 'Record Borrowed Item'
-                        : 'Submit Document'}
+                        ? recordModal === 'batches' ? (editingBatchId ? 'Edit bulk documents' : 'Bulk documents') : 'Borrowed item'
+                        : 'Submit a document'}
                   </h2>
-                  <p className="mt-1 text-center text-sm text-emerald-700">
+                  <p className="mt-1 text-left text-sm text-slate-600">
                     {incomingModalMode === 'quick'
-                      ? 'Records the document without collecting or saving a contact number.'
+                      ? 'Records the document without collecting a contact number.'
                       : isBatchOrBorrowModal
                         ? recordModal === 'batches'
-                          ? editingBatchId ? 'Update the bulk paper details and total paper count.' : 'Enter the bulk paper details and total paper count.'
-                          : 'Record the item and borrower. Update its status when it is returned.'
-                        : 'Add the document details and the required contact number.'}
+                          ? editingBatchId ? 'Update the details and the number of documents.' : 'Enter the details and the number of documents.'
+                          : 'Record the item and the person who borrowed it.'
+                        : 'Enter the document details and a contact number.'}
                   </p>
                 </div>
               </div>
@@ -1911,11 +1997,11 @@ function App() {
                 </div>
               )}
               {submissionSuccess.trackerQrError && (
-                <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">{submissionSuccess.trackerQrError}</p>
+                <p className="mt-3 rounded-2xl border border-yellow-300 bg-yellow-50 p-3 text-sm text-slate-800" role="status">{submissionSuccess.trackerQrError}</p>
               )}
               {submissionSuccess.trackerDisabled && (
-                <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">
-                  The {submissionSuccess.trackerQrLabel ? 'batch' : 'document'} was saved, but QR tracking is currently turned off by the office. Keep this reference: {submissionSuccess.reference}.
+                <p className="mt-3 rounded-2xl border border-yellow-300 bg-yellow-50 p-3 text-sm text-slate-800" role="status">
+                  The {submissionSuccess.trackerQrLabel ? 'bulk submission' : 'document'} was saved, but QR tracking is currently turned off by the office. Keep this reference: {submissionSuccess.reference}.
                 </p>
               )}
               <button
@@ -1940,10 +2026,14 @@ function App() {
               className={`mobile-modal-panel-enter ${isModalClosing ? 'mobile-modal-panel-exit' : ''} w-full rounded-t-[2rem] bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-w-md sm:rounded-[2rem] sm:p-7`}
               onClick={(event) => event.stopPropagation()}
             >
-              <div className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full ${actionFeedback.tone === 'danger' ? 'bg-rose-100 text-rose-700' : actionFeedback.tone === 'warning' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'} ring-8 ${actionFeedback.tone === 'danger' ? 'ring-rose-50' : actionFeedback.tone === 'warning' ? 'ring-amber-50' : 'ring-emerald-50'}`}>
-                <i className={`bi ${actionFeedback.tone === 'danger' ? 'bi-exclamation-triangle' : actionFeedback.tone === 'warning' ? 'bi-exclamation-circle' : 'bi-check-circle'}`} aria-hidden="true" />
+              <div className={`mx-auto flex h-16 w-16 items-center justify-center rounded-full ${actionFeedback.tone === 'danger' ? 'bg-rose-100 text-rose-700' : actionFeedback.tone === 'warning' ? 'bg-yellow-100 text-slate-800' : 'bg-emerald-100 text-emerald-800'} ring-8 ${actionFeedback.tone === 'danger' ? 'ring-rose-50' : actionFeedback.tone === 'warning' ? 'ring-yellow-50' : 'ring-emerald-50'}`}>
+                {actionFeedback.tone === 'danger'
+                  ? <BiError size={34} aria-hidden="true" />
+                  : actionFeedback.tone === 'warning'
+                    ? <BiErrorCircle size={34} aria-hidden="true" />
+                    : <BiCheckCircle size={34} aria-hidden="true" />}
               </div>
-              <p className={`mt-5 text-center text-xs font-bold uppercase tracking-[0.16em] ${actionFeedback.tone === 'danger' ? 'text-rose-700' : actionFeedback.tone === 'warning' ? 'text-amber-700' : 'text-emerald-700'}`}>
+              <p className={`mt-5 text-center text-xs font-bold uppercase tracking-[0.16em] ${actionFeedback.tone === 'danger' ? 'text-rose-700' : actionFeedback.tone === 'warning' ? 'text-slate-700' : 'text-emerald-700'}`}>
                 {actionFeedback.tone === 'danger' ? 'Action not completed' : actionFeedback.tone === 'warning' ? 'Please review' : 'Action complete'}
               </p>
               <h2 id="action-feedback-title" className="mt-1 text-center text-xl font-bold text-emerald-950 sm:text-2xl">
@@ -1971,10 +2061,10 @@ function App() {
               onClick={(event) => event.stopPropagation()}
             >
               <div className="mb-5 flex items-start justify-between gap-4">
-                <div className="flex-1 text-center">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-600">Document tracking</p>
-                  <h2 id="client-status-modal-title" className="mt-1 text-center text-xl font-bold text-emerald-950 sm:text-2xl">Check document status</h2>
-                  <p className="mt-1 text-center text-sm leading-relaxed text-emerald-700">Scan the office-issued QR code, or use the contact number provided when the document was submitted.</p>
+                <div className="flex-1 text-left">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">Document tracking</p>
+                  <h2 id="client-status-modal-title" className="mt-1 text-left text-xl font-bold text-emerald-950 sm:text-2xl">Check document status</h2>
+                  <p className="mt-1 text-left text-sm leading-relaxed text-slate-600">Scan the office-issued QR code, or search using the contact number given when the document was submitted.</p>
                 </div>
                 <button
                   type="button"
@@ -1987,7 +2077,7 @@ function App() {
               </div>
 
               <form onSubmit={handleClientStatusLookup} className="rounded-2xl border border-emerald-200 bg-white p-4 sm:p-5">
-                <label htmlFor="clientStatusPhone" className="mb-2 block text-sm font-semibold text-emerald-950">{formLabels.contactNumber}</label>
+                <label htmlFor="clientStatusPhone" className={`${labelClass} mb-2`}>{formLabels.contactNumber}</label>
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <input
                     id="clientStatusPhone"
@@ -1998,20 +2088,19 @@ function App() {
                     title="Enter exactly 11 digits."
                     value={clientStatusPhone}
                     onChange={(event) => setClientStatusPhone(contactNumberDigits(event.target.value))}
-                    placeholder="09123456789"
-                    aria-label="Client contact number for status lookup"
+                    placeholder="11-digit number, e.g. 09123456789"
                     className={`${inputClass} min-w-0 flex-1`}
                     required
                   />
                   <button type="submit" className={`${buttonClass} shrink-0 disabled:cursor-wait disabled:opacity-70`} disabled={clientStatusLoading || !isOnline} aria-live="polite">
-                    {clientStatusLoading ? <><span className="loading-spinner" aria-hidden="true" />Checking…</> : !isOnline ? 'Connection required' : 'Find documents'}
+                    {clientStatusLoading ? <><span className="loading-spinner" aria-hidden="true" />Searching…</> : !isOnline ? 'Connection required' : 'Find documents'}
                   </button>
                 </div>
-                <p className="mt-2 text-xs text-emerald-600">Use the same 11-digit number you gave to the office.</p>
+                <p className={helperClass}>Use the same 11-digit number you gave to the office.</p>
               </form>
 
               <div className="mt-3 rounded-2xl border border-emerald-200 bg-white p-4">
-                <p className="text-sm text-emerald-800">Have an office-issued tracking QR code?</p>
+                <p className="text-sm text-slate-700">Have an office-issued tracking QR code?</p>
                 <button
                   type="button"
                   disabled={!isOnline}
@@ -2020,9 +2109,9 @@ function App() {
                     setDocumentScannerStatus('');
                     setDocumentScannerOpen(true);
                   }}
-                  className="mt-3 min-h-11 w-full rounded-xl bg-emerald-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className={`${buttonClass} mt-3 w-full disabled:cursor-not-allowed disabled:opacity-50`}
                 >
-                  Scan document or batch QR code
+                  Scan QR
                 </button>
               </div>
 
@@ -2034,9 +2123,9 @@ function App() {
               )}
               {clientStatusError && <p className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800" role="alert">{clientStatusError}</p>}
               {clientStatusSearched && !clientStatusError && clientStatusItems.length === 0 && (
-                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                  <p className="font-semibold text-amber-950">No matching documents</p>
-                  <p className="mt-1 text-sm text-amber-800">Check the number and try again, or contact the office for help.</p>
+                <div className="mt-4 rounded-2xl border border-yellow-300 bg-yellow-50 p-4">
+                  <p className="font-semibold text-slate-900">No matching documents</p>
+                  <p className="mt-1 text-sm text-slate-700">Check the number and try again, or contact the office for help.</p>
                 </div>
               )}
               {clientStatusItems.length > 0 && (
@@ -2053,10 +2142,10 @@ function App() {
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <p className="break-words font-semibold text-emerald-950">{record.subject}</p>
-                            <p className="mt-1 break-words text-xs text-emerald-700">{record.reference} · {record.type}{Number(record.paperCount) > 0 ? ` · ${record.paperCount} papers` : ''}</p>
-                            <p className="mt-1 text-xs text-emerald-600">{record.date}</p>
+                            <p className="mt-1 break-words text-xs text-slate-600">{record.reference} · {record.type}{Number(record.paperCount) > 0 ? ` · ${record.paperCount} documents` : ''}</p>
+                            <p className="mt-1 text-xs text-slate-600">{record.date}</p>
                           </div>
-                          <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[record.status] || 'bg-gray-100 text-gray-700'}`}>
+                          <span className={`${badgeClass} ${statusClasses[record.status] || neutralBadgeClass}`}>
                             {record.status}
                           </span>
                         </div>
@@ -2066,7 +2155,7 @@ function App() {
                 </div>
               )}
               <div className="mt-5 flex justify-end">
-                <button type="button" onClick={() => closePopup(() => setClientStatusOpen(false))} className="min-h-11 rounded-xl border border-emerald-200 bg-white px-5 py-3 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100">
+                <button type="button" onClick={() => closePopup(() => setClientStatusOpen(false))} className={secondaryButtonClass}>
                   Close
                 </button>
               </div>
@@ -2089,12 +2178,12 @@ function App() {
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-600">Office QR tracking</p>
                   <h2 id="document-scanner-title" className="mt-1 text-xl font-bold text-emerald-950">Scan office QR code</h2>
-                  <p className="mt-1 text-sm leading-relaxed text-emerald-700">The office verifies each QR code, then opens its tracker through the server you are using now. Older QR codes can work after the Wi-Fi address changes.</p>
+                  <p className="mt-1 text-sm leading-relaxed text-slate-600">The office verifies each QR code and then opens its tracker through the server you are currently using.</p>
                 </div>
                 <button type="button" aria-label="Close QR scanner" onClick={() => setDocumentScannerOpen(false)} className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-full border border-emerald-200 text-lg font-semibold text-emerald-800">×</button>
               </div>
               <div className="mt-4 overflow-hidden rounded-2xl bg-emerald-950">
-                <video ref={scannerVideoRef} className="aspect-[4/3] w-full object-cover" autoPlay muted playsInline aria-label="Camera preview for office document and batch QR scanner" />
+                <video ref={scannerVideoRef} className="aspect-[4/3] w-full object-cover" autoPlay muted playsInline aria-label="Camera preview for the office QR scanner" />
               </div>
               <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900" role="status" aria-live="polite">
                 {documentScannerBusy ? <><span className="loading-spinner mr-2" aria-hidden="true" />{documentScannerStatus}</> : documentScannerStatus || 'Allow camera access and point it at the tracking QR code.'}

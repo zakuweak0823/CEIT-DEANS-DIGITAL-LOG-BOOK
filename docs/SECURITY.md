@@ -9,11 +9,15 @@ certification or a substitute for an independent review.
 The system has three distinct access paths:
 
 1. **Administrator portal** — PHP pages use an administrator session. Mutating
-   form requests are checked for a session CSRF token.
+   form requests are checked for a session CSRF token. Super Admin account
+   management is restricted by a database-verified role check; standard
+   administrators retain the existing logbook access.
 2. **Mobile logbook API** — Admin Settings can allow kiosk access without
-   sign-in. When kiosk access is disabled, mobile users must sign in and use a
-   bearer token. The API token is returned at sign-in, while its SHA-256 digest
-   is stored in MySQL with an expiry time.
+   sign-in. The API supports bearer-token sign-in when kiosk access is disabled,
+   but the current React/Vite mobile app has no sign-in screen and cannot use
+   those tokens. Disabling kiosk access therefore blocks the current mobile app.
+   API tokens are returned at sign-in, while their SHA-256 digests are stored in
+   MySQL with an expiry time.
 3. **Document and batch trackers** — A public status page accepts a long,
    random office-issued token. Anyone holding a valid token can see the limited
    status details returned by that tracker. This is a bearer link, not an
@@ -28,12 +32,14 @@ control for the mobile API or admin portal.
 - **Admin sessions:** the PHP session cookie is configured as `HttpOnly` and
   `SameSite=Lax`; the `Secure` cookie flag is enabled when the request is
   served over HTTPS. The session ID is regenerated after successful admin
-  sign-in.
+  sign-in. Sessions are bound to the current password hash so resetting an
+  account password invalidates its existing portal sessions.
 - **Request forgery checks:** admin POST requests use a per-session,
   cryptographically random CSRF token and a constant-time comparison.
 - **Password storage:** new passwords use PHP's `password_hash()` and
   `password_verify()`. The legacy seeded plaintext password is upgraded to a
-  hash when it is successfully used; it remains unsafe until changed.
+  hash when it is successfully used; it remains unsafe until changed. New
+  administrator and reset passwords must be at least 12 characters.
 - **Database access:** the shared query helper uses MySQLi prepared
   statements for bound values. Dynamic SQL identifiers still require
   allow-listing because placeholders only bind values.
@@ -43,8 +49,9 @@ control for the mobile API or admin portal.
 - **Tracking tokens:** document and batch tracking tokens are generated from
   32 random bytes and represented as 64 hexadecimal characters. Tracker
   responses return status-oriented fields rather than admin pages.
-- **Mobile authentication:** when kiosk access is disabled, mobile bearer
-  tokens expire after 30 days and only their SHA-256 digests are stored.
+- **Mobile authentication:** API bearer tokens expire after 30 days and only
+  their SHA-256 digests are stored. The current React/Vite mobile app does not
+  include a sign-in flow and uses the kiosk access setting.
 - **Cross-origin requests:** the mobile API only returns CORS headers for a
   small configured set of local app origins and also supports native clients
   that omit an `Origin` header. CORS is a browser policy, not an
@@ -56,9 +63,13 @@ control for the mobile API or admin portal.
 
 ## Required setup before use
 
-1. Sign in with the initial local account (`admin` / `admin`) only for
-   installation, then immediately set a unique, strong administrator
-   password. Do not reuse that password elsewhere.
+1. On a fresh installation, sign in with the initial local account
+   (`admin` / `admin`) only for setup, then immediately set a unique, strong
+   password in **Administrator accounts**. On an existing installation,
+   back up the database and run
+   [`database/promote_admin_to_super_admin.sql`](../database/promote_admin_to_super_admin.sql)
+   once to grant the existing `admin` account Super Admin access; then sign in
+   and immediately change its password. Do not reuse that password elsewhere.
 2. Replace the default XAMPP database account with a dedicated MySQL user and
    a strong password. Grant only the database privileges the application
    needs.
@@ -88,19 +99,26 @@ control for the mobile API or admin portal.
 
 - The seeded `admin` / `admin` account is public setup information. A fresh
   installation must not be left reachable with these credentials.
+- Super Admins can create, reset, and remove standard administrator accounts.
+  Forgotten standard-admin passwords must be reset by a Super Admin. Recovery
+  of an inaccessible Super Admin account requires trusted system/database
+  administrator access; the app does not send password-reset email.
 - Mobile kiosk mode is intentionally unauthenticated. When enabled, anyone
   able to reach the configured mobile API may use its kiosk workflows. A
   firewall or trusted network boundary is essential in that mode.
+- The current React/Vite mobile app is kiosk-only. Turning kiosk access off
+  blocks that app; its API sign-in endpoint is available to clients that
+  implement bearer-token authentication.
 - A tracking QR is a bearer credential. Anyone who receives a photo, scan, or
   copied URL may view the status associated with that token. Share tracking
   codes only with their intended recipient and disable tracking in Admin
   Settings if links should stop working.
 - The local development TLS certificate and Private-network firewall helper
   are for trusted LAN development, not public hosting.
-- The admin login does not currently provide an in-app multi-factor
-  authentication or password-reset workflow. Apply strong unique credentials
-  and suitable network protections; consider an approved reverse proxy or
-  identity provider before broader deployment.
+- The admin login does not provide multi-factor authentication or automated
+  email password resets. Apply strong unique credentials and suitable network
+  protections; consider an approved reverse proxy or identity provider before
+  broader deployment.
 - `HttpOnly` and `SameSite` cookies do not replace HTTPS. Plain HTTP can expose
   session credentials and submitted data to other parties on the network.
 

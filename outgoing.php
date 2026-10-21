@@ -201,7 +201,7 @@ if ($stmt !== false) {
             <div class="card-body">
                 <form method="GET" class="row g-2 mb-3">
                     <div class="col-12 col-md-7">
-                        <input type="search" name="search" class="form-control" placeholder="Search outgoing documents" value="<?php echo sanitize($search); ?>">
+                        <input type="search" name="search" class="form-control" placeholder="Search by subject, name, or recipient" value="<?php echo sanitize($search); ?>">
                     </div>
                     <div class="col-12 col-md-3">
                         <label class="visually-hidden" for="outgoingStatusFilter">Filter by status</label>
@@ -223,10 +223,10 @@ if ($stmt !== false) {
                             <tr>
                                 <th>Date</th>
                                 <th>Reference</th>
-                                <th>Submitted by</th>
+                                <th>Submitted By</th>
                                 <th>Recipient</th>
-                                <th>Document type</th>
-                                <th>Client Contact</th>
+                                <th>Subject</th>
+                                <th>Contact Number</th>
                                 <th>Status</th>
                                 <th>Priority</th>
                                 <th>Actions</th>
@@ -238,7 +238,7 @@ if ($stmt !== false) {
                             <?php else: ?>
                                 <?php foreach ($documents as $document): ?>
                                     <tr>
-                                        <td data-label="Date"><?php echo sanitize(date('Y-m-d', strtotime($document['date_created']))); ?></td>
+                                        <td data-label="Date"><?php echo sanitize(date('M j, Y', strtotime($document['date_created']))); ?><div class="small text-muted"><?php echo sanitize(date('g:i A', strtotime($document['date_created']))); ?></div></td>
                                         <td data-label="Reference">
                                             <code><?php echo sanitize(document_tracking_reference($document['doc_id'])); ?></code>
                                             <?php if (!$documentTrackingSettings['enabled']): ?>
@@ -258,12 +258,12 @@ if ($stmt !== false) {
                                                 </form>
                                             <?php endif; ?>
                                         </td>
-                                        <td data-label="Submitted by"><?php echo sanitize(trim((string)($document['submitter_name'] ?? '')) !== '' ? $document['submitter_name'] : 'Name not recorded'); ?></td>
-                                        <td data-label="Recipient"><?php echo sanitize($document['recipient']); ?></td>
-                                        <td data-label="Document type"><?php echo sanitize($document['subject']); ?></td>
-                                        <td data-label="Client contact"><?php echo sanitize($document['client_phone'] ?? 'Not provided'); ?></td>
+                                        <td data-label="Submitted By"><?php echo sanitize(trim((string)($document['submitter_name'] ?? '')) !== '' ? $document['submitter_name'] : 'Name not recorded'); ?></td>
+                                        <td data-label="Recipient"><?php echo sanitize(trim((string)($document['recipient'] ?? '')) !== '' ? $document['recipient'] : 'Not provided'); ?></td>
+                                        <td data-label="Subject"><?php echo sanitize($document['subject']); ?></td>
+                                        <td data-label="Contact Number"><?php echo sanitize($document['client_phone'] ?? 'Not provided'); ?></td>
                                         <td data-label="Status">
-                                            <span class="badge <?php echo $document['status'] === 'Released' ? 'text-bg-success' : 'text-bg-warning'; ?>"><?php echo sanitize($document['status']); ?></span>
+                                            <span class="badge <?php echo admin_status_badge_class($document['status']); ?>"><?php echo sanitize($document['status']); ?></span>
                                         </td>
                                         <td data-label="Priority">
                                             <?php if ((int)($document['is_priority'] ?? 0) === 1): ?>

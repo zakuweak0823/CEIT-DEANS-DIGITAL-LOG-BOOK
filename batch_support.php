@@ -1,4 +1,41 @@
 <?php
+// Turns the submitted per-document page counts into a JSON list sized to the document count.
+// Returns [json|null, valid]. Blank entries are kept as null so pages stay optional.
+function batch_pages_total($json)
+{
+    $pages = json_decode((string)$json, true);
+    return is_array($pages) ? (int)array_sum(array_map('intval', $pages)) : 0;
+}
+
+function batch_pages_label($json)
+{
+    $total = batch_pages_total($json);
+    return $total > 0 ? $total . ($total === 1 ? ' page' : ' pages') . ' in total' : '';
+}
+
+function normalize_document_pages($raw, $paperCount)
+{
+    if (!is_array($raw)) {
+        return [null, true];
+    }
+    $pages = [];
+    $hasValue = false;
+    for ($i = 0; $i < $paperCount; $i++) {
+        $value = trim((string)($raw[$i] ?? ''));
+        if ($value === '') {
+            $pages[] = null;
+            continue;
+        }
+        $number = filter_var($value, FILTER_VALIDATE_INT);
+        if ($number === false || $number < 1 || $number > 9999) {
+            return [null, false];
+        }
+        $pages[] = $number;
+        $hasValue = true;
+    }
+    return [$hasValue ? json_encode($pages) : null, true];
+}
+
 function batch_workflow_setting_defaults()
 {
     return [
@@ -107,6 +144,8 @@ function ensure_batch_storage($conn)
     $conn->query("ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS sender_type VARCHAR(20) NOT NULL DEFAULT 'Student'");
     $conn->query("ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS recipient_contact_type VARCHAR(20) NOT NULL DEFAULT 'Unassigned'");
     $conn->query('ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS paper_count INT UNSIGNED NOT NULL DEFAULT 0');
+    $conn->query('ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS document_pages TEXT DEFAULT NULL');
+    $conn->query('ALTER TABLE document_batches DROP COLUMN IF EXISTS pages_per_document');
     $conn->query('ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS is_priority TINYINT(1) NOT NULL DEFAULT 0');
     foreach ([
         'ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS received_paper_count INT UNSIGNED DEFAULT NULL',

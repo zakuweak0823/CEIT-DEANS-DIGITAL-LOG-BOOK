@@ -99,7 +99,7 @@ mysqli_stmt_close($stmt);
                                         <td><?php echo sanitize($document['subject']); ?></td>
                                         <td><?php echo sanitize($document['recipient']); ?></td>
                                         <td><?php echo sanitize($document['type']); ?></td>
-                                        <td><span class="badge <?php echo $document['status'] === 'Pending' ? 'text-bg-warning' : ($document['status'] === 'For Release' ? 'text-bg-primary' : 'text-bg-success'); ?>"><?php echo sanitize($document['status']); ?></span></td>
+                                        <td><span class="badge <?php echo admin_status_badge_class($document['status']); ?>"><?php echo sanitize($document['status']); ?></span></td>
                                         <td>
                                             <?php if ((int)$document['is_priority'] === 1): ?>
                                                 <span class="badge rounded-pill text-bg-warning"><i class="bi bi-star-fill me-1" aria-hidden="true"></i>Priority</span>
