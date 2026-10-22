@@ -634,6 +634,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Batch edits and linked document updates must commit or roll back together.
             $conn->begin_transaction();
             $recipientValue = $documentType === 'Incoming' ? 'Dean\'s Office' : '';
+            $batchCode = '';
+            $trackingToken = '';
             if ($action === 'add_batch') {
                 $batchCode = 'BP-' . date('Ymd') . '-' . strtoupper(bin2hex(random_bytes(3)));
                 $trackingToken = bin2hex(random_bytes(32));
@@ -882,7 +884,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $today = date('Y-m-d');
 $monthStart = date('Y-m-01');
 
-function fetch_scalar($conn, $query, $types = '', $params = []) {
+function fetch_scalar(mysqli $conn, string $query, string $types = '', array $params = []) {
     $stmt = mysqli_prepare($conn, $query);
     if ($types !== '') {
         mysqli_stmt_bind_param($stmt, $types, ...$params);
@@ -894,7 +896,7 @@ function fetch_scalar($conn, $query, $types = '', $params = []) {
     return $value ?: 0;
 }
 
-function fetch_rows($conn, $query, $types = '', $params = []) {
+function fetch_rows(mysqli $conn, string $query, string $types = '', array $params = []) {
     $stmt = mysqli_prepare($conn, $query);
     if ($types !== '') {
         mysqli_stmt_bind_param($stmt, $types, ...$params);
