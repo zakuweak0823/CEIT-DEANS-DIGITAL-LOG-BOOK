@@ -44,6 +44,7 @@ $documentIdParam = $_GET['document_id'] ?? '';
 $documentIdFilter = is_string($documentIdParam) && ctype_digit($documentIdParam) ? (int)$documentIdParam : 0;
 $statusFilter = trim($_GET['status'] ?? '');
 $overdueFilter = ($_GET['overdue'] ?? '') === '1';
+$orderFilter = ($_GET['order'] ?? '') === 'newest' ? 'newest' : 'oldest';
 $overdueDays = (int)get_sla_settings($conn)['incomingDays'];
 $validStatusFilters = ['Pending', 'For Release', 'Released'];
 if (!in_array($statusFilter, $validStatusFilters, true)) {
@@ -210,24 +211,24 @@ if ($overdueFilter && $documentIdFilter === 0) {
     $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND doc_id = ?", 'i', [$documentIdFilter]);
 } elseif ($search !== '' && $statusFilter !== '' && $submitterFilter !== 'All') {
     $searchTerm = "%{$search}%";
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND status = ? AND submitter_type = ? AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ?) ORDER BY is_priority DESC, date_created DESC", 'sssssss', [$statusFilter, $submitterFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND status = ? AND submitter_type = ? AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ?) ORDER BY is_priority DESC, date_created ASC, doc_id ASC", 'sssssss', [$statusFilter, $submitterFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
 } elseif ($search !== '' && $statusFilter !== '') {
     $searchTerm = "%{$search}%";
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND status = ? AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ?) ORDER BY is_priority DESC, date_created DESC", 'ssssss', [$statusFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND status = ? AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ?) ORDER BY is_priority DESC, date_created ASC, doc_id ASC", 'ssssss', [$statusFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
 } elseif ($search !== '' && $submitterFilter !== 'All') {
     $searchTerm = "%{$search}%";
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND submitter_type = ? AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ? OR status LIKE ?) ORDER BY is_priority DESC, date_created DESC", 'sssssss', [$submitterFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND submitter_type = ? AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ? OR status LIKE ?) ORDER BY is_priority DESC, date_created ASC, doc_id ASC", 'sssssss', [$submitterFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
 } elseif ($search !== '') {
     $searchTerm = "%{$search}%";
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ? OR status LIKE ?) ORDER BY is_priority DESC, date_created DESC", 'ssssss', [$searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ? OR status LIKE ?) ORDER BY is_priority DESC, date_created ASC, doc_id ASC", 'ssssss', [$searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
 } elseif ($statusFilter !== '' && $submitterFilter !== 'All') {
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND status = ? AND submitter_type = ? ORDER BY is_priority DESC, date_created DESC", 'ss', [$statusFilter, $submitterFilter]);
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND status = ? AND submitter_type = ? ORDER BY is_priority DESC, date_created ASC, doc_id ASC", 'ss', [$statusFilter, $submitterFilter]);
 } elseif ($statusFilter !== '') {
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND status = ? ORDER BY is_priority DESC, date_created DESC", 's', [$statusFilter]);
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND status = ? ORDER BY is_priority DESC, date_created ASC, doc_id ASC", 's', [$statusFilter]);
 } elseif ($submitterFilter !== 'All') {
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND submitter_type = ? ORDER BY is_priority DESC, date_created DESC", 's', [$submitterFilter]);
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND submitter_type = ? ORDER BY is_priority DESC, date_created ASC, doc_id ASC", 's', [$submitterFilter]);
 } else {
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' ORDER BY is_priority DESC, date_created DESC");
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' ORDER BY is_priority DESC, date_created ASC, doc_id ASC");
 }
 
 if ($stmt !== false) {
@@ -238,6 +239,11 @@ if ($stmt !== false) {
         }
     }
     mysqli_stmt_close($stmt);
+}
+if ($orderFilter === 'newest') {
+    usort($documents, static function ($a, $b) {
+        return [(int)$b['is_priority'], $b['date_created'], (int)$b['doc_id']] <=> [(int)$a['is_priority'], $a['date_created'], (int)$a['doc_id']];
+    });
 }
 ?>
 <?php include 'header.php'; ?>
@@ -290,7 +296,7 @@ if ($stmt !== false) {
             <div class="card-body">
                 <nav class="nav nav-pills flex-wrap gap-2 mb-3" aria-label="Incoming submission sections">
                     <?php foreach (['All' => 'All submissions', 'Faculty' => 'Faculty', 'Student' => 'Students', 'Other' => 'Other'] as $typeValue => $typeLabel): ?>
-                        <?php $typeQuery = array_filter(['search' => $search, 'status' => $statusFilter, 'submitter' => $typeValue === 'All' ? '' : $typeValue], static function ($value) { return $value !== ''; }); ?>
+                        <?php $typeQuery = array_filter(['search' => $search, 'status' => $statusFilter, 'order' => $orderFilter === 'newest' ? 'newest' : '', 'submitter' => $typeValue === 'All' ? '' : $typeValue], static function ($value) { return $value !== ''; }); ?>
                         <a class="nav-link<?php echo $submitterFilter === $typeValue ? ' active' : ''; ?>" href="incoming<?php echo $typeQuery ? '?' . http_build_query($typeQuery) : ''; ?>"<?php echo $submitterFilter === $typeValue ? ' aria-current="page"' : ''; ?>>
                             <?php echo sanitize($typeLabel); ?>
                         </a>
@@ -298,7 +304,7 @@ if ($stmt !== false) {
                 </nav>
                 <form method="GET" class="row g-2 mb-3">
                     <?php if ($submitterFilter !== 'All'): ?><input type="hidden" name="submitter" value="<?php echo sanitize($submitterFilter); ?>"><?php endif; ?>
-                    <div class="col-12 col-md-7">
+                    <div class="col-12 col-md-5">
                         <input type="search" name="search" class="form-control" placeholder="Search by subject, name, or reference" value="<?php echo sanitize($search); ?>">
                     </div>
                     <div class="col-12 col-md-3">
@@ -308,6 +314,13 @@ if ($stmt !== false) {
                             <?php foreach ($validStatusFilters as $filterOption): ?>
                                 <option value="<?php echo sanitize($filterOption); ?>" <?php echo $statusFilter === $filterOption ? 'selected' : ''; ?>><?php echo sanitize($filterOption); ?></option>
                             <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-2">
+                        <label class="visually-hidden" for="incomingOrderFilter">Sort order</label>
+                        <select class="form-select" id="incomingOrderFilter" name="order">
+                            <option value="oldest" <?php echo $orderFilter === 'oldest' ? 'selected' : ''; ?>>Oldest first</option>
+                            <option value="newest" <?php echo $orderFilter === 'newest' ? 'selected' : ''; ?>>Newest first</option>
                         </select>
                     </div>
                     <div class="col-12 col-md-2 d-grid">

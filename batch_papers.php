@@ -586,14 +586,14 @@ if (!$setupError) {
              FROM document_batches b
              WHERE b.batch_code LIKE ? OR b.document_type LIKE ? OR b.batch_type LIKE ? OR b.status LIKE ? OR b.sender LIKE ? OR b.submitter_name LIKE ? OR b.recipient LIKE ? OR b.remarks LIKE ?
                 OR EXISTS (SELECT 1 FROM batch_papers p WHERE p.batch_id = b.batch_id AND (p.subject LIKE ? OR p.remarks LIKE ?))
-             ORDER BY b.is_priority DESC, b.batch_date DESC, b.batch_id DESC",
+             ORDER BY b.is_priority DESC, (b.status = 'Released') ASC, CASE WHEN b.status <> 'Released' THEN b.batch_id END ASC, b.batch_id DESC",
             'ssssssssss',
             [$term, $term, $term, $term, $term, $term, $term, $term, $term, $term]
         );
     } else {
         $stmt = safe_query(
             $conn,
-            'SELECT b.* FROM document_batches b ORDER BY b.is_priority DESC, b.batch_date DESC, b.batch_id DESC'
+            "SELECT b.* FROM document_batches b ORDER BY b.is_priority DESC, (b.status = 'Released') ASC, CASE WHEN b.status <> 'Released' THEN b.batch_id END ASC, b.batch_id DESC"
         );
     }
 

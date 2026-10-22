@@ -31,6 +31,7 @@ $documentIdParam = $_GET['document_id'] ?? '';
 $documentIdFilter = is_string($documentIdParam) && ctype_digit($documentIdParam) ? (int)$documentIdParam : 0;
 $statusFilter = trim($_GET['status'] ?? '');
 $overdueFilter = ($_GET['overdue'] ?? '') === '1';
+$orderFilter = ($_GET['order'] ?? '') === 'newest' ? 'newest' : 'oldest';
 $overdueDays = (int)get_sla_settings($conn)['outgoingDays'];
 if (!in_array($statusFilter, ['', 'For Release', 'Released'], true)) {
     $statusFilter = '';
@@ -167,14 +168,14 @@ if ($overdueFilter && $documentIdFilter === 0) {
     $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND doc_id = ?", 'i', [$documentIdFilter]);
 } elseif ($search !== '' && $statusFilter !== '') {
     $searchTerm = "%{$search}%";
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND status = ? AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ?) ORDER BY (status = 'For Release') DESC, date_created DESC", 'ssssss', [$statusFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND status = ? AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ?) ORDER BY (status = 'For Release') DESC, CASE WHEN status = 'For Release' THEN date_created END ASC, date_created DESC", 'ssssss', [$statusFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
 } elseif ($search !== '') {
     $searchTerm = "%{$search}%";
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ? OR status LIKE ?) ORDER BY (status = 'For Release') DESC, date_created DESC", 'ssssss', [$searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ? OR status LIKE ?) ORDER BY (status = 'For Release') DESC, CASE WHEN status = 'For Release' THEN date_created END ASC, date_created DESC", 'ssssss', [$searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
 } elseif ($statusFilter !== '') {
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND status = ? ORDER BY (status = 'For Release') DESC, date_created DESC", 's', [$statusFilter]);
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND status = ? ORDER BY (status = 'For Release') DESC, CASE WHEN status = 'For Release' THEN date_created END ASC, date_created DESC", 's', [$statusFilter]);
 } else {
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' ORDER BY (status = 'For Release') DESC, date_created DESC");
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' ORDER BY (status = 'For Release') DESC, CASE WHEN status = 'For Release' THEN date_created END ASC, date_created DESC");
 }
 
 if ($stmt !== false) {
@@ -185,6 +186,11 @@ if ($stmt !== false) {
         }
     }
     mysqli_stmt_close($stmt);
+}
+if ($orderFilter === 'newest') {
+    usort($documents, static function ($a, $b) {
+        return [$b['date_created'], (int)$b['doc_id']] <=> [$a['date_created'], (int)$a['doc_id']];
+    });
 }
 ?>
 <?php include 'header.php'; ?>
@@ -228,7 +234,7 @@ if ($stmt !== false) {
         <div class="card shadow-sm">
             <div class="card-body">
                 <form method="GET" class="row g-2 mb-3">
-                    <div class="col-12 col-md-7">
+                    <div class="col-12 col-md-5">
                         <input type="search" name="search" class="form-control" placeholder="Search by subject, name, or recipient" value="<?php echo sanitize($search); ?>">
                     </div>
                     <div class="col-12 col-md-3">
@@ -238,6 +244,13 @@ if ($stmt !== false) {
                             <?php foreach (['For Release', 'Released'] as $filterOption): ?>
                                 <option value="<?php echo sanitize($filterOption); ?>" <?php echo $statusFilter === $filterOption ? 'selected' : ''; ?>><?php echo sanitize($filterOption); ?></option>
                             <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-2">
+                        <label class="visually-hidden" for="outgoingOrderFilter">Sort order</label>
+                        <select class="form-select" id="outgoingOrderFilter" name="order">
+                            <option value="oldest" <?php echo $orderFilter === 'oldest' ? 'selected' : ''; ?>>Oldest first</option>
+                            <option value="newest" <?php echo $orderFilter === 'newest' ? 'selected' : ''; ?>>Newest first</option>
                         </select>
                     </div>
                     <div class="col-12 col-md-2 d-grid">

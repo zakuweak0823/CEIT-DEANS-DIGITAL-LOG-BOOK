@@ -31,7 +31,7 @@ if ($search !== '') {
     $types = 'ssss';
     $params = [$searchTerm, $searchTerm, $searchTerm, $searchTerm];
 }
-$query .= ' ORDER BY date_created DESC';
+$query .= " ORDER BY (status = 'Released') ASC, CASE WHEN status <> 'Released' THEN date_created END ASC, date_created DESC";
 $stmt = safe_query($conn, $query, $types, $params);
 if ($stmt === false) {
     http_response_code(500);
