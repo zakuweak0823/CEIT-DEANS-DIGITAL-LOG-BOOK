@@ -633,7 +633,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-2">
             <div>
                 <h2 class="mb-1 text-primary">Bulk Documents</h2>
-                <p class="text-muted mb-0">Register several incoming or outgoing documents in one submission.</p>
+                <p class="text-muted mb-0">Register several documents in one submission.</p>
             </div>
             <div class="d-flex flex-wrap gap-2">
                 <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#create-batch" <?php echo $setupError ? 'disabled' : ''; ?>>
