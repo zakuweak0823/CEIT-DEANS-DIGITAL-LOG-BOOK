@@ -99,9 +99,9 @@ the sections below and in the [Windows setup guide](docs/WINDOWS-SETUP.md).
 
 | Area | Capabilities |
 | --- | --- |
-| **Dashboard** | Review activity summaries, daily counts, pending incoming work, document and borrowed item analytics, and recent records. The Overdue records panel flags documents and borrowed items that stay open longer than the time limits set under Settings. |
-| **Incoming documents** | Record the submitter's name and submitter type separately; optionally note the submitting department or office; issue office-verified QR tracking codes; search records; and prepare documents for release. |
-| **Outgoing documents** | Track outgoing records and release status, manage each document directly, and send client notifications. |
+| **Dashboard** | Review activity summaries, daily counts, pending incoming work, document and borrowed item analytics, and recent records. The Overdue records panel counts only Incoming and Outgoing documents that stay open longer than the time limits set under Settings; click an Incoming or Outgoing tile to open a pop-out listing just those overdue documents, each with a **Review** button. Borrowed items are not counted as overdue. Small ⓘ guides explain the processing-time and SMS charts. |
+| **Incoming documents** | Record the submitter's name and submitter type separately; optionally note the submitting department or office; issue office-verified QR tracking codes; search, filter by status, and sort records; and prepare documents for release. Only Pending documents are listed here, because a released document moves to Outgoing. Records are listed oldest first (first in, first out), with Priority documents on top. |
+| **Outgoing documents** | Track outgoing records and release status, manage each document directly, and send client notifications. For Release documents are listed first, oldest first, so the longest-waiting document is handled first; a sort control switches to newest first. |
 | **Bulk Documents** | Register bulk submissions, associate document-level records, separate Priority from Standard submissions, scan office QR codes, record received counts, and follow release status. |
 | **Borrowed Items** | Manage item categories, borrowers, and return status. |
 | **Records and reports** | Search logbook records; generate Incoming, Outgoing, Borrowed Items, SMS Logs, or All Reports; filter results by text/status; print a formal portrait document or export a formatted Excel workbook. |
@@ -142,6 +142,19 @@ the sections below and in the [Windows setup guide](docs/WINDOWS-SETUP.md).
 - Incoming and Outgoing keep priority separate from row actions. Quick Submit
   includes a **Manage** link to the specific record in the appropriate
   Incoming or Outgoing list.
+- Long admin tables are split into pages of 10 rows with Previous/Next and
+  numbered page controls, and reports are split into pages of 25 rows. Report
+  printing and Excel export always include every matching record.
+- On wide screens the row actions stay pinned to the right edge of a table and
+  show their names in a tooltip. On narrow screens each record becomes a card
+  with full-width action buttons. Tracking links appear as an
+  **Open tracking page** button instead of a raw URL, and long text is shortened
+  to two lines with the full text on hover.
+- The dashboard **Review** buttons open the exact Incoming, Outgoing, or
+  Borrowed record in question, with a banner naming it and a **Show all**
+  button.
+- Printed reports use consistent page margins, repeat the table heading on
+  every page, and include an SMS status guide (Delivered, Pending, Failed).
 - Bulk-paper history keeps priority, status, paper intake, and row actions
   distinct. Receipt confirmation is recorded separately from QR scanning;
   mismatched paper counts require a note.
@@ -257,6 +270,18 @@ database username and password in [`db.php`](db.php), then run
 [`start-office-server.bat`](start-office-server.bat). Do not copy a live MySQL
 data directory while its server is running.
 
+#### Optional sample data
+
+[`database/dummy_data.sql`](database/dummy_data.sql) holds sample records for
+trying the system, and import it after `schema.sql`. It follows the app's
+rules: Incoming holds only Pending documents, Outgoing holds For Release and
+Released documents, some records are overdue, SMS logs belong to outgoing
+documents, and bulk submissions are recorded only as batches. To change the
+amounts, edit the counts at the top of
+[`database/generate_dummy_data.js`](database/generate_dummy_data.js) and run
+`node database/generate_dummy_data.js`. Remove the leading `-- ` from the
+TRUNCATE line at the top of the SQL file first if you want to replace earlier
+sample data.
 This launcher is for the host computer and other devices on the same trusted
 Private network; it does not make the site available over mobile data or the
 public internet. Phone camera scanning requires trusted HTTPS, which needs a
@@ -543,6 +568,8 @@ another server, set `VITE_API_ENDPOINT` at build time to the complete
 │   └── js/                           # Browser-ready JavaScript bundles
 ├── database/
 │   ├── schema.sql                    # Fresh-install schema and initial Super Admin seed
+│   ├── dummy_data.sql                # Optional sample data (import after schema.sql)
+│   ├── generate_dummy_data.js        # Regenerates dummy_data.sql
 │   └── promote_admin_to_super_admin.sql # Existing-install role upgrade
 ├── docs/
 │   ├── SECURITY.md                   # Security model and deployment checklist
@@ -607,6 +634,7 @@ identifies the Git commit that contains the recorded changes.
 | **V1.14 — Clear submitter fields and reliable QR tracking** | [`e51c23c`](https://github.com/zakuweak0823/CEIT-DEANS-DIGITAL-LOG-BOOK/commit/e51c23c) | Replaced the ambiguous mobile “From” category label with “Submitter type”; made the admin submitting department/office field explicitly optional; fixed tracker API routing for installations in a named project folder; and documented the field meanings and phone tracker troubleshooting. |
 | **V1.15 — Automatic LAN camera certificates** | This patch | `npm run dev:lan` now provisions a host-specific local CA and LAN-IP-matched TLS certificate with XAMPP OpenSSL when needed. Private keys remain outside the repository; the public CA can be downloaded from Admin Settings and trusted on phones. |
 | **V1.18 — CMD log data maintenance** | This patch | Added CMD-only commands to clear Incoming, Outgoing, batch, borrowed-item, SMS, or all log data with an affected-record warning and two confirmations. Empty tables reset their auto-increment; the shared Incoming/Outgoing document sequence is preserved whenever records remain. |
+| **V1.19 — Responsive tables, overdue tracking and sample data** | This patch | Added a Tracking QR column and professional wording across admin tables; responsive, aligned tables with icon-only pinned row actions and table pagination (10 rows, 25 in reports); Review links that open the exact record; an overdue pop-out on the dashboard that counts only documents; clearer report print margins and an SMS status guide; first-in-first-out ordering with a sort control for Incoming and Outgoing; and rule-based sample data with a generator script. |
 
 Earlier chat iterations included repeated README and footer refinements,
 pending-document bubble improvements and its hide/show setting, admin
