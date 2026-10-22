@@ -7,8 +7,8 @@
 
 <p>Bring the admin dashboard, document workflows, QR status tracking, printable reports, and mobile logbook into one coordinated system.</p>
 
-<p><img src="assets/images/ceit-web-android-showcase.svg" alt="Illustrated showcase of the CEIT Admin web dashboard and Android public kiosk UI" width="100%"></p>
-<p><sub>Project showcase: desktop admin workspace and mobile logbook concept.</sub></p>
+<p><img src="assets/images/ceit-system-showcase.svg" alt="Illustrated showcase of the CEIT Dean's Digital Log Book: the admin dashboard with overdue records, the Incoming table with Tracking QR and pagination, SMS overview, and the mobile submission app" width="100%"></p>
+<p><sub>Project showcase: admin workspace, QR tracking, SMS overview and the mobile logbook (illustrated with sample data).</sub></p>
 
 <p>
 <a href="https://www.php.net/"><img src="https://img.shields.io/badge/PHP-8%2B-777BB4?logo=php&logoColor=white" alt="PHP 8 or later"></a>
