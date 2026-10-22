@@ -37,12 +37,10 @@ if (isset($_POST['update'])) {
     $subject = trim($_POST['subject'] ?? '');
     $remarks = trim($_POST['remarks'] ?? '');
     $clientPhone = contact_number_input($_POST['client_phone'] ?? '');
-    $documentDate = trim($_POST['document_date'] ?? '');
-    $dateObject = DateTime::createFromFormat('!Y-m-d', $documentDate);
 
-    if ($id > 0 && $subject !== '' && $dateObject && $dateObject->format('Y-m-d') === $documentDate && $clientPhone !== null && ($clientPhone === '' || is_valid_contact_number($clientPhone))) {
+    if ($id > 0 && $subject !== '' && $clientPhone !== null && ($clientPhone === '' || is_valid_contact_number($clientPhone))) {
         $phoneValue = $clientPhone === '' ? null : $clientPhone;
-        $stmt = safe_query($conn, "UPDATE documents SET client_phone = ?, subject = ?, remarks = ?, date_created = TIMESTAMP(?, TIME(date_created)) WHERE doc_id = ? AND type = 'Outgoing'", 'ssssi', [$phoneValue, $subject, $remarks, $documentDate, $id]);
+        $stmt = safe_query($conn, "UPDATE documents SET client_phone = ?, subject = ?, remarks = ? WHERE doc_id = ? AND type = 'Outgoing'", 'sssi', [$phoneValue, $subject, $remarks, $id]);
         if ($stmt !== false) {
             mysqli_stmt_close($stmt);
             $message = show_alert('Outgoing document updated successfully.');
@@ -52,7 +50,7 @@ if (isset($_POST['update'])) {
     } else {
         $message = show_alert($clientPhone === null || ($clientPhone !== '' && !is_valid_contact_number($clientPhone))
             ? 'Enter an 11-digit contact number using digits only, or leave it blank.'
-            : 'Check the document type, date, and record details.', 'danger');
+            : 'Check the document type and record details.', 'danger');
     }
 }
 
@@ -275,7 +273,7 @@ if ($stmt !== false) {
                                         </td>
                                         <td data-label="Actions">
                                             <div class="table-actions document-row-actions">
-                                            <button type="button" class="btn btn-sm btn-outline-primary document-action-button" title="Edit document" aria-label="Edit <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?>" onclick="editDocument(<?php echo (int)$document['doc_id']; ?>, <?php echo htmlspecialchars(json_encode($document['client_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['subject'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['remarks'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode(date('Y-m-d', strtotime($document['date_created'])), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                            <button type="button" class="btn btn-sm btn-outline-primary document-action-button" title="Edit document" aria-label="Edit <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?>" onclick="editDocument(<?php echo (int)$document['doc_id']; ?>, <?php echo htmlspecialchars(json_encode($document['client_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['subject'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['remarks'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
                                                 <i class="bi bi-pencil"></i> Edit
                                             </button>
                                             <form method="POST" class="d-inline">
@@ -423,10 +421,6 @@ if ($stmt !== false) {
                     <input type="hidden" name="action" value="update">
                     <input type="hidden" name="id" id="editId">
                     <div class="mb-3">
-                        <label class="form-label" for="editDate">Date</label>
-                        <input type="date" id="editDate" name="document_date" class="form-control" required>
-                    </div>
-                    <div class="mb-3">
                         <label class="form-label" for="editClientPhone"><?php echo sanitize($mobileFormLabels['contactNumber']); ?> (optional)</label>
                         <input type="tel" id="editClientPhone" name="client_phone" class="form-control" inputmode="numeric" pattern="[0-9]{11}" maxlength="11" placeholder="09123456789" title="Enter exactly 11 digits.">
                         <div class="form-text">Enter exactly 11 digits, or leave blank.</div>
@@ -451,9 +445,8 @@ if ($stmt !== false) {
 
 <script src="assets/js/qr-tools.bundle.js"></script>
 <script>
-function editDocument(id, clientPhone, subject, remarks, date) {
+function editDocument(id, clientPhone, subject, remarks) {
     document.getElementById('editId').value = id;
-    document.getElementById('editDate').value = date;
     document.getElementById('editClientPhone').value = clientPhone;
     document.getElementById('editSubject').value = subject;
     document.getElementById('editRemarks').value = remarks;

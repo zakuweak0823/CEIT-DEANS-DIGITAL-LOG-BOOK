@@ -380,14 +380,17 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif (isset($_POST['save_batch'])) {
         $batchId = (int)($_POST['batch_id'] ?? 0);
+        if ($batchId === 0) {
+            $batchDate = date('Y-m-d');
+        }
         $dateObject = DateTime::createFromFormat('!Y-m-d', $batchDate);
         $validDocumentType = in_array($documentType, ['Incoming', 'Outgoing'], true);
         $validSenderType = in_array($senderType, ['Student', 'Faculty'], true);
         if (!$validDocumentType || $batchType === '' || strlen($batchType) > 255 ||
             $batchSubmitterName === '' || strlen($batchSubmitterName) > 255 ||
-            !$dateObject || $dateObject->format('Y-m-d') !== $batchDate || ($batchId === 0 && $batchDate < date('Y-m-d')) ||
+            ($batchId === 0 && (!$dateObject || $dateObject->format('Y-m-d') !== $batchDate || $batchDate < date('Y-m-d'))) ||
             !$validSenderType || $paperCount < 1 || $paperCount > 3 || !$validPages) {
-                        $message = show_alert('Check the submission type, date (not earlier than today), submitter, document count (1–3), and pages per document (optional, 1–9,999).', 'danger');
+                        $message = show_alert('Check the submission type, date (not earlier than today) for a new entry, submitter, document count (1–3), and pages per document (optional, 1–9,999).', 'danger');
             $showBatchModal = true;
         } elseif ($batchId > 0) {
             try {
@@ -407,9 +410,9 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $batchStatus = $existingBatch['status'];
                 $stmt = safe_query(
                     $conn,
-                    'UPDATE document_batches SET document_type = ?, batch_type = ?, batch_date = ?, sender = ?, sender_type = ?, submitter_name = ?, remarks = ?,                     paper_count = ?, document_pages = ?, is_priority = ? WHERE batch_id = ?',
-                                        'sssssssisii',
-                                        [$documentType, $batchType, $batchDate, $senderType, $senderType, $batchSubmitterName, $batchRemarks, $paperCount, $documentPagesJson, $batchPriority, $batchId]
+                    'UPDATE document_batches SET document_type = ?, batch_type = ?, sender = ?, sender_type = ?, submitter_name = ?, remarks = ?, paper_count = ?, document_pages = ?, is_priority = ? WHERE batch_id = ?',
+                                        'ssssssisii',
+                                        [$documentType, $batchType, $senderType, $senderType, $batchSubmitterName, $batchRemarks, $paperCount, $documentPagesJson, $batchPriority, $batchId]
                 );
                 if ($stmt === false || mysqli_stmt_affected_rows($stmt) < 0) {
                     if ($stmt !== false) mysqli_stmt_close($stmt);
@@ -419,9 +422,9 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Keep legacy document fields synchronized because existing reports and screens query documents.
                 $stmt = safe_query(
                     $conn,
-                    'UPDATE documents d INNER JOIN batch_papers p ON p.doc_id = d.doc_id SET d.type = ?, d.date_created = ?, d.sender = ?, d.submitter_type = ?, d.status = ?, d.is_priority = ? WHERE p.batch_id = ?',
-                    'sssssii',
-                    [$documentType, $batchDate, $senderType, $senderType, $batchStatus, $batchPriority, $batchId]
+                    'UPDATE documents d INNER JOIN batch_papers p ON p.doc_id = d.doc_id SET d.type = ?, d.sender = ?, d.submitter_type = ?, d.status = ?, d.is_priority = ? WHERE p.batch_id = ?',
+                    'ssssii',
+                    [$documentType, $senderType, $senderType, $batchStatus, $batchPriority, $batchId]
                 );
                 if ($stmt === false) {
                     throw new RuntimeException('Could not update the linked document records.');
@@ -680,7 +683,9 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                     <div class="col-12 col-md-6">
                     <div class="mb-3">
                         <label class="form-label" for="batchDate">Submission date</label>
-                                                <input class="form-control" type="date" id="batchDate" name="batch_date" min="<?php echo sanitize(date('Y-m-d')); ?>" value="<?php echo sanitize($batchDate); ?>" required>
+                        <input class="form-control" type="date" id="batchDate" value="<?php echo sanitize($batchDate); ?>" disabled>
+                        <input type="hidden" id="immutableBatchDate" disabled>
+                        <div id="batchDateLockedHelp" class="form-text" hidden>The submission date cannot be changed after the batch is created.</div>
                     </div>
                     </div>
                     <div class="col-12 col-md-6">
@@ -1328,6 +1333,11 @@ document.addEventListener('DOMContentLoaded', function () {
             batchPriorityInput.checked = trigger.dataset.isPriority === '1';
             document.getElementById('batchDate').value = trigger.dataset.batchDate || '';
             document.getElementById('batchDate').removeAttribute('min');
+            document.getElementById('batchDate').disabled = true;
+            document.getElementById('immutableBatchDate').name = 'batch_date';
+            document.getElementById('immutableBatchDate').value = trigger.dataset.batchDate || '';
+            document.getElementById('immutableBatchDate').disabled = false;
+            document.getElementById('batchDateLockedHelp').hidden = false;
             document.getElementById('batchSenderType').value = trigger.dataset.senderType || 'Student';
             document.getElementById('batchPaperCount').value = trigger.dataset.paperCount || '1';
             renderPages(parsePages(trigger.dataset.documentPages));
@@ -1340,6 +1350,11 @@ document.addEventListener('DOMContentLoaded', function () {
             batchIdInput.value = batchModal.dataset.postedBatchId || '';
             renderPages(parsePages(pagesContainer.dataset.initial));
             const editing = batchIdInput.value !== '' && batchIdInput.value !== '0';
+            document.getElementById('batchDate').disabled = true;
+            document.getElementById('immutableBatchDate').disabled = !editing;
+            document.getElementById('immutableBatchDate').name = editing ? 'batch_date' : '';
+            document.getElementById('immutableBatchDate').value = document.getElementById('batchDate').value;
+            document.getElementById('batchDateLockedHelp').hidden = !editing;
             title.textContent = editing ? 'Edit Bulk Documents' : 'Add Bulk Documents';
             saveButton.innerHTML = editing
                 ? '<i class="bi bi-check-lg me-1" aria-hidden="true"></i>Save Changes'
@@ -1349,6 +1364,10 @@ document.addEventListener('DOMContentLoaded', function () {
             batchPaperCountInput.readOnly = false;
             batchPaperCountLockedHelp.hidden = true;
             batchIdInput.value = '';
+            document.getElementById('batchDate').disabled = true;
+            document.getElementById('immutableBatchDate').disabled = true;
+            document.getElementById('immutableBatchDate').removeAttribute('name');
+            document.getElementById('batchDateLockedHelp').hidden = true;
             document.getElementById('documentType').value = 'Incoming';
             batchTypeInput.value = '';
             batchSubmitterNameInput.value = '';

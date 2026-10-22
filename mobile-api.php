@@ -613,11 +613,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $paperCount = filter_var($input['paper_count'] ?? null, FILTER_VALIDATE_INT);
         [$documentPagesJson, $validPages] = normalize_document_pages($input['document_pages'] ?? null, is_int($paperCount) ? max(0, min($paperCount, 9999)) : 0);
         $batchId = (int)($input['batch_id'] ?? 0);
+        if ($action === 'add_batch') {
+            $batchDate = date('Y-m-d');
+        }
         $dateObject = DateTime::createFromFormat('!Y-m-d', $batchDate);
         if (!in_array($documentType, ['Incoming', 'Outgoing'], true) ||
             $batchType === '' || strlen($batchType) > 255 ||
             $submitterName === '' || strlen($submitterName) > 255 ||
-            !$dateObject || $dateObject->format('Y-m-d') !== $batchDate || ($action === 'add_batch' && $batchDate < date('Y-m-d')) ||
+            ($action === 'add_batch' && (!$dateObject || $dateObject->format('Y-m-d') !== $batchDate || $batchDate < date('Y-m-d'))) ||
             ($mobileFormLabels['senderEnabled'] && !in_array($senderType, ['Student', 'Faculty'], true)) ||
             $paperCount === false || $paperCount < 1 || $paperCount > 3 ||
             !$validPages ||
@@ -657,18 +660,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $isPriority = (int)$existingBatch['is_priority'];
                 $stmt = safe_query(
                     $conn,
-                    'UPDATE document_batches SET document_type = ?, batch_type = ?, batch_date = ?, sender = ?, sender_type = ?, submitter_name = ?,                     remarks = ?,                     paper_count = ?, document_pages = ? WHERE batch_id = ?',
-                                        'sssssssisi',
-                                        [$documentType, $batchType, $batchDate, $senderType, $senderType, $submitterName, $batchRemarks, $paperCount, $documentPagesJson, $batchId]
+                    'UPDATE document_batches SET document_type = ?, batch_type = ?, sender = ?, sender_type = ?, submitter_name = ?,                     remarks = ?,                     paper_count = ?, document_pages = ? WHERE batch_id = ?',
+                                        'ssssssisi',
+                                        [$documentType, $batchType, $senderType, $senderType, $submitterName, $batchRemarks, $paperCount, $documentPagesJson, $batchId]
                 );
                 if ($stmt === false) throw new RuntimeException('Could not update batch details');
                 mysqli_stmt_close($stmt);
 
                 $stmt = safe_query(
                     $conn,
-                    'UPDATE documents d INNER JOIN batch_papers p ON p.doc_id = d.doc_id SET d.type = ?, d.date_created = ?, d.sender = ?, d.submitter_type = ?, d.status = ?, d.is_priority = ? WHERE p.batch_id = ?',
-                    'sssssii',
-                    [$documentType, $batchDate, $senderType, $senderType, $batchStatus, $isPriority, $batchId]
+                    'UPDATE documents d INNER JOIN batch_papers p ON p.doc_id = d.doc_id SET d.type = ?, d.sender = ?, d.submitter_type = ?, d.status = ?, d.is_priority = ? WHERE p.batch_id = ?',
+                    'ssssii',
+                    [$documentType, $senderType, $senderType, $batchStatus, $isPriority, $batchId]
                 );
                 if ($stmt === false) throw new RuntimeException('Could not update linked paper records');
                 mysqli_stmt_close($stmt);
@@ -714,9 +717,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $submitterType = $mobileFormLabels['senderEnabled']
             ? trim($input['submitter_type'] ?? $sender)
             : 'Other';
-        $documentDate = trim($input['date'] ?? '');
-        $dateObject = DateTime::createFromFormat('!Y-m-d', $documentDate);
-
         $validClientPhone = $clientPhone !== null && (
             $isQuickSubmit
                 ? ($clientPhone === '' || is_valid_contact_number($clientPhone))
@@ -725,13 +725,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ((!$mobileFormLabels['senderEnabled'] || $sender !== '') &&
             $submitterName !== '' && strlen($submitterName) <= 255 &&
             $subject && $validClientPhone &&
-            in_array($submitterType, ['Student', 'Faculty', 'Other'], true) &&
-            $dateObject && $dateObject->format('Y-m-d') === $documentDate && $documentDate >= date('Y-m-d')) {
+            in_array($submitterType, ['Student', 'Faculty', 'Other'], true)) {
             $phoneValue = $clientPhone === '' ? null : $clientPhone;
             $entrySource = $isQuickSubmit ? 'quick_submit' : 'standard';
             $conn->begin_transaction();
             try {
-                $stmt = safe_query($conn, "INSERT INTO documents(type, sender, submitter_name, recipient, client_phone, subject, remarks, status, date_created, entry_source, submitter_type) VALUES('Incoming', ?, ?, ?, ?, ?, ?, 'Pending', TIMESTAMP(?, CURTIME()), ?, ?)", 'sssssssss', [$sender, $submitterName, $recipient, $phoneValue, $subject, $remarks, $documentDate, $entrySource, $submitterType]);
+                $stmt = safe_query($conn, "INSERT INTO documents(type, sender, submitter_name, recipient, client_phone, subject, remarks, status, date_created, entry_source, submitter_type) VALUES('Incoming', ?, ?, ?, ?, ?, ?, 'Pending', NOW(), ?, ?)", 'ssssssss', [$sender, $submitterName, $recipient, $phoneValue, $subject, $remarks, $entrySource, $submitterType]);
                 if ($stmt === false) {
                     throw new RuntimeException('Incoming document insert failed');
                 }
@@ -804,13 +803,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $subject = trim($input['subject'] ?? '');
         $remarks = trim($input['remarks'] ?? '');
         $clientPhone = contact_number_input($input['client_phone'] ?? '');
-        $documentDate = trim($input['date'] ?? '');
-        $dateObject = DateTime::createFromFormat('!Y-m-d', $documentDate);
         $validClientPhone = $clientPhone !== null && ($clientPhone === '' || is_valid_contact_number($clientPhone));
 
-        if ($sender && $subject && $validClientPhone && $dateObject && $dateObject->format('Y-m-d') === $documentDate && $documentDate >= date('Y-m-d')) {
+        if ($sender && $subject && $validClientPhone) {
             $phoneValue = $clientPhone === '' ? null : $clientPhone;
-            $stmt = safe_query($conn, "INSERT INTO documents(type, sender, recipient, client_phone, subject, remarks, status, date_created) VALUES('Outgoing', ?, ?, ?, ?, ?, 'For Release', TIMESTAMP(?, CURTIME()))", 'ssssss', [$sender, $recipient, $phoneValue, $subject, $remarks, $documentDate]);
+            $stmt = safe_query($conn, "INSERT INTO documents(type, sender, recipient, client_phone, subject, remarks, status, date_created) VALUES('Outgoing', ?, ?, ?, ?, ?, 'For Release', NOW())", 'sssss', [$sender, $recipient, $phoneValue, $subject, $remarks]);
             if ($stmt !== false) {
                 $documentId = mysqli_insert_id($conn);
                 mysqli_stmt_close($stmt);

@@ -1,3 +1,4 @@
 {
-  "phpserver.router": "router.php"
+  "phpserver.router": "router.php",
+  "CodeGPT.apiKey": "CodeGPT Plus Beta"
 }

@@ -681,10 +681,6 @@ function App() {
       showActionFeedback({ title: 'Name required', description: 'Enter the name of the person submitting the document.', tone: 'warning' });
       return;
     }
-    if (!incomingForm.date || incomingForm.date < todayLocalDate()) {
-      showActionFeedback({ title: 'Check the date submitted', description: 'The date cannot be earlier than today.', tone: 'warning' });
-      return;
-    }
     if (incomingForm.submitterName.trim().length > 255) {
       showActionFeedback({ title: 'Name is too long', description: 'Enter a name of no more than 255 characters.', tone: 'warning' });
       return;
@@ -700,7 +696,6 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: incomingModalMode === 'quick' ? 'quick_submit_incoming' : 'add_incoming',
-          date: incomingForm.date,
           sender: formLabels.senderEnabled ? incomingForm.from : '',
           submitter_type: formLabels.senderEnabled ? incomingForm.from : 'Other',
           submitter_name: incomingForm.submitterName.trim(),
@@ -733,13 +728,14 @@ function App() {
         }
         const clientPhone = incomingModalMode === 'standard' ? incomingForm.clientPhone : '';
         const incomingStatus = 'Pending';
-        setIncomingItems((prev) => [{ id: result.id, reference: result.reference, date: incomingForm.date, from: formLabels.senderEnabled ? incomingForm.from : '', submitterName: incomingForm.submitterName.trim(), subject: incomingForm.subject, recipient: 'Dean’s Office', clientPhone, status: incomingStatus }, ...prev]);
+        const submissionDate = todayLocalDate();
+        setIncomingItems((prev) => [{ id: result.id, reference: result.reference, date: submissionDate, from: formLabels.senderEnabled ? incomingForm.from : '', submitterName: incomingForm.submitterName.trim(), subject: incomingForm.subject, recipient: 'Dean’s Office', clientPhone, status: incomingStatus }, ...prev]);
         setReportItems((prev) => [
-          { id: result.id, date: incomingForm.date, type: 'Incoming', from: formLabels.senderEnabled ? incomingForm.from : '', subject: incomingForm.subject, status: incomingStatus },
+          { id: result.id, date: submissionDate, type: 'Incoming', from: formLabels.senderEnabled ? incomingForm.from : '', subject: incomingForm.subject, status: incomingStatus },
           ...prev,
         ]);
         incrementDocumentStatusCount(incomingStatus);
-        setIncomingForm({ date: incomingForm.date, from: 'Student', submitterName: '', subject: '', clientPhone: '' });
+        setIncomingForm({ date: submissionDate, from: 'Student', submitterName: '', subject: '', clientPhone: '' });
         closePopup(() => {
           setActiveForm(null);
           setIncomingModalMode(null);
@@ -1006,7 +1002,7 @@ function App() {
       showActionFeedback({ title: 'Check the name', description: 'Enter a name of no more than 255 characters.', tone: 'warning' });
       return;
     }
-    if (!batchForm.date || (!editingBatchId && batchForm.date < todayLocalDate()) || batchForm.date < MIN_RECORD_DATE) {
+    if (!editingBatchId && (!batchForm.date || batchForm.date < todayLocalDate() || batchForm.date < MIN_RECORD_DATE)) {
       showActionFeedback({ title: 'Check the date submitted', description: 'The date cannot be earlier than today.', tone: 'warning' });
       return;
     }
@@ -1034,7 +1030,6 @@ function App() {
           document_type: batchForm.documentType,
           batch_type: batchType,
           submitter_name: submitterName,
-          batch_date: batchForm.date,
           sender_type: formLabels.senderEnabled ? batchForm.senderType : '',
           remarks: batchForm.remarks,
           paper_count: paperCount,
@@ -1047,7 +1042,7 @@ function App() {
       let successNotice;
       if (editingBatchId) {
         setBatchItems((items) => items.map((batch) => batch.id === editingBatchId
-          ? { ...batch, documentType: batchForm.documentType, batchType, submitterName, batchDate: batchForm.date, senderType: batchForm.senderType, paperCount, documentPages, remarks: batchForm.remarks }
+          ? { ...batch, documentType: batchForm.documentType, batchType, submitterName, senderType: batchForm.senderType, paperCount, documentPages, remarks: batchForm.remarks }
           : batch));
         successNotice = {
           title: 'Bulk submission updated',
@@ -1148,7 +1143,7 @@ function App() {
   });
 
   const openIncomingModal = (mode) => {
-    setIncomingForm((form) => ({ ...form, date: form.date || todayLocalDate() }));
+    setIncomingForm((form) => ({ ...form, date: todayLocalDate() }));
     setIncomingModalMode(mode);
   };
 
@@ -1158,8 +1153,8 @@ function App() {
         <form onSubmit={handleSubmitIncoming} className="mobile-modal-scroll min-h-0 flex-1 overflow-y-auto rounded-3xl border border-emerald-200 bg-white p-4 shadow-sm sm:p-6">
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="space-y-2">
-              <span className={labelClass}>Date submitted</span>
-              <input type="date" min={todayLocalDate()} className={inputClass} value={incomingForm.date} onChange={(event) => setIncomingForm({ ...incomingForm, date: event.target.value })} required />
+              <span className={labelClass}>Date</span>
+              <input type="date" className={inputClass} value={incomingForm.date || todayLocalDate()} disabled />
             </label>
             <label className="space-y-2 sm:col-span-2">
               <span className={labelClass}>Name</span>
@@ -1217,8 +1212,8 @@ function App() {
         <form onSubmit={handleSubmitBatch} className="mobile-modal-scroll min-h-0 flex-1 overflow-y-auto rounded-3xl border border-emerald-200 bg-white p-4 shadow-sm sm:p-6">
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="space-y-2">
-              <span className={labelClass}>Date submitted</span>
-              <input type="date" min={editingBatchId ? MIN_RECORD_DATE : todayLocalDate()} className={inputClass} value={batchForm.date} onChange={(event) => setBatchForm({ ...batchForm, date: event.target.value })} required />
+              <span className={labelClass}>Date</span>
+              <input type="date" className={inputClass} value={batchForm.date || todayLocalDate()} disabled />
             </label>
             <label className="space-y-2 sm:col-span-2">
               <span className={labelClass}>Name</span>
