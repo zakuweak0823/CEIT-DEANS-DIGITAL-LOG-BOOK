@@ -1,4 +1,5 @@
 {
   "phpserver.router": "router.php",
+  "css.lint.unknownAtRules": "ignore",
   "CodeGPT.apiKey": "CodeGPT Plus Beta"
 }

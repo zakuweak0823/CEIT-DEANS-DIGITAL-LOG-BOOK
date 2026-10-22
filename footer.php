@@ -23,6 +23,32 @@
 <?php endif; ?>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+// Keep every column heading aligned with the content beneath it, at any window size.
+(function () {
+    const syncTableHeadingAlignment = function () {
+        document.querySelectorAll('.admin-content table').forEach(function (table) {
+            const headings = table.querySelectorAll(':scope > thead > tr:last-child > th');
+            if (headings.length === 0) return;
+            const row = Array.from(table.querySelectorAll(':scope > tbody > tr')).find(function (candidate) {
+                return candidate.children.length === headings.length && !candidate.querySelector('td[colspan]');
+            });
+            if (!row) return;
+            headings.forEach(function (heading, index) {
+                const align = window.getComputedStyle(row.children[index]).textAlign;
+                heading.style.textAlign = align === 'center' ? 'center' : (align === 'right' || align === 'end' ? 'right' : 'left');
+            });
+        });
+    };
+    let resizeTimer = null;
+    document.addEventListener('DOMContentLoaded', syncTableHeadingAlignment);
+    window.addEventListener('load', syncTableHeadingAlignment);
+    window.addEventListener('resize', function () {
+        window.clearTimeout(resizeTimer);
+        resizeTimer = window.setTimeout(syncTableHeadingAlignment, 120);
+    });
+})();
+</script>
+<script>
 let adminServerUnavailable = false;
 let adminServerAvailabilityHandler = null;
 let adminDocumentActivityCheck = null;
