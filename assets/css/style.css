@@ -8605,7 +8605,7 @@ body.admin-theme-glass.admin-compact .admin-quick-access-count {
     white-space: nowrap;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1200px) {
     .admin-body .admin-content .incoming-documents-table td[data-label="Submitted by"],
     .admin-body .admin-content .outgoing-documents-table td[data-label="Submitted by"] {
         min-width: 12rem;
@@ -8642,45 +8642,182 @@ body.admin-theme-glass.admin-compact .admin-quick-access-count {
     width: 100%;
 }
 
-.admin-body .admin-content .table-responsive > .incoming-documents-table,
-.admin-body .admin-content .table-responsive > .outgoing-documents-table {
-    min-width: 86rem;
-    table-layout: auto;
+@media (max-width: 1199.98px) {
+    .admin-body .admin-content .admin-mobile-card-table tbody tr > td > * {
+        grid-column: 2;
+    }
+
+    .admin-body .admin-content .admin-mobile-card-table tbody tr > td > .table-cell-badges {
+        justify-content: flex-start;
+    }
 }
 
-.admin-body .admin-content .incoming-documents-table th:nth-child(4),
-.admin-body .admin-content .incoming-documents-table td[data-label="Tracking QR"],
-.admin-body .admin-content .outgoing-documents-table th:nth-child(3),
-.admin-body .admin-content .outgoing-documents-table td[data-label="Tracking QR"] {
-    min-width: 10rem;
-    text-align: center;
-}
+/* Wide-table layout only; below 1200px these tables switch to stacked cards. */
+@media (min-width: 1200px) {
+    .admin-body .admin-content .table-responsive > .incoming-documents-table,
+    .admin-body .admin-content .table-responsive > .outgoing-documents-table {
+        min-width: 80rem;
+        table-layout: auto;
+    }
 
-.admin-body .admin-content .incoming-documents-table td[data-label="Date"],
-.admin-body .admin-content .incoming-documents-table td[data-label="Reference"],
-.admin-body .admin-content .incoming-documents-table td[data-label="Status"],
-.admin-body .admin-content .incoming-documents-table td[data-label="Priority"],
-.admin-body .admin-content .outgoing-documents-table td[data-label="Date"],
-.admin-body .admin-content .outgoing-documents-table td[data-label="Reference"],
-.admin-body .admin-content .outgoing-documents-table td[data-label="Status"],
-.admin-body .admin-content .outgoing-documents-table td[data-label="Priority"] {
-    text-align: center;
-}
+    .admin-body .admin-content .incoming-documents-table th:nth-child(4),
+    .admin-body .admin-content .incoming-documents-table td[data-label="Tracking QR"],
+    .admin-body .admin-content .outgoing-documents-table th:nth-child(3),
+    .admin-body .admin-content .outgoing-documents-table td[data-label="Tracking QR"] {
+        min-width: 10rem;
+        text-align: center;
+    }
 
-.admin-body .admin-content .incoming-documents-table td[data-label="Date"],
-.admin-body .admin-content .outgoing-documents-table td[data-label="Date"] {
-    min-width: 8rem;
-    white-space: nowrap;
-}
+    .admin-body .admin-content .incoming-documents-table td[data-label="Date"],
+    .admin-body .admin-content .incoming-documents-table td[data-label="Reference"],
+    .admin-body .admin-content .incoming-documents-table td[data-label="Status"],
+    .admin-body .admin-content .incoming-documents-table td[data-label="Priority"],
+    .admin-body .admin-content .outgoing-documents-table td[data-label="Date"],
+    .admin-body .admin-content .outgoing-documents-table td[data-label="Reference"],
+    .admin-body .admin-content .outgoing-documents-table td[data-label="Status"],
+    .admin-body .admin-content .outgoing-documents-table td[data-label="Priority"] {
+        text-align: center;
+    }
 
-.admin-body .admin-content .incoming-documents-table td[data-label="Actions"],
-.admin-body .admin-content .outgoing-documents-table td[data-label="Actions"] {
-    min-width: 15rem;
-    text-align: center;
+    .admin-body .admin-content .incoming-documents-table td[data-label="Date"],
+    .admin-body .admin-content .outgoing-documents-table td[data-label="Date"] {
+        min-width: 8rem;
+        white-space: nowrap;
+    }
+
+    .admin-body .admin-content .incoming-documents-table td[data-label="Actions"],
+    .admin-body .admin-content .table.incoming-documents-table.admin-table-has-actions > thead > tr > th:last-child,
+    .admin-body .admin-content .table.incoming-documents-table.admin-table-has-actions > tbody > tr > td:last-child {
+        min-width: 11rem;
+        text-align: center;
+    }
+
+    .admin-body .admin-content .outgoing-documents-table td[data-label="Actions"],
+    .admin-body .admin-content .table.outgoing-documents-table.admin-table-has-actions > thead > tr > th:last-child,
+    .admin-body .admin-content .table.outgoing-documents-table.admin-table-has-actions > tbody > tr > td:last-child {
+        min-width: 11rem;
+        text-align: center;
+    }
+
+    .admin-body .admin-content .incoming-documents-table td[data-label="Subject"],
+    .admin-body .admin-content .outgoing-documents-table td[data-label="Subject"] {
+        min-width: 9rem;
+        overflow-wrap: break-word;
+    }
 }
 
 .admin-body .admin-content .document-row-actions {
     gap: 0.45rem;
+}
+
+/* Action buttons share one size and icon spacing, so rows stay even at any width. */
+.admin-body .admin-content .table-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+}
+
+.admin-body .admin-content .table-actions .btn .bi {
+    margin: 0 !important;
+}
+
+@media (min-width: 1200px) {
+    /* One tidy row per record: every row keeps the same height and the buttons never wrap. */
+    .admin-body .admin-content .document-row-actions {
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .admin-body .admin-content .document-row-actions > form {
+        display: flex;
+        margin: 0;
+    }
+
+    .admin-body .admin-content .document-row-actions .btn {
+        position: relative;
+        flex: 0 0 auto;
+        gap: 0;
+        width: 2.4rem;
+        min-width: 2.4rem;
+        padding: 0;
+        font-size: 0.95rem;
+        transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+    }
+
+    .admin-body .admin-content .document-row-actions .btn:hover,
+    .admin-body .admin-content .document-row-actions .btn:focus-visible {
+        z-index: 3;
+        transform: translateY(-2px);
+        box-shadow: 0 0.35rem 0.8rem rgba(6, 78, 59, 0.18);
+    }
+
+    /* The visible label is shown by the shared body-level tooltip, so the table can never clip it. */
+    .admin-body .admin-content .document-row-actions .action-label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .admin-body .admin-content .document-row-actions .btn,
+        .admin-action-tooltip {
+            transition: none;
+        }
+    }
+}
+
+.admin-action-tooltip {
+    position: fixed;
+    z-index: 2000;
+    top: 0;
+    left: 0;
+    padding: 0.4rem 0.7rem;
+    border-radius: 0.5rem;
+    background: #0f3d2b;
+    box-shadow: 0 0.4rem 1rem rgba(6, 40, 28, 0.28);
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 600;
+    line-height: 1.2;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.16s ease;
+    white-space: nowrap;
+}
+
+.admin-action-tooltip.is-visible {
+    opacity: 1;
+}
+
+.admin-action-tooltip::after {
+    position: absolute;
+    left: var(--arrow-x, 50%);
+    margin-left: -0.35rem;
+    border: 0.35rem solid transparent;
+    content: "";
+}
+
+.admin-action-tooltip[data-placement="top"]::after {
+    top: 100%;
+    border-top-color: #0f3d2b;
+}
+
+.admin-action-tooltip[data-placement="bottom"]::after {
+    bottom: 100%;
+    border-bottom-color: #0f3d2b;
+}
+
+@media (max-width: 1199.98px) {
+    .admin-action-tooltip {
+        display: none;
+    }
 }
 
 .admin-body .admin-content .document-action-button {
@@ -8720,6 +8857,19 @@ body.admin-theme-glass.admin-compact .admin-quick-access-count {
 
     .admin-body .admin-content .admin-mobile-card-table .document-row-actions {
         grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+    }
+
+    .admin-body .admin-content .admin-mobile-card-table .document-row-actions > form,
+    .admin-body .admin-content .admin-mobile-card-table .document-row-actions > .btn {
+        display: flex;
+        width: 100%;
+        margin: 0;
+    }
+
+    .admin-body .admin-content .admin-mobile-card-table .document-row-actions .btn {
+        flex: 1 1 auto;
+        width: 100%;
+        max-width: none;
     }
 
     .admin-body .admin-content .admin-mobile-card-table .document-action-button {
@@ -9718,9 +9868,21 @@ body.admin-theme-civic .dashboard-page .dashboard-stat-icon-borrowed .bi {
 
 .dashboard-redesign .dashboard-sla-summary {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.75rem;
     margin: 1rem 0 1.1rem;
+}
+
+.dashboard-redesign a.dashboard-sla-link {
+    color: inherit;
+    text-decoration: none;
+    transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.dashboard-redesign a.dashboard-sla-link:hover,
+.dashboard-redesign a.dashboard-sla-link:focus-visible {
+    box-shadow: 0 0.3rem 0.8rem rgba(159, 18, 57, 0.12);
+    transform: translateY(-1px);
 }
 
 .dashboard-redesign .dashboard-overdue-note {
@@ -9804,6 +9966,50 @@ body.admin-theme-civic .dashboard-page .dashboard-stat-icon-borrowed .bi {
     white-space: nowrap;
 }
 
+.dashboard-redesign .dashboard-activity-table small {
+    font-size: 0.7rem;
+    line-height: 1.3;
+}
+
+@media (min-width: 1200px) {
+    .dashboard-redesign .dashboard-activity-table {
+        table-layout: fixed;
+        width: 100%;
+    }
+
+    .dashboard-redesign .dashboard-activity-table thead th,
+    .dashboard-redesign .dashboard-activity-table tbody td {
+        padding: 0.85rem 1rem;
+        vertical-align: middle;
+    }
+
+    .dashboard-redesign .dashboard-activity-table th:nth-child(1),
+    .dashboard-redesign .dashboard-activity-table td:nth-child(1) { width: 22%; text-align: left; }
+    .dashboard-redesign .dashboard-activity-table th:nth-child(2),
+    .dashboard-redesign .dashboard-activity-table td:nth-child(2) { width: 12%; text-align: center; }
+    .dashboard-redesign .dashboard-activity-table th:nth-child(3),
+    .dashboard-redesign .dashboard-activity-table td:nth-child(3) { width: 24%; text-align: left; }
+    .dashboard-redesign .dashboard-activity-table th:nth-child(4),
+    .dashboard-redesign .dashboard-activity-table td:nth-child(4) { width: 13%; text-align: center; }
+    .dashboard-redesign .dashboard-activity-table th:nth-child(5),
+    .dashboard-redesign .dashboard-activity-table td:nth-child(5) { width: 15%; text-align: center; }
+    .dashboard-redesign .dashboard-activity-table th:nth-child(6),
+    .dashboard-redesign .dashboard-activity-table td:nth-child(6) { width: 14%; text-align: center; }
+
+    .dashboard-redesign .dashboard-activity-table td:nth-child(1),
+    .dashboard-redesign .dashboard-activity-table td:nth-child(3) {
+        overflow-wrap: anywhere;
+    }
+
+    .dashboard-redesign .dashboard-activity-table td:nth-child(5) .dashboard-overdue-days {
+        display: block;
+    }
+
+    .dashboard-redesign .dashboard-activity-table td:nth-child(6) .btn {
+        min-width: 5.5rem;
+    }
+}
+
 @media (max-width: 991.98px) {
     .dashboard-redesign .dashboard-sla-summary {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -9857,4 +10063,254 @@ body.admin-theme-civic .dashboard-page .dashboard-stat-icon-borrowed .bi {
 
 .border-warning {
     border-color: #facc15 !important;
+}
+
+/* Clean handling of long text: two lines, then an ellipsis. */
+.admin-body .admin-content .cell-clamp {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    max-width: 20rem;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    text-overflow: ellipsis;
+}
+
+.admin-body .admin-content .table td[data-label="Tracking QR"] .btn {
+    white-space: nowrap;
+}
+
+.admin-body .admin-content .table td[data-label="Recipient"] {
+    min-width: 8.5rem;
+}
+
+@media (min-width: 768px) {
+    .admin-body .admin-content .table.admin-table-has-actions > thead > tr > th:last-child,
+    .admin-body .admin-content .table.admin-table-has-actions > tbody > tr > td:last-child {
+        padding-right: 1.25rem;
+    }
+}
+
+@media (min-width: 1200px) {
+    .admin-body .admin-content .table-responsive > .dashboard-activity-table.admin-table-has-actions {
+        min-width: 44rem;
+        table-layout: fixed;
+    }
+
+    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > thead > tr > th,
+    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > tbody > tr > td {
+        min-width: 0;
+        padding: 0.85rem 0.9rem;
+        text-align: center;
+    }
+
+    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > thead > tr > th:nth-child(1),
+    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > tbody > tr > td:nth-child(1),
+    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > thead > tr > th:nth-child(3),
+    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > tbody > tr > td:nth-child(3) {
+        text-align: left;
+    }
+
+    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > thead > tr > th:nth-child(1) { width: 24%; }
+    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > thead > tr > th:nth-child(2) { width: 12%; }
+    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > thead > tr > th:nth-child(3) { width: 24%; }
+    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > thead > tr > th:nth-child(4) { width: 13%; }
+    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > thead > tr > th:nth-child(5) { width: 15%; }
+    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > thead > tr > th:nth-child(6) { width: 12%; }
+
+    .admin-body .admin-content .dashboard-activity-table .cell-clamp {
+        max-width: 100%;
+    }
+}
+
+/* Links that open a page are shown as buttons, never as raw web addresses. */
+.tracking-link-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    max-width: 100%;
+    font-weight: 650;
+    text-decoration: none;
+}
+
+.tracking-link-button[hidden] {
+    display: none;
+}
+
+/* Do not reserve scrollbar space on the right when a table fits its container. */
+.admin-body .admin-content .table-responsive {
+    scrollbar-gutter: auto;
+}
+
+.admin-body .admin-content .table-responsive > .dashboard-activity-table {
+    width: 100%;
+    margin-bottom: 0;
+}
+
+/* Banner shown when a single record was opened from a "Review" button. */
+.selected-record-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.8rem 1rem;
+    border: 1px solid #cfe3d6;
+    border-left: 4px solid #198754;
+    border-radius: 0.75rem;
+    background: #f1f8f4;
+    color: #17402b;
+}
+
+.selected-record-banner > .bi {
+    font-size: 1.25rem;
+    color: #198754;
+}
+
+.selected-record-banner > div {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.selected-record-banner span {
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 575.98px) {
+    .selected-record-banner {
+        flex-wrap: wrap;
+    }
+}
+
+/* Small info icon beside a chart title; explains the chart in a popover. */
+.chart-info-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 0.4rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #78847b;
+    font-size: 0.85rem;
+    line-height: 1;
+    vertical-align: middle;
+    cursor: help;
+}
+
+.chart-info-button:hover,
+.chart-info-button:focus-visible {
+    color: #17613e;
+}
+
+.chart-info-popover {
+    --bs-popover-max-width: 17rem;
+    --bs-popover-body-padding-x: 0.85rem;
+    --bs-popover-body-padding-y: 0.7rem;
+    --bs-popover-body-color: #405347;
+    --bs-popover-border-color: #d9e3dc;
+    font-size: 0.78rem;
+    line-height: 1.5;
+}
+
+button.dashboard-sla-stat.dashboard-sla-link { width: 100%; text-align: left; font: inherit; cursor: pointer; }
+.overdue-modal .modal-header { align-items: flex-start; }
+.overdue-modal-sub { margin: .15rem 0 0; font-size: .8rem; color: #64748b; }
+.overdue-modal-list { list-style: none; margin: 0; padding: 0; }
+.overdue-modal-list li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .75rem 1.25rem; border-bottom: 1px solid rgba(148,163,184,.25); }
+.overdue-modal-list li:last-child { border-bottom: 0; }
+.overdue-modal-text { min-width: 0; display: flex; flex-direction: column; gap: .1rem; }
+.overdue-modal-text span { font-size: .8rem; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.overdue-modal-meta { flex: none; display: flex; align-items: center; gap: .75rem; }
+@media (max-width: 575px) { .overdue-modal-list li { flex-direction: column; align-items: stretch; gap: .5rem; } .overdue-modal-meta { justify-content: space-between; } }
+
+/* Page controls under long tables. */
+.table-pager {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem 1rem;
+    margin-top: 0.85rem;
+}
+
+.table-pager-info {
+    color: #68766c;
+    font-size: 0.8rem;
+}
+
+.table-pager-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.table-pager-btn {
+    min-width: 2.15rem;
+    height: 2.15rem;
+    padding: 0 0.55rem;
+    border: 1px solid #cfe0d5;
+    border-radius: 0.5rem;
+    background: #fff;
+    color: #17613e;
+    font-size: 0.82rem;
+    font-weight: 650;
+    line-height: 1;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.table-pager-btn:hover:not(:disabled) {
+    border-color: #17613e;
+    background: #eef6f1;
+}
+
+.table-pager-btn.is-active {
+    border-color: #0f5132;
+    background: #0f5132;
+    color: #fff;
+}
+
+.table-pager-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.table-pager-gap {
+    padding: 0 0.2rem;
+    color: #8a968d;
+}
+
+@media (max-width: 575.98px) {
+    .table-pager {
+        justify-content: center;
+    }
+}
+
+/* Keep the Actions column in view while a wide table scrolls sideways. */
+@media (min-width: 1200px) {
+    .admin-body .admin-content .table-responsive > .table.admin-table-has-actions > thead > tr > th:last-child,
+    .admin-body .admin-content .table-responsive > .table.admin-table-has-actions > tbody > tr > td:last-child {
+        position: sticky;
+        right: 0;
+        z-index: 2;
+    }
+
+    .admin-body .admin-content .table-responsive > .table.admin-table-has-actions > thead > tr > th:last-child {
+        box-shadow: -8px 0 8px -8px rgba(0, 0, 0, 0.35);
+    }
+
+    .admin-body .admin-content .table-responsive > .table.admin-table-has-actions > tbody > tr > td:last-child {
+        background-color: #fff;
+        box-shadow: -8px 0 8px -8px rgba(15, 81, 50, 0.25);
+    }
+
+    .admin-body .admin-content .table-responsive > .table.admin-table-has-actions > tbody > tr:nth-child(even) > td:last-child {
+        background-color: #f3f8f4;
+    }
+
+    .admin-body .admin-content .table-responsive > .table.admin-table-has-actions > tbody > tr:hover > td:last-child {
+        background-color: #e8f2eb;
+    }
 }

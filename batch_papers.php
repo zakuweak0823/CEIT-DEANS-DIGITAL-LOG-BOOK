@@ -1121,7 +1121,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                     <canvas id="batchQrCanvas" aria-label="QR code for tracking this bulk submission"></canvas>
                 </div>
                 <p class="small text-muted mt-3 mb-2" id="batchQrHelp">Choose whether this QR identifies the local bulk submission or opens its tracking page.</p>
-                <a id="batchTrackingLink" href="#" target="_blank" rel="noopener noreferrer" class="small text-break">Open tracking page</a>
+                <a id="batchTrackingLink" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary btn-sm tracking-link-button"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>Open tracking page</a>
                 <p id="batchQrError" class="small text-danger mt-3 mb-0" role="alert" hidden></p>
             </div>
             <div class="modal-footer">
@@ -1584,7 +1584,7 @@ document.addEventListener('DOMContentLoaded', function () {
             receiptLink.rel = 'noopener noreferrer';
             receiptLink.className = batch.receivedPaperCount !== null && batch.receivedPaperCount !== undefined
                 ? 'btn btn-success mt-2'
-                : 'd-inline-block mt-2';
+                : 'btn btn-outline-primary btn-sm tracking-link-button mt-2';
             receiptLink.textContent = batch.receivedPaperCount !== null && batch.receivedPaperCount !== undefined
                 ? 'Open / print receipt'
                 : 'Open tracking page';

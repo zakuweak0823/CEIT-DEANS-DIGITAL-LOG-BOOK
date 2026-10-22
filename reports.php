@@ -214,6 +214,10 @@ function reportTitle(string $type): string
 .report-page .report-table--all col.report-col-status {
     width: 12%;
 }
+.report-page .report-table tbody tr.report-page-hidden,
+.report-page .report-pager[hidden] {
+    display: none;
+}
 .report-page .report-print-header {
     display: none;
 }
@@ -261,8 +265,15 @@ function reportTitle(string $type): string
         overflow: visible !important;
         width: 100% !important;
         flex: none !important;
-        padding: 0.38in 0.42in 0.44in !important;
+        padding: 0 !important;
         background: #fff !important;
+    }
+    .report-page .report-table thead {
+        display: table-header-group;
+    }
+    .report-page .report-table tr {
+        break-inside: avoid;
+        page-break-inside: avoid;
     }
     .report-page {
         width: 100% !important;
@@ -579,7 +590,8 @@ function reportTitle(string $type): string
         break-inside: avoid;
     }
     .report-page .report-table tr[hidden],
-    .report-page #reportNoMatches {
+    .report-page #reportNoMatches,
+    .report-page .report-pager {
         display: none !important;
     }
     .report-page .badge {
@@ -614,7 +626,7 @@ function reportTitle(string $type): string
     }
     @page {
         size: A4 portrait;
-        margin: 0;
+        margin: 0.5in 0.45in 0.55in;
     }
 }
 </style>
@@ -748,6 +760,9 @@ function reportTitle(string $type): string
                     <?php if ($reportType === 'All Reports'): ?>
                         <p class="report-print-note">Long record details are shortened for print. Export to Excel for complete details.</p>
                     <?php endif; ?>
+                    <?php if ($reportType === 'All Reports' || $reportType === 'SMS Logs'): ?>
+                        <p class="report-print-note report-status-key"><strong>SMS status guide:</strong> Delivered = confirmed received on the recipient's phone. Pending = awaiting confirmation. Failed = not delivered.</p>
+                    <?php endif; ?>
                 </header>
                 <?php endif; ?>
                 <div class="report-screen-heading d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3">
@@ -783,7 +798,7 @@ function reportTitle(string $type): string
                 </div>
                 <?php endif; ?>
                 <div class="table-responsive report-table-wrap">
-                    <table id="reportTable" class="table table-hover align-middle mb-0 report-table <?php echo $reportType === 'All Reports' ? 'report-table--all' : ($reportType === 'SMS Logs' ? 'report-table--sms' : ($reportType === 'Borrowed Items' ? 'report-table--borrowed' : 'report-table--documents')); ?>">
+                    <table id="reportTable" data-no-pagination class="table table-hover align-middle mb-0 report-table <?php echo $reportType === 'All Reports' ? 'report-table--all' : ($reportType === 'SMS Logs' ? 'report-table--sms' : ($reportType === 'Borrowed Items' ? 'report-table--borrowed' : 'report-table--documents')); ?>">
                         <?php if ($reportType === 'Borrowed Items'): ?>
                             <colgroup>
                                 <col class="report-col-item">
@@ -972,6 +987,64 @@ function printReport() {
 window.addEventListener('beforeprint', applyReportPrintTitle);
 window.addEventListener('afterprint', restoreReportPrintTitle);
 
+const REPORT_PAGE_SIZE = 15;
+let reportPage = 1;
+const reportPager = document.createElement('nav');
+reportPager.className = 'table-pager report-pager';
+reportPager.setAttribute('aria-label', 'Report pages');
+reportTable.closest('.table-responsive').insertAdjacentElement('afterend', reportPager);
+
+// Pages only hide rows with a class, so the search/status filter (row.hidden), Excel export and printing still see every match.
+function renderReportPage() {
+    const matches = reportRows.filter(function (row) { return !row.hidden; });
+    const pageCount = Math.max(1, Math.ceil(matches.length / REPORT_PAGE_SIZE));
+    reportPage = Math.min(Math.max(reportPage, 1), pageCount);
+    const first = (reportPage - 1) * REPORT_PAGE_SIZE;
+    matches.forEach(function (row, index) {
+        row.classList.toggle('report-page-hidden', index < first || index >= first + REPORT_PAGE_SIZE);
+    });
+    reportPager.textContent = '';
+    reportPager.hidden = matches.length <= REPORT_PAGE_SIZE;
+    if (reportPager.hidden) return;
+
+    const info = document.createElement('span');
+    info.className = 'table-pager-info';
+    info.textContent = 'Showing ' + (first + 1) + '–' + Math.min(first + REPORT_PAGE_SIZE, matches.length) + ' of ' + matches.length + ' records. Printing and Excel include all of them.';
+    const controls = document.createElement('div');
+    controls.className = 'table-pager-controls';
+    const addButton = function (html, page, aria, active, disabled) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'table-pager-btn' + (active ? ' is-active' : '');
+        button.innerHTML = html;
+        button.disabled = !!disabled;
+        button.setAttribute('aria-label', aria);
+        if (active) button.setAttribute('aria-current', 'page');
+        button.addEventListener('click', function () {
+            reportPage = page;
+            renderReportPage();
+            reportTable.closest('.table-responsive').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        });
+        controls.appendChild(button);
+    };
+    addButton('<i class="bi bi-chevron-left" aria-hidden="true"></i>', reportPage - 1, 'Previous page', false, reportPage === 1);
+    let previous = 0;
+    for (let p = 1; p <= pageCount; p++) {
+        if (p !== 1 && p !== pageCount && Math.abs(p - reportPage) > 1) continue;
+        if (p - previous > 1) {
+            const gap = document.createElement('span');
+            gap.className = 'table-pager-gap';
+            gap.textContent = '…';
+            controls.appendChild(gap);
+        }
+        addButton(String(p), p, 'Page ' + p, p === reportPage, false);
+        previous = p;
+    }
+    addButton('<i class="bi bi-chevron-right" aria-hidden="true"></i>', reportPage + 1, 'Next page', false, reportPage === pageCount);
+    reportPager.appendChild(info);
+    reportPager.appendChild(controls);
+}
+
 function filterReportRows() {
     const query = reportSearch.value.trim().toLocaleLowerCase();
     const selectedStatus = statusFilter.value;
@@ -986,6 +1059,8 @@ function filterReportRows() {
     reportNoMatches.hidden = visibleCount > 0;
     reportResultCount.textContent = 'Showing ' + visibleCount.toLocaleString() + ' of ' + reportRows.length.toLocaleString() + ' records';
     reportPrintRecordCount.textContent = visibleCount.toLocaleString();
+    reportPage = 1;
+    renderReportPage();
 }
 reportSearch.addEventListener('input', filterReportRows);
 statusFilter.addEventListener('change', filterReportRows);

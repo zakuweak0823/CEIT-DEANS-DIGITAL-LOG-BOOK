@@ -129,7 +129,12 @@ $borrowedItems = [];
 // Normalize legacy/non-returned status values for the UI's two-state filter.
 $statusExpression = "CASE WHEN bi.status = 'Returned' THEN 'Returned' ELSE 'Unreturned' END";
 $statusCondition = $statusFilter === 'All' ? '' : " AND {$statusExpression} = ?";
-if ($search !== '') {
+$itemIdParam = $_GET['item_id'] ?? '';
+$itemIdFilter = is_string($itemIdParam) && ctype_digit($itemIdParam) ? (int)$itemIdParam : 0;
+if ($itemIdFilter > 0) {
+    // The dashboard's Review action must show only the selected borrowed item.
+    $stmt = safe_query($conn, "SELECT bi.*, ic.category_name, {$statusExpression} AS display_status FROM borrowed_items bi LEFT JOIN item_categories ic ON bi.category_id = ic.category_id WHERE bi.item_id = ?", 'i', [$itemIdFilter]);
+} elseif ($search !== '') {
     $searchTerm = "%{$search}%";
     $query = "SELECT bi.*, ic.category_name, {$statusExpression} AS display_status FROM borrowed_items bi LEFT JOIN item_categories ic ON bi.category_id = ic.category_id WHERE (bi.item_name LIKE ? OR bi.borrower LIKE ? OR bi.status LIKE ? OR ic.category_name LIKE ?){$statusCondition} ORDER BY bi.date_borrowed DESC";
     $types = 'ssss' . ($statusFilter === 'All' ? '' : 's');
@@ -171,6 +176,18 @@ if ($stmt !== false) {
             </button>
         </div>
     </div>
+    <?php if ($itemIdFilter > 0): ?>
+        <div class="col-12">
+            <div class="selected-record-banner" role="status">
+                <i class="bi bi-bullseye" aria-hidden="true"></i>
+                <div>
+                    <strong>Selected item</strong>
+                    <span><?php echo $borrowedItems ? sanitize($borrowedItems[0]['item_name']) . ' · borrowed by ' . sanitize($borrowedItems[0]['borrower']) : 'This item could not be found.'; ?></span>
+                </div>
+                <a class="btn btn-sm btn-outline-primary" href="borrowed">Show all borrowed items</a>
+            </div>
+        </div>
+    <?php endif; ?>
     <div class="col-12">
         <div class="card shadow-sm">
             <div class="card-body">

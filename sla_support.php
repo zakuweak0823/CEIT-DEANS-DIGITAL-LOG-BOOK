@@ -71,7 +71,7 @@ function get_sla_overdue($conn, array $sla, int $limit = 8): array
     $overdue['documentCount'] = (int)safe_scalar($conn, "SELECT COUNT(*) FROM documents WHERE $documentFilter", 'ii', [$sla['incomingDays'], $sla['outgoingDays']]);
     $stmt = safe_query(
         $conn,
-        "SELECT type, status, subject, sender, submitter_name, recipient, date_created, DATEDIFF(NOW(), date_created) AS days_open
+        "SELECT doc_id, type, status, subject, sender, submitter_name, recipient, date_created, DATEDIFF(NOW(), date_created) AS days_open
          FROM documents WHERE $documentFilter ORDER BY date_created ASC LIMIT " . (int)$limit,
         'ii',
         [$sla['incomingDays'], $sla['outgoingDays']]
@@ -87,7 +87,7 @@ function get_sla_overdue($conn, array $sla, int $limit = 8): array
     $overdue['loanCount'] = (int)safe_scalar($conn, "SELECT COUNT(*) FROM borrowed_items WHERE status <> 'Returned' AND date_borrowed < (NOW() - INTERVAL ? DAY)", 'i', [$sla['loanDays']]);
     $stmt = safe_query(
         $conn,
-        "SELECT item_name, borrower, date_borrowed, DATEDIFF(NOW(), date_borrowed) AS days_out
+        "SELECT item_id, item_name, borrower, date_borrowed, DATEDIFF(NOW(), date_borrowed) AS days_out
          FROM borrowed_items WHERE status <> 'Returned' AND date_borrowed < (NOW() - INTERVAL ? DAY) ORDER BY date_borrowed ASC LIMIT " . (int)$limit,
         'i',
         [$sla['loanDays']]

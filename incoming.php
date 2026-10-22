@@ -3,6 +3,7 @@ require_once 'auth.php';
 require_once 'db.php';
 require_once 'mobile_form_settings.php';
 require_once 'document_tracking.php';
+require_once 'sla_support.php';
 ensure_admin();
 
 $mobileFormLabels = get_mobile_form_labels($conn);
@@ -42,6 +43,8 @@ $search = trim($_GET['search'] ?? '');
 $documentIdParam = $_GET['document_id'] ?? '';
 $documentIdFilter = is_string($documentIdParam) && ctype_digit($documentIdParam) ? (int)$documentIdParam : 0;
 $statusFilter = trim($_GET['status'] ?? '');
+$overdueFilter = ($_GET['overdue'] ?? '') === '1';
+$overdueDays = (int)get_sla_settings($conn)['incomingDays'];
 $validStatusFilters = ['Pending', 'For Release', 'Released'];
 if (!in_array($statusFilter, $validStatusFilters, true)) {
     $statusFilter = '';
@@ -199,7 +202,10 @@ if (!in_array($submitterFilter, ['All', 'Faculty', 'Student', 'Other'], true)) {
     $submitterFilter = 'All';
 }
 $documents = [];
-if ($documentIdFilter > 0) {
+if ($overdueFilter && $documentIdFilter === 0) {
+    // The dashboard's overdue tile must list only documents past their processing time.
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND status = 'Pending' AND date_created < (NOW() - INTERVAL ? DAY) ORDER BY date_created ASC", 'i', [$overdueDays]);
+} elseif ($documentIdFilter > 0) {
     // Quick Submit's Manage action must show only the selected incoming record.
     $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND doc_id = ?", 'i', [$documentIdFilter]);
 } elseif ($search !== '' && $statusFilter !== '' && $submitterFilter !== 'All') {
@@ -254,6 +260,30 @@ if ($stmt !== false) {
     </div>
     <?php if ($message): ?>
         <div class="col-12"><?php echo $message; ?></div>
+    <?php endif; ?>
+    <?php if ($overdueFilter && $documentIdFilter === 0): ?>
+        <div class="col-12">
+            <div class="selected-record-banner" role="status">
+                <i class="bi bi-hourglass-split" aria-hidden="true"></i>
+                <div>
+                    <strong>Overdue incoming documents</strong>
+                    <span>Showing <?php echo count($documents); ?> open document(s) waiting longer than <?php echo (int)$overdueDays; ?> day(s).</span>
+                </div>
+                <a class="btn btn-sm btn-outline-primary" href="incoming">Show all incoming documents</a>
+            </div>
+        </div>
+    <?php endif; ?>
+    <?php if ($documentIdFilter > 0): ?>
+        <div class="col-12">
+            <div class="selected-record-banner" role="status">
+                <i class="bi bi-bullseye" aria-hidden="true"></i>
+                <div>
+                    <strong>Selected record</strong>
+                    <span><?php echo $documents ? sanitize($documents[0]['subject']) . ' · ' . sanitize($documents[0]['status']) : 'This record could not be found.'; ?></span>
+                </div>
+                <a class="btn btn-sm btn-outline-primary" href="incoming">Show all incoming documents</a>
+            </div>
+        </div>
     <?php endif; ?>
     <div class="col-12">
         <div class="card shadow-sm">
@@ -357,7 +387,7 @@ if ($stmt !== false) {
                                         <td data-label="Actions">
                                             <div class="table-actions document-row-actions">
                                             <button type="button" class="btn btn-sm btn-outline-primary document-action-button" title="Edit document" aria-label="Edit <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?>" onclick="editDocument(<?php echo (int)$document['doc_id']; ?>, <?php echo htmlspecialchars(json_encode($document['sender'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['submitter_name'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['client_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['subject'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['remarks'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['submitter_type'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
-                                                <i class="bi bi-pencil"></i> Edit
+                                                <i class="bi bi-pencil" aria-hidden="true"></i><span class="action-label">Edit</span>
                                             </button>
                                             <?php if ($document['status'] === 'Pending'): ?>
                                                 <button
@@ -370,7 +400,7 @@ if ($stmt !== false) {
                                                     data-document-sender="<?php echo sanitize($document['sender']); ?>"
                                                     data-document-recipient="<?php echo sanitize($document['recipient']); ?>"
                                                 >
-                                                    <i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>Prepare for release
+                                                    <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span class="action-label">Prepare for release</span>
                                                 </button>
                                             <?php endif; ?>
                                             </div>
@@ -504,7 +534,7 @@ if ($stmt !== false) {
                     <canvas id="documentTrackingQrCanvas" aria-label="Document status tracking QR code"></canvas>
                 </div>
                 <div id="documentTrackingQrError" class="alert alert-danger mt-3" role="alert" hidden></div>
-                <a id="documentTrackingQrLink" class="small d-block mt-3" target="_blank" rel="noopener noreferrer"></a>
+                <a id="documentTrackingQrLink" class="btn btn-outline-primary btn-sm tracking-link-button mt-3" target="_blank" rel="noopener noreferrer"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>Open tracking page</a>
             </div>
             <div class="modal-footer">
                 <a id="downloadDocumentTrackingQr" class="btn btn-primary disabled" aria-disabled="true" download="document-tracking.png"><i class="bi bi-download me-1" aria-hidden="true"></i>Download QR</a>
@@ -602,7 +632,7 @@ function showDocumentTrackingQr(trackerUrl, reference) {
     const download = document.getElementById('downloadDocumentTrackingQr');
     document.getElementById('documentTrackingQrReference').textContent = reference;
     link.href = trackerUrl;
-    link.textContent = trackerUrl;
+    link.title = 'Open the tracking page in a new tab';
     error.hidden = true;
     download.classList.add('disabled');
     download.setAttribute('aria-disabled', 'true');

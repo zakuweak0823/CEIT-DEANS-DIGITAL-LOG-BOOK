@@ -131,7 +131,7 @@ if ($philsms_sender_id === '') {
                         <div class="col-md-6">
                             <label class="form-label" for="sms_api_provider">SMS API Provider</label>
                             <input type="text" id="sms_api_provider" class="form-control" value="PhilSMS" readonly>
-                            <div class="form-text">API endpoint: <a href="https://dashboard.philsms.com/api/v3/sms/send" target="_blank" rel="noopener noreferrer">https://dashboard.philsms.com/api/v3/sms/send</a></div>
+                            <div class="form-text">API endpoint: <code class="text-break">https://dashboard.philsms.com/api/v3/sms/send</code></div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label" for="philsms_api_token_current">PhilSMS API token currently in use</label>
@@ -195,7 +195,7 @@ if ($philsms_sender_id === '') {
                     </div>
 
             </div>
-            <div class="card-footer sticky-bottom d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2 bg-white p-3 p-md-4">
+            <div class="card-footer d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2 bg-white p-3 p-md-4">
                 <div class="small text-muted" id="emailSetupStatus" role="status" aria-live="polite">Email validation checks configuration only; it does not send a test message.</div>
                 <div class="d-flex flex-column flex-sm-row gap-2">
                     <button type="button" class="btn btn-outline-primary" onclick="testEmail()">Validate Email Settings</button>

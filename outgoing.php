@@ -4,6 +4,7 @@ require_once 'db.php';
 require_once 'sms_service.php';
 require_once 'mobile_form_settings.php';
 require_once 'document_tracking.php';
+require_once 'sla_support.php';
 ensure_admin();
 
 $mobileFormLabels = get_mobile_form_labels($conn);
@@ -29,6 +30,8 @@ $search = trim($_GET['search'] ?? '');
 $documentIdParam = $_GET['document_id'] ?? '';
 $documentIdFilter = is_string($documentIdParam) && ctype_digit($documentIdParam) ? (int)$documentIdParam : 0;
 $statusFilter = trim($_GET['status'] ?? '');
+$overdueFilter = ($_GET['overdue'] ?? '') === '1';
+$overdueDays = (int)get_sla_settings($conn)['outgoingDays'];
 if (!in_array($statusFilter, ['', 'For Release', 'Released'], true)) {
     $statusFilter = '';
 }
@@ -156,7 +159,10 @@ if (isset($_POST['send_client_sms'])) {
 }
 
 $documents = [];
-if ($documentIdFilter > 0) {
+if ($overdueFilter && $documentIdFilter === 0) {
+    // The dashboard's overdue tile must list only documents past their processing time.
+    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND status = 'For Release' AND date_created < (NOW() - INTERVAL ? DAY) ORDER BY date_created ASC", 'i', [$overdueDays]);
+} elseif ($documentIdFilter > 0) {
     // Quick Submit's Manage action must resolve to one exact outgoing document.
     $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND doc_id = ?", 'i', [$documentIdFilter]);
 } elseif ($search !== '' && $statusFilter !== '') {
@@ -193,6 +199,30 @@ if ($stmt !== false) {
     </div>
     <?php if ($message): ?>
         <div class="col-12"><?php echo $message; ?></div>
+    <?php endif; ?>
+    <?php if ($overdueFilter && $documentIdFilter === 0): ?>
+        <div class="col-12">
+            <div class="selected-record-banner" role="status">
+                <i class="bi bi-hourglass-split" aria-hidden="true"></i>
+                <div>
+                    <strong>Overdue outgoing documents</strong>
+                    <span>Showing <?php echo count($documents); ?> open document(s) waiting longer than <?php echo (int)$overdueDays; ?> day(s).</span>
+                </div>
+                <a class="btn btn-sm btn-outline-primary" href="outgoing">Show all outgoing documents</a>
+            </div>
+        </div>
+    <?php endif; ?>
+    <?php if ($documentIdFilter > 0): ?>
+        <div class="col-12">
+            <div class="selected-record-banner" role="status">
+                <i class="bi bi-bullseye" aria-hidden="true"></i>
+                <div>
+                    <strong>Selected record</strong>
+                    <span><?php echo $documents ? sanitize($documents[0]['subject']) . ' · ' . sanitize($documents[0]['status']) : 'This record could not be found.'; ?></span>
+                </div>
+                <a class="btn btn-sm btn-outline-primary" href="outgoing">Show all outgoing documents</a>
+            </div>
+        </div>
     <?php endif; ?>
     <div class="col-12">
         <div class="card shadow-sm">
@@ -274,15 +304,15 @@ if ($stmt !== false) {
                                         <td data-label="Actions">
                                             <div class="table-actions document-row-actions">
                                             <button type="button" class="btn btn-sm btn-outline-primary document-action-button" title="Edit document" aria-label="Edit <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?>" onclick="editDocument(<?php echo (int)$document['doc_id']; ?>, <?php echo htmlspecialchars(json_encode($document['client_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['subject'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['remarks'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
-                                                <i class="bi bi-pencil"></i> Edit
+                                                <i class="bi bi-pencil" aria-hidden="true"></i><span class="action-label">Edit</span>
                                             </button>
                                             <form method="POST" class="d-inline">
                                                 <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                                                 <input type="hidden" name="status_doc_id" value="<?php echo (int)$document['doc_id']; ?>">
                                                 <input type="hidden" name="new_status" value="<?php echo $document['status'] === 'Released' ? 'For Release' : 'Released'; ?>">
                                                 <button type="submit" name="set_outgoing_status" class="btn btn-sm document-action-button <?php echo $document['status'] === 'Released' ? 'btn-outline-secondary' : 'btn-success'; ?>" title="<?php echo $document['status'] === 'Released' ? 'Set for release' : 'Mark released'; ?>">
-                                                    <i class="bi <?php echo $document['status'] === 'Released' ? 'bi-arrow-counterclockwise' : 'bi-check2-circle'; ?> me-1" aria-hidden="true"></i>
-                                                    <?php echo $document['status'] === 'Released' ? 'Set For Release' : 'Mark Released'; ?>
+                                                    <i class="bi <?php echo $document['status'] === 'Released' ? 'bi-arrow-counterclockwise' : 'bi-check2-circle'; ?>" aria-hidden="true"></i>
+                                                    <span class="action-label"><?php echo $document['status'] === 'Released' ? 'Set For Release' : 'Mark Released'; ?></span>
                                                 </button>
                                             </form>
                                             <?php if ($document['status'] === 'For Release' && is_valid_contact_number(trim((string)($document['client_phone'] ?? '')))): ?>
@@ -296,7 +326,7 @@ if ($stmt !== false) {
                                                     data-document-phone="<?php echo sanitize($document['client_phone'] ?? ''); ?>"
                                                     data-document-status="<?php echo sanitize($document['status']); ?>"
                                                 >
-                                                    <i class="bi bi-chat-dots me-1" aria-hidden="true"></i>Send SMS
+                                                    <i class="bi bi-chat-dots" aria-hidden="true"></i><span class="action-label">Send SMS</span>
                                                 </button>
                                             <?php endif; ?>
                                             </div>
@@ -326,7 +356,7 @@ if ($stmt !== false) {
                 <div class="qr-code-frame">
                     <canvas id="documentTrackingQrCanvas" aria-label="QR code for tracking this document"></canvas>
                 </div>
-                <p class="small text-break mt-3 mb-2"><a id="documentTrackingQrLink" href="#" target="_blank" rel="noopener noreferrer"></a></p>
+                <a id="documentTrackingQrLink" href="#" class="btn btn-outline-primary btn-sm tracking-link-button mt-3" target="_blank" rel="noopener noreferrer"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>Open tracking page</a>
                 <p id="documentTrackingQrError" class="small text-danger mt-3 mb-0" role="alert" hidden></p>
             </div>
             <div class="modal-footer">
@@ -460,7 +490,7 @@ function showDocumentTrackingQr(trackerUrl, reference) {
     const download = document.getElementById('downloadDocumentTrackingQr');
     document.getElementById('documentTrackingQrReference').textContent = reference;
     link.href = trackerUrl;
-    link.textContent = trackerUrl;
+    link.title = 'Open the tracking page in a new tab';
     error.hidden = true;
     download.classList.add('disabled');
     download.setAttribute('aria-disabled', 'true');

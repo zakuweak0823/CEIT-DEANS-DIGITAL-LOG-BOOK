@@ -43,7 +43,7 @@ $slaOverdueBadgeCount = 0;
 if ($adminName && isset($conn) && function_exists('safe_query') && !$isLoginPage) {
     require_once __DIR__ . '/sla_support.php';
     $slaHeaderOverdue = get_sla_overdue($conn, get_sla_settings($conn), 1);
-    $slaOverdueBadgeCount = (int)$slaHeaderOverdue['documentCount'] + (int)$slaHeaderOverdue['loanCount'];
+    $slaOverdueBadgeCount = (int)$slaHeaderOverdue['documentCount'];
 }
 $slaOverdueBadge = $slaOverdueBadgeCount > 0
     ? '<span class="sidebar-overdue-badge" title="Overdue records">' . ($slaOverdueBadgeCount > 99 ? '99+' : $slaOverdueBadgeCount) . '</span>'

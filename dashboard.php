@@ -56,8 +56,8 @@ $smsFailed = safe_scalar($conn, "SELECT COUNT(*) FROM sms_logs WHERE LOWER(statu
 $totalDocuments = safe_scalar($conn, "SELECT COUNT(*) FROM documents");
 
 $slaSettings = get_sla_settings($conn);
-$slaOverdue = get_sla_overdue($conn, $slaSettings, 6);
-$overdueTotal = $slaOverdue['documentCount'] + $slaOverdue['loanCount'];
+$slaOverdue = get_sla_overdue($conn, $slaSettings, 300);
+$overdueTotal = (int)$slaOverdue['documentCount'];
 $overdueIncoming = (int)safe_scalar($conn, "SELECT COUNT(*) FROM documents WHERE type = 'Incoming' AND status = 'Pending' AND date_created < (NOW() - INTERVAL ? DAY)", 'i', [$slaSettings['incomingDays']]);
 $overdueOutgoing = (int)safe_scalar($conn, "SELECT COUNT(*) FROM documents WHERE type = 'Outgoing' AND status = 'For Release' AND date_created < (NOW() - INTERVAL ? DAY)", 'i', [$slaSettings['outgoingDays']]);
 $overdueRows = [];
@@ -71,21 +71,15 @@ foreach ($slaOverdue['documents'] as $doc) {
         'status' => (string)$doc['status'],
         'open' => (int)$doc['days_open'],
         'late' => (int)$doc['days_open'] - (int)($isIncoming ? $slaSettings['incomingDays'] : $slaSettings['outgoingDays']),
-        'href' => $isIncoming ? 'incoming?status=Pending' : 'outgoing?status=For%20Release',
-    ];
-}
-foreach ($slaOverdue['loans'] as $loan) {
-    $overdueRows[] = [
-        'subject' => $loan['item_name'],
-        'type' => 'Borrowed',
-        'person' => (string)$loan['borrower'],
-        'status' => 'Not Returned',
-        'open' => (int)$loan['days_out'],
-        'late' => (int)$loan['days_out'] - (int)$slaSettings['loanDays'],
-        'href' => 'borrowed?status=Unreturned',
+        'href' => ($isIncoming ? 'incoming' : 'outgoing') . '?document_id=' . (int)$doc['doc_id'],
     ];
 }
 usort($overdueRows, static function ($a, $b) { return $b['late'] <=> $a['late']; });
+// Full overdue lists for the pop-out windows; the dashboard table itself shows the top six.
+$overdueByType = ['Incoming' => [], 'Outgoing' => []];
+foreach ($overdueRows as $overdueRow) {
+    $overdueByType[$overdueRow['type']][] = $overdueRow;
+}
 $overdueRows = array_slice($overdueRows, 0, 6);
 $openDocuments = (int)$pendingIncoming + (int)$forReleaseCount;
 $slaCompliance = $openDocuments > 0 ? max(0, (int)round((($openDocuments - $slaOverdue['documentCount']) / $openDocuments) * 100)) : 100;
@@ -231,12 +225,13 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
         </div>
         <?php if ($slaSettings['enabled']): ?>
             <div class="dashboard-sla-summary">
-                <?php foreach ([['Incoming', $overdueIncoming, (int)$slaSettings['incomingDays']], ['Outgoing', $overdueOutgoing, (int)$slaSettings['outgoingDays']], ['Borrowed items', (int)$slaOverdue['loanCount'], (int)$slaSettings['loanDays']]] as $limitTile): ?>
-                    <div class="dashboard-sla-stat <?php echo $limitTile[1] > 0 ? 'is-alert' : 'is-ok'; ?>">
+                <?php foreach ([['Incoming', $overdueIncoming, (int)$slaSettings['incomingDays'], 'incoming?overdue=1'], ['Outgoing', $overdueOutgoing, (int)$slaSettings['outgoingDays'], 'outgoing?overdue=1']] as $limitTile): ?>
+                    <?php $tileTag = $limitTile[1] > 0 ? 'button' : 'div'; ?>
+                    <<?php echo $tileTag; ?> class="dashboard-sla-stat <?php echo $limitTile[1] > 0 ? 'is-alert dashboard-sla-link' : 'is-ok'; ?>"<?php echo $limitTile[1] > 0 ? ' type="button" data-bs-toggle="modal" data-bs-target="#overdueModal' . sanitize($limitTile[0]) . '" aria-label="View the ' . (int)$limitTile[1] . ' overdue ' . strtolower(sanitize($limitTile[0])) . ' documents"' : ''; ?>>
                         <span><?php echo sanitize($limitTile[0]); ?></span>
                         <strong><?php echo number_format($limitTile[1]); ?></strong>
                         <em>overdue after <?php echo sanitize($plural($limitTile[2], 'day')); ?></em>
-                    </div>
+                    </<?php echo $tileTag; ?>>
                 <?php endforeach; ?>
                 <div class="dashboard-sla-stat">
                     <span>Open documents on time</span>
@@ -258,7 +253,7 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
                                     <td data-label="Person"><?php echo sanitize($row['person'] !== '' ? $row['person'] : '-'); ?></td>
                                     <td data-label="Status"><span class="badge <?php echo admin_status_badge_class($row['status']); ?>"><?php echo sanitize($row['status']); ?></span></td>
                                     <td data-label="Overdue by"><span class="dashboard-overdue-days"><?php echo sanitize($plural(max(1, $row['late']), 'day')); ?></span><small class="d-block text-muted"><?php echo sanitize($plural($row['open'], 'day')); ?> open</small></td>
-                                    <td data-label="Actions"><a class="btn btn-sm btn-outline-secondary" href="<?php echo sanitize($row['href']); ?>">Review</a></td>
+                                    <td data-label="Actions"><a class="btn btn-sm btn-outline-secondary" href="<?php echo sanitize($row['href']); ?>" aria-label="Review <?php echo sanitize($row['subject']); ?>">Review</a></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -270,6 +265,44 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
             <?php endif; ?>
         <?php endif; ?>
     </section>
+
+    <?php foreach (['Incoming' => $overdueIncoming, 'Outgoing' => $overdueOutgoing] as $modalType => $modalCount): ?>
+        <?php if ($modalCount > 0): ?>
+            <div class="modal fade overdue-modal" id="overdueModal<?php echo $modalType; ?>" tabindex="-1" aria-labelledby="overdueModal<?php echo $modalType; ?>Title" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <div>
+                                <h5 class="modal-title" id="overdueModal<?php echo $modalType; ?>Title">Overdue <?php echo strtolower($modalType); ?> documents</h5>
+                                <p class="overdue-modal-sub"><?php echo number_format($modalCount); ?> past the <?php echo sanitize($plural((int)$slaSettings[strtolower($modalType) . 'Days'], 'day')); ?> limit, most overdue first</p>
+                            </div>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body p-0">
+                            <ul class="overdue-modal-list">
+                                <?php foreach ($overdueByType[$modalType] as $row): ?>
+                                    <li>
+                                        <div class="overdue-modal-text">
+                                            <strong class="cell-clamp"><?php echo sanitize($row['subject']); ?></strong>
+                                            <span><?php echo sanitize($row['person'] !== '' ? $row['person'] : '-'); ?></span>
+                                        </div>
+                                        <div class="overdue-modal-meta">
+                                            <span class="dashboard-overdue-days"><?php echo sanitize($plural(max(1, $row['late']), 'day')); ?> overdue</span>
+                                            <a class="btn btn-sm btn-outline-secondary" href="<?php echo sanitize($row['href']); ?>" aria-label="Review <?php echo sanitize($row['subject']); ?>">Review</a>
+                                        </div>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
+                        </div>
+                        <div class="modal-footer">
+                            <a class="btn btn-sm btn-outline-secondary" href="<?php echo $modalType === 'Incoming' ? 'incoming' : 'outgoing'; ?>?overdue=1">Open full list</a>
+                            <button type="button" class="btn btn-sm btn-primary" data-bs-dismiss="modal">Close</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
+    <?php endforeach; ?>
 
     <section class="dashboard-reporting" aria-labelledby="dashboardReportingTitle">
         <div class="dashboard-section-heading">
@@ -286,11 +319,11 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
                 <div class="dashboard-chart-container"><canvas id="redesignMonthlyChart" role="img" aria-label="Chart comparing incoming and outgoing document counts by month"></canvas></div>
             </article>
             <article class="dashboard-panel dashboard-chart-panel">
-                <div class="dashboard-panel-heading"><h3>Document processing time</h3><span>Days Document has been waiting</span></div>
+                <div class="dashboard-panel-heading"><h3>Document processing time<button type="button" class="chart-info-button" data-chart-info="<strong>Bars show open documents</strong> (Pending incoming and For Release outgoing), grouped by how many days they have been waiting. Documents waiting over 7 days need attention first." aria-label="About this chart"><i class="bi bi-info-circle" aria-hidden="true"></i></button></h3><span>Days Document has been waiting</span></div>
                 <div class="dashboard-chart-container"><canvas id="redesignAgingChart" role="img" aria-label="Chart showing how many days documents have been waiting for action"></canvas></div>
             </article>
             <article class="dashboard-panel dashboard-chart-panel">
-                <div class="dashboard-panel-heading"><h3>SMS overview</h3><span>Delivery status of all messages</span></div>
+                <div class="dashboard-panel-heading"><h3>SMS overview<button type="button" class="chart-info-button" data-chart-info="<strong>Delivered:</strong> confirmed received on the recipient's phone.<br><strong>Pending:</strong> awaiting confirmation.<br><strong>Failed:</strong> not delivered. Follow up with the recipient." aria-label="What the SMS statuses mean"><i class="bi bi-info-circle" aria-hidden="true"></i></button></h3><span>Delivery status of all messages</span></div>
                 <div class="dashboard-chart-container"><canvas id="redesignSmsChart" role="img" aria-label="Chart showing SMS messages by delivery status"></canvas></div>
             </article>
         </div>
@@ -388,6 +421,16 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.chart-info-button').forEach(function (button) {
+        new bootstrap.Popover(button, {
+            html: true,
+            trigger: 'focus hover',
+            placement: 'bottom',
+            container: 'body',
+            customClass: 'chart-info-popover',
+            content: button.getAttribute('data-chart-info')
+        });
+    });
     const quickActionModal = document.getElementById('quickActionModal');
     const quickActionModalDialog = quickActionModal.querySelector('.quick-action-modal-dialog');
     const quickActionFrame = document.getElementById('quickActionFrame');

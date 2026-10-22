@@ -112,7 +112,7 @@ mysqli_stmt_close($stmt);
                                                 <?php // Route by the record's current type; destination pages filter by this exact ID. ?>
                                                 <?php $managePage = $document['type'] === 'Outgoing' ? 'outgoing' : 'incoming'; ?>
                                                 <a class="btn btn-sm btn-outline-primary document-action-button" href="<?php echo $managePage; ?>?document_id=<?php echo (int)$document['doc_id']; ?>" aria-label="Manage Quick Submit record <?php echo (int)$document['doc_id']; ?>" title="Open in <?php echo $managePage === 'outgoing' ? 'Outgoing' : 'Incoming'; ?> Documents">
-                                                    <i class="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>Manage
+                                                    <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span class="action-label">Manage</span>
                                                 </a>
                                             </div>
                                         </td>
