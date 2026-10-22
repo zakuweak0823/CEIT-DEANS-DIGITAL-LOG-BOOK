@@ -79,7 +79,7 @@ if (isset($_POST['issue_tracking_qr'])) {
                 mysqli_stmt_close($stmt);
             }
             $conn->commit();
-            $message = show_alert('The office-issued document tracking QR is ready in the table.', 'success');
+            $message = show_alert('The document tracking QR code is ready in the table.', 'success');
         } catch (DomainException $error) {
             $conn->rollback();
             $message = show_alert($error->getMessage(), 'danger');
@@ -289,60 +289,59 @@ if ($stmt !== false) {
                     <table class="table align-middle mb-0 incoming-documents-table">
                         <thead class="table-light">
                             <tr>
-                                <th>Date</th>
-                                <th>Submitted By</th>
-                                <th>Reference</th>
-                                <th>Subject</th>
-                                <th>Recipient</th>
-                                <th>Contact Number</th>
-                                <th>Status</th>
-                                <th>Priority</th>
-                                <th>Actions</th>
+                                <th scope="col">Date</th>
+                                <th scope="col">Submitted by</th>
+                                <th scope="col">Reference</th>
+                                <th scope="col">Tracking QR</th>
+                                <th scope="col">Subject</th>
+                                <th scope="col">Recipient</th>
+                                <th scope="col">Contact number</th>
+                                <th scope="col">Status</th>
+                                <th scope="col">Priority</th>
+                                <th scope="col">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php if (count($documents) === 0): ?>
-                                <tr><td colspan="9" class="text-center text-muted">No incoming documents found.</td></tr>
+                                <tr><td colspan="10" class="text-center text-muted">No incoming documents found.</td></tr>
                             <?php else: ?>
                                 <?php foreach ($documents as $document): ?>
                                     <tr>
-                                        <td><?php echo sanitize(date('M j, Y', strtotime($document['date_created']))); ?><div class="small text-muted"><?php echo sanitize(date('g:i A', strtotime($document['date_created']))); ?></div></td>
-                                        <td>
+                                        <td data-label="Date"><?php echo sanitize(date('M j, Y', strtotime($document['date_created']))); ?><div class="small text-muted"><?php echo sanitize(date('g:i A', strtotime($document['date_created']))); ?></div></td>
+                                        <td data-label="Submitted by">
                                             <div class="table-cell-badges">
                                                 <span class="badge text-bg-light border"><?php echo sanitize($document['submitter_type']); ?></span>
                                             </div>
                                             <div class="mt-1 fw-semibold"><?php echo sanitize(trim((string)($document['submitter_name'] ?? '')) !== '' ? $document['submitter_name'] : 'Name not recorded'); ?></div>
                                         </td>
-                                        <td>
-                                            <code><?php echo sanitize(document_tracking_reference($document['doc_id'])); ?></code>
-                                            <div class="mt-2">
-                                                <?php if (!$documentTrackingSettings['enabled']): ?>
-                                                    <span class="small text-muted">Tracking is off</span>
-                                                <?php elseif (!empty($document['tracking_token'])): ?>
-                                                    <?php $documentTrackerUrl = $documentTrackingSettings['baseUrl'] . '?token=' . rawurlencode($document['tracking_token']); ?>
-                                                    <button type="button" class="btn btn-sm btn-outline-success" onclick="showDocumentTrackingQr(<?php echo htmlspecialchars(json_encode($documentTrackerUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode(document_tracking_reference($document['doc_id']), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
-                                                        <i class="bi bi-qr-code me-1" aria-hidden="true"></i>Show QR
+                                        <td data-label="Reference"><code><?php echo sanitize(document_tracking_reference($document['doc_id'])); ?></code></td>
+                                        <td data-label="Tracking QR">
+                                            <?php if (!$documentTrackingSettings['enabled']): ?>
+                                                <span class="small text-muted">QR tracking is disabled</span>
+                                            <?php elseif (!empty($document['tracking_token'])): ?>
+                                                <?php $documentTrackerUrl = $documentTrackingSettings['baseUrl'] . '?token=' . rawurlencode($document['tracking_token']); ?>
+                                                <button type="button" class="btn btn-sm btn-outline-success" aria-label="View tracking QR code for <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?>" onclick="showDocumentTrackingQr(<?php echo htmlspecialchars(json_encode($documentTrackerUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode(document_tracking_reference($document['doc_id']), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                                    <i class="bi bi-qr-code me-1" aria-hidden="true"></i>View QR code
+                                                </button>
+                                            <?php else: ?>
+                                                <form method="POST" class="m-0">
+                                                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                                                    <input type="hidden" name="tracking_doc_id" value="<?php echo (int)$document['doc_id']; ?>">
+                                                    <button type="submit" name="issue_tracking_qr" value="1" class="btn btn-sm btn-outline-success">
+                                                        <i class="bi bi-qr-code me-1" aria-hidden="true"></i>Create QR code
                                                     </button>
-                                                <?php else: ?>
-                                                    <form method="POST" class="d-inline">
-                                                        <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
-                                                        <input type="hidden" name="tracking_doc_id" value="<?php echo (int)$document['doc_id']; ?>">
-                                                        <button type="submit" name="issue_tracking_qr" value="1" class="btn btn-sm btn-outline-success">
-                                                            <i class="bi bi-qr-code me-1" aria-hidden="true"></i>Issue QR
-                                                        </button>
-                                                    </form>
-                                                <?php endif; ?>
-                                            </div>
+                                                </form>
+                                            <?php endif; ?>
                                         </td>
-                                        <td><?php echo sanitize($document['subject']); ?></td>
-                                        <td><?php echo sanitize(trim((string)($document['recipient'] ?? '')) !== '' ? $document['recipient'] : 'Not provided'); ?></td>
-                                        <td><?php echo sanitize($document['client_phone'] ?? 'Not provided'); ?></td>
-                                        <td>
+                                        <td data-label="Subject"><?php echo sanitize($document['subject']); ?></td>
+                                        <td data-label="Recipient"><?php echo sanitize(trim((string)($document['recipient'] ?? '')) !== '' ? $document['recipient'] : 'Not provided'); ?></td>
+                                        <td data-label="Contact number"><?php echo sanitize($document['client_phone'] ?? 'Not provided'); ?></td>
+                                        <td data-label="Status">
                                             <span class="badge <?php echo admin_status_badge_class($document['status']); ?>">
                                                 <?php echo sanitize($document['status']); ?>
                                             </span>
                                         </td>
-                                        <td>
+                                        <td data-label="Priority">
                                             <?php if ($document['submitter_type'] === 'Faculty'): ?>
                                                 <form method="POST" class="document-priority-control">
                                                     <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
@@ -355,7 +354,7 @@ if ($stmt !== false) {
                                                 <span class="badge rounded-pill text-bg-light border">Standard</span>
                                             <?php endif; ?>
                                         </td>
-                                        <td>
+                                        <td data-label="Actions">
                                             <div class="table-actions document-row-actions">
                                             <button type="button" class="btn btn-sm btn-outline-primary document-action-button" title="Edit document" aria-label="Edit <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?>" onclick="editDocument(<?php echo (int)$document['doc_id']; ?>, <?php echo htmlspecialchars(json_encode($document['sender'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['submitter_name'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['client_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['subject'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['remarks'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['submitter_type'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
                                                 <i class="bi bi-pencil"></i> Edit

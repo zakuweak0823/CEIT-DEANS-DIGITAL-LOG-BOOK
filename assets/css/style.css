@@ -1111,7 +1111,7 @@ body {
 }
 
 .admin-content .table-responsive.batch-history-table > .table {
-    min-width: 70rem;
+    min-width: 78rem;
 }
 
 .admin-content .table-responsive.batch-history-table > .table th:last-child,
@@ -8560,7 +8560,7 @@ body.admin-theme-glass.admin-compact .admin-quick-access-count {
     }
 
     .admin-body .admin-content .batch-history-table > .table {
-        min-width: 70rem;
+        min-width: 78rem;
     }
 }
 
@@ -8614,6 +8614,37 @@ body.admin-theme-glass.admin-compact .admin-quick-access-count {
 .admin-body .admin-content .outgoing-documents-table,
 .admin-body .admin-content .quick-submit-table {
     width: 100%;
+}
+
+.admin-body .admin-content .table-responsive > .incoming-documents-table,
+.admin-body .admin-content .table-responsive > .outgoing-documents-table {
+    min-width: 86rem;
+    table-layout: auto;
+}
+
+.admin-body .admin-content .incoming-documents-table th:nth-child(4),
+.admin-body .admin-content .incoming-documents-table td[data-label="Tracking QR"],
+.admin-body .admin-content .outgoing-documents-table th:nth-child(3),
+.admin-body .admin-content .outgoing-documents-table td[data-label="Tracking QR"] {
+    min-width: 10rem;
+    text-align: center;
+}
+
+.admin-body .admin-content .incoming-documents-table td[data-label="Date"],
+.admin-body .admin-content .incoming-documents-table td[data-label="Reference"],
+.admin-body .admin-content .incoming-documents-table td[data-label="Status"],
+.admin-body .admin-content .incoming-documents-table td[data-label="Priority"],
+.admin-body .admin-content .outgoing-documents-table td[data-label="Date"],
+.admin-body .admin-content .outgoing-documents-table td[data-label="Reference"],
+.admin-body .admin-content .outgoing-documents-table td[data-label="Status"],
+.admin-body .admin-content .outgoing-documents-table td[data-label="Priority"] {
+    text-align: center;
+}
+
+.admin-body .admin-content .incoming-documents-table td[data-label="Actions"],
+.admin-body .admin-content .outgoing-documents-table td[data-label="Actions"] {
+    min-width: 15rem;
+    text-align: center;
 }
 
 .admin-body .admin-content .document-row-actions {

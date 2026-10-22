@@ -249,7 +249,7 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
             <?php else: ?>
                 <div class="table-responsive">
                     <table class="table align-middle mb-0 dashboard-activity-table admin-mobile-card-table">
-                        <thead><tr><th scope="col">Record</th><th scope="col">Type</th><th scope="col">Person</th><th scope="col">Status</th><th scope="col">Overdue By</th><th scope="col"><span class="visually-hidden">Action</span></th></tr></thead>
+                        <thead><tr><th scope="col">Record</th><th scope="col">Type</th><th scope="col">Person</th><th scope="col">Status</th><th scope="col">Overdue by</th><th scope="col">Actions</th></tr></thead>
                         <tbody>
                             <?php foreach ($overdueRows as $row): ?>
                                 <tr>
@@ -257,8 +257,8 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
                                     <td data-label="Type"><span class="badge <?php echo $row['type'] === 'Incoming' ? 'dashboard-direction-incoming' : ($row['type'] === 'Outgoing' ? 'dashboard-direction-outgoing' : 'admin-status-neutral'); ?>"><?php echo sanitize($row['type']); ?></span></td>
                                     <td data-label="Person"><?php echo sanitize($row['person'] !== '' ? $row['person'] : '-'); ?></td>
                                     <td data-label="Status"><span class="badge <?php echo admin_status_badge_class($row['status']); ?>"><?php echo sanitize($row['status']); ?></span></td>
-                                    <td data-label="Overdue By"><span class="dashboard-overdue-days"><?php echo sanitize($plural(max(1, $row['late']), 'day')); ?></span><small class="d-block text-muted"><?php echo sanitize($plural($row['open'], 'day')); ?> open</small></td>
-                                    <td data-label="Action"><a class="btn btn-sm btn-outline-secondary" href="<?php echo sanitize($row['href']); ?>">Review</a></td>
+                                    <td data-label="Overdue by"><span class="dashboard-overdue-days"><?php echo sanitize($plural(max(1, $row['late']), 'day')); ?></span><small class="d-block text-muted"><?php echo sanitize($plural($row['open'], 'day')); ?> open</small></td>
+                                    <td data-label="Actions"><a class="btn btn-sm btn-outline-secondary" href="<?php echo sanitize($row['href']); ?>">Review</a></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -303,7 +303,7 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
         </div>
         <div class="table-responsive">
             <table class="table align-middle mb-0 dashboard-activity-table admin-mobile-card-table">
-                <thead><tr><th scope="col">Date</th><th scope="col">Direction</th><th scope="col">Subject</th><th scope="col">Submitter / recipient</th><th scope="col">Status</th><th scope="col"><span class="visually-hidden">Action</span></th></tr></thead>
+                <thead><tr><th scope="col">Date</th><th scope="col">Direction</th><th scope="col">Subject</th><th scope="col">Submitter / recipient</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
                 <tbody>
                     <?php if (empty($recentDocuments)): ?>
                         <tr><td colspan="6" class="text-center text-muted py-4"><i class="bi bi-inbox d-block fs-4 mb-1" aria-hidden="true"></i>No documents have been recorded yet.</td></tr>
@@ -320,7 +320,7 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
                                 <td data-label="Subject"><span class="dashboard-activity-subject"><?php echo sanitize($doc['subject']); ?></span></td>
                                 <td data-label="<?php echo $doc['type'] === 'Incoming' ? 'Submitter' : 'Recipient'; ?>"><?php echo sanitize($documentParty !== '' ? $documentParty : '-'); ?></td>
                                 <td data-label="Status"><span class="badge <?php echo admin_status_badge_class($documentStatus); ?>"><?php echo sanitize($documentStatus); ?></span></td>
-                                <td data-label="Action"><a class="btn btn-sm dashboard-record-view" href="records?search=<?php echo rawurlencode($doc['subject']); ?>" aria-label="View record for <?php echo sanitize($doc['subject']); ?>"><i class="bi bi-eye" aria-hidden="true"></i></a></td>
+                                <td data-label="Actions"><a class="btn btn-sm dashboard-record-view" href="records?search=<?php echo rawurlencode($doc['subject']); ?>" aria-label="View record for <?php echo sanitize($doc['subject']); ?>"><i class="bi bi-eye" aria-hidden="true"></i></a></td>
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>

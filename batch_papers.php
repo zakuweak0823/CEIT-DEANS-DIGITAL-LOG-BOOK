@@ -749,13 +749,13 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                 </div>
                 <!-- Keep the desktop history table separate from the narrow-screen card list below. -->
                 <div class="table-responsive d-none d-xl-block batch-history-table">
-                    <table class="table table-hover align-middle mb-0">
+                    <table class="table table-hover align-middle mb-0 batch-history-data-table">
                         <thead class="table-light">
-                            <tr><th>Date</th><th>Reference</th><th>Document Name</th><th>Submitted By / Recipient</th><th>Documents</th><th>Status</th><th>Priority</th><th>Actions</th></tr>
+                            <tr><th scope="col">Date</th><th scope="col">Reference</th><th scope="col">Document name</th><th scope="col">Submitted by / recipient</th><th scope="col">Documents</th><th scope="col">Status</th><th scope="col">Priority</th><th scope="col">Tracking QR</th><th scope="col">Actions</th></tr>
                         </thead>
                         <tbody>
                             <?php if (!$batches): ?>
-                                <tr><td colspan="8" class="text-center text-muted py-4">No bulk documents found.</td></tr>
+                                <tr><td colspan="9" class="text-center text-muted py-4">No bulk documents found.</td></tr>
                             <?php else: ?>
                                 <?php foreach ($batches as $batch): ?>
                                     <tr>
@@ -788,6 +788,15 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                                     <i class="bi bi-star<?php echo (int)$batch['is_priority'] === 1 ? '-fill' : ''; ?> me-1" aria-hidden="true"></i><?php echo (int)$batch['is_priority'] === 1 ? 'Priority' : 'Standard'; ?>
                                                 </button>
                                             </form>
+                                        </td>
+                                        <td class="text-center">
+                                            <?php if (!empty($batch['tracking_token'])): ?>
+                                                <button class="btn btn-sm btn-outline-secondary" type="button" aria-label="View tracking QR code for <?php echo sanitize($batch['batch_code']); ?>" title="View tracking QR code" onclick="showBatchQr(<?php echo htmlspecialchars(json_encode($batch['tracking_token'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($batch['batch_code'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                                    <i class="bi bi-qr-code me-1" aria-hidden="true"></i>View QR code
+                                                </button>
+                                            <?php else: ?>
+                                                <span class="small text-muted">Not issued</span>
+                                            <?php endif; ?>
                                         </td>
                                         <td>
                                             <div class="batch-row-actions">
@@ -839,11 +848,6 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                                 <button class="btn btn-sm btn-outline-secondary batch-action-button" type="button" title="View documents" aria-label="View documents in <?php echo sanitize($batch['batch_code']); ?>" data-bs-toggle="collapse" data-bs-target="#papers<?php echo (int)$batch['batch_id']; ?>" aria-expanded="false" aria-controls="papers<?php echo (int)$batch['batch_id']; ?>">
                                                     <i class="bi bi-eye" aria-hidden="true"></i>
                                                 </button>
-                                                <?php if (!empty($batch['tracking_token'])): ?>
-                                                    <button class="btn btn-sm btn-outline-secondary batch-action-button" type="button" title="Show tracking QR" aria-label="Show tracking QR for <?php echo sanitize($batch['batch_code']); ?>" onclick="showBatchQr(<?php echo htmlspecialchars(json_encode($batch['tracking_token'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($batch['batch_code'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
-                                                        <i class="bi bi-qr-code" aria-hidden="true"></i>
-                                                    </button>
-                                                <?php endif; ?>
                                                 <?php if ($batch['received_at'] === null): ?>
                                                     <form method="POST" class="m-0">
                                                         <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
@@ -858,7 +862,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                         </td>
                                     </tr>
                                     <tr class="collapse" id="papers<?php echo (int)$batch['batch_id']; ?>">
-                                        <td colspan="8" class="bg-light">
+                                        <td colspan="9" class="bg-light">
                                             <div class="py-2">
                                                 <?php if (trim((string)$batch['remarks']) !== ''): ?>
                                                     <p class="small mb-2">                                                    <strong>Remarks:</strong> <?php echo nl2br(sanitize($batch['remarks'])); ?></p>
@@ -931,6 +935,16 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                     <dl class="row small g-2 mt-2 mb-3">
                                         <dt class="col-4 text-muted">Document Name</dt>
                                         <dd class="col-8 mb-0 text-break"><?php echo sanitize($batch['batch_type']); ?></dd>
+                                        <dt class="col-4 text-muted">Tracking QR</dt>
+                                        <dd class="col-8 mb-0">
+                                            <?php if (!empty($batch['tracking_token'])): ?>
+                                                <button class="btn btn-sm btn-outline-secondary" type="button" aria-label="View tracking QR code for <?php echo sanitize($batch['batch_code']); ?>" onclick="showBatchQr(<?php echo htmlspecialchars(json_encode($batch['tracking_token'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($batch['batch_code'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                                    <i class="bi bi-qr-code me-1" aria-hidden="true"></i>View QR code
+                                                </button>
+                                            <?php else: ?>
+                                                <span class="text-muted">Not issued</span>
+                                            <?php endif; ?>
+                                        </dd>
                                         <dt class="col-4 text-muted">From</dt>
                                         <dd class="col-8 mb-0 text-break"><?php echo sanitize($batch['sender_type']); ?></dd>
                                         <dt class="col-4 text-muted">Submitted by</dt>
@@ -999,11 +1013,6 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                         <button class="btn btn-sm btn-outline-secondary batch-action-button" type="button" title="View documents" aria-label="View documents in <?php echo sanitize($batch['batch_code']); ?>" data-bs-toggle="collapse" data-bs-target="#mobile-papers<?php echo (int)$batch['batch_id']; ?>" aria-expanded="false" aria-controls="mobile-papers<?php echo (int)$batch['batch_id']; ?>">
                                             <i class="bi bi-eye" aria-hidden="true"></i>
                                         </button>
-                                        <?php if (!empty($batch['tracking_token'])): ?>
-                                            <button class="btn btn-sm btn-outline-secondary batch-action-button" type="button" title="Show tracking QR" aria-label="Show tracking QR for <?php echo sanitize($batch['batch_code']); ?>" onclick="showBatchQr(<?php echo htmlspecialchars(json_encode($batch['tracking_token'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($batch['batch_code'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
-                                                <i class="bi bi-qr-code" aria-hidden="true"></i>
-                                            </button>
-                                        <?php endif; ?>
                                         <?php if ($batch['received_at'] === null): ?>
                                             <form method="POST" class="m-0">
                                                 <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
