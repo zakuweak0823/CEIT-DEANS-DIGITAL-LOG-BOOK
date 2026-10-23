@@ -61,7 +61,14 @@ function save_sla_settings($conn, array $settings): bool
 // Returns overdue documents (oldest first) and overdue loans for the configured thresholds.
 function get_sla_overdue($conn, array $sla, int $limit = 8): array
 {
-    $overdue = ['documents' => [], 'documentCount' => 0, 'loans' => [], 'loanCount' => 0];
+    $overdue = [
+        'documents' => [],
+        'documentCount' => 0,
+        'bulkDocuments' => [],
+        'bulkDocumentCount' => 0,
+        'loans' => [],
+        'loanCount' => 0,
+    ];
     if (empty($sla['enabled'])) {
         return $overdue;
     }
@@ -82,6 +89,33 @@ function get_sla_overdue($conn, array $sla, int $limit = 8): array
             $overdue['documents'][] = $row;
         }
         mysqli_stmt_close($stmt);
+    }
+
+    $bulkFilter = "((b.document_type = 'Incoming' AND b.status = 'Pending' AND b.batch_date < (CURDATE() - INTERVAL ? DAY))
+        OR (b.document_type = 'Outgoing' AND b.status = 'For Release' AND b.batch_date < (CURDATE() - INTERVAL ? DAY)))";
+    $bulkCount = safe_scalar($conn, "SELECT COUNT(*) FROM document_batches b WHERE $bulkFilter", 'ii', [$sla['incomingDays'], $sla['outgoingDays']]);
+    $overdue['bulkDocumentCount'] = (int)$bulkCount;
+    $overdue['documentCount'] += $overdue['bulkDocumentCount'];
+    $stmt = safe_query(
+        $conn,
+        "SELECT b.batch_id, b.batch_code, b.document_type AS type, b.status, b.batch_type AS subject,
+                b.sender, b.submitter_name, b.recipient, b.batch_date AS date_created,
+                DATEDIFF(CURDATE(), b.batch_date) AS days_open
+         FROM document_batches b
+         WHERE $bulkFilter
+         ORDER BY b.batch_date ASC, b.batch_id ASC
+         LIMIT " . (int)$limit,
+        'ii',
+        [$sla['incomingDays'], $sla['outgoingDays']]
+    );
+    if ($stmt !== false) {
+        $result = mysqli_stmt_get_result($stmt);
+        while ($row = mysqli_fetch_assoc($result)) {
+            $overdue['bulkDocuments'][] = $row;
+        }
+        mysqli_stmt_close($stmt);
+    } else {
+        error_log('Bulk submission overdue records could not be loaded.');
     }
 
     $overdue['loanCount'] = (int)safe_scalar($conn, "SELECT COUNT(*) FROM borrowed_items WHERE status <> 'Returned' AND date_borrowed < (NOW() - INTERVAL ? DAY)", 'i', [$sla['loanDays']]);

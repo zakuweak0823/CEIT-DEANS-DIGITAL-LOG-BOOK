@@ -1150,16 +1150,35 @@ body {
 
 .batch-history-table .batch-row-actions {
     flex-wrap: nowrap;
+    width: 100%;
 }
 
 .batch-card-actions {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(2.45rem, 1fr));
+    align-items: stretch;
+    gap: 0.5rem;
 }
 
 .batch-history-table .batch-row-actions > form,
 .batch-card-actions > form:not(.flex-grow-1) {
     display: inline-flex;
+    align-items: stretch;
     margin: 0;
+}
+
+.batch-history-table .batch-row-actions > form {
+    flex: 0 0 auto;
+}
+
+.batch-card-actions > form.flex-grow-1 {
+    grid-column: 1 / -1;
+    width: 100%;
+}
+
+.batch-card-actions > form:not(.flex-grow-1) {
+    display: flex;
+    width: 100%;
 }
 
 .batch-history-table .batch-row-actions .batch-action-button,
@@ -1172,6 +1191,22 @@ body {
     place-items: center;
     border-radius: 0.65rem;
     font-size: 0.92rem;
+}
+
+.batch-card-actions > .batch-action-button {
+    width: 100%;
+    min-width: 0;
+}
+
+.batch-card-actions > form:not(.flex-grow-1) > .batch-action-button {
+    width: 100%;
+    min-width: 0;
+}
+
+.batch-card-actions > form.flex-grow-1 > .btn {
+    width: 100%;
+    min-height: 2.6rem;
+    white-space: normal;
 }
 
 .batch-history-table .batch-row-actions .batch-action-button:hover,
@@ -9868,7 +9903,7 @@ body.admin-theme-civic .dashboard-page .dashboard-stat-icon-borrowed .bi {
 
 .dashboard-redesign .dashboard-sla-summary {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 0.75rem;
     margin: 1rem 0 1.1rem;
 }
@@ -10312,5 +10347,75 @@ button.dashboard-sla-stat.dashboard-sla-link { width: 100%; text-align: left; fo
 
     .admin-body .admin-content .table-responsive > .table.admin-table-has-actions > tbody > tr:hover > td:last-child {
         background-color: #e8f2eb;
+    }
+}
+
+/* Keep table actions centered and consistently sized across list pages. */
+.admin-body .admin-content .table.admin-table-has-actions > thead > tr > th:last-child,
+.admin-body .admin-content .table.admin-table-has-actions > tbody > tr > td:last-child {
+    vertical-align: middle;
+    text-align: center;
+}
+
+.admin-body .admin-content .table.admin-table-has-actions > tbody > tr > td:last-child > form {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+}
+
+.admin-body .admin-content .table.admin-table-has-actions .table-actions {
+    align-items: center;
+    justify-content: center;
+}
+
+.admin-body .admin-content .table.admin-table-has-actions .table-actions > form {
+    align-items: stretch;
+}
+
+.admin-body .admin-content .table.admin-table-has-actions .table-actions > .btn,
+.admin-body .admin-content .table.admin-table-has-actions .table-actions > form > .btn,
+.admin-body .admin-content .table.admin-table-has-actions > tbody > tr > td:last-child > form > .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.5rem;
+}
+
+@media (max-width: 1199.98px) {
+    .admin-body .admin-content .admin-mobile-card-table > tbody > tr > td[data-label="Action"] > form,
+    .admin-body .admin-content .admin-mobile-card-table > tbody > tr > td[data-label="Actions"] > form {
+        display: flex;
+        width: 100%;
+        margin: 0;
+    }
+
+    .admin-body .admin-content .admin-mobile-card-table > tbody > tr > td[data-label="Action"] > form > .btn,
+    .admin-body .admin-content .admin-mobile-card-table > tbody > tr > td[data-label="Actions"] > form > .btn {
+        width: 100%;
+        min-height: 2.6rem;
+        white-space: normal;
+    }
+
+    .admin-body .admin-content .admin-mobile-card-table .table-actions {
+        display: flex;
+        align-items: stretch;
+        justify-content: flex-start;
+    }
+
+    .admin-body .admin-content .admin-mobile-card-table .table-actions > form,
+    .admin-body .admin-content .admin-mobile-card-table .table-actions > .btn {
+        display: flex;
+        flex: 1 1 9rem;
+        min-width: 0;
+        margin: 0;
+    }
+
+    .admin-body .admin-content .admin-mobile-card-table .table-actions > form > .btn,
+    .admin-body .admin-content .admin-mobile-card-table .table-actions > .btn {
+        width: 100%;
+        min-width: 0;
+        min-height: 2.6rem;
+        white-space: normal;
     }
 }

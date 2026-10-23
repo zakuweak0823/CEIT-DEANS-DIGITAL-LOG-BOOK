@@ -68,6 +68,8 @@ $slaOverdue = get_sla_overdue($conn, $slaSettings, 300);
 $overdueTotal = (int)$slaOverdue['documentCount'];
 $overdueIncoming = (int)safe_scalar($conn, "SELECT COUNT(*) FROM documents WHERE type = 'Incoming' AND status = 'Pending' AND date_created < (NOW() - INTERVAL ? DAY)", 'i', [$slaSettings['incomingDays']]);
 $overdueOutgoing = (int)safe_scalar($conn, "SELECT COUNT(*) FROM documents WHERE type = 'Outgoing' AND status = 'For Release' AND date_created < (NOW() - INTERVAL ? DAY)", 'i', [$slaSettings['outgoingDays']]);
+$overdueBulkDocuments = (int)$slaOverdue['bulkDocumentCount'];
+$openBulkDocuments = (int)safe_scalar($conn, "SELECT COUNT(*) FROM document_batches WHERE (document_type = 'Incoming' AND status = 'Pending') OR (document_type = 'Outgoing' AND status = 'For Release')");
 $overdueRows = [];
 foreach ($slaOverdue['documents'] as $doc) {
     $isIncoming = $doc['type'] === 'Incoming';
@@ -82,9 +84,23 @@ foreach ($slaOverdue['documents'] as $doc) {
         'href' => ($isIncoming ? 'incoming' : 'outgoing') . '?document_id=' . (int)$doc['doc_id'],
     ];
 }
+foreach ($slaOverdue['bulkDocuments'] as $batch) {
+    $isIncoming = $batch['type'] === 'Incoming';
+    $limitDays = (int)($isIncoming ? $slaSettings['incomingDays'] : $slaSettings['outgoingDays']);
+    $submitter = trim((string)$batch['submitter_name']);
+    $overdueRows[] = [
+        'subject' => trim((string)$batch['subject']) . ' · ' . (string)$batch['batch_code'],
+        'type' => 'Bulk Documents',
+        'person' => $submitter !== '' ? $submitter : (string)$batch['sender'],
+        'status' => (string)$batch['status'],
+        'open' => (int)$batch['days_open'],
+        'late' => (int)$batch['days_open'] - $limitDays,
+        'href' => 'batch_papers?search=' . rawurlencode((string)$batch['batch_code']),
+    ];
+}
 usort($overdueRows, static function ($a, $b) { return $b['late'] <=> $a['late']; });
 // Full overdue lists for the pop-out windows; the dashboard table itself shows the top six.
-$overdueByType = ['Incoming' => [], 'Outgoing' => []];
+$overdueByType = ['Incoming' => [], 'Outgoing' => [], 'Bulk Documents' => []];
 foreach ($overdueRows as $overdueRow) {
     $overdueByType[$overdueRow['type']][] = $overdueRow;
 }
@@ -101,7 +117,7 @@ foreach ($overdueRows as $overdueRow) {
     }
 }
 $overdueRows = array_slice($overdueRows, 0, 6);
-$openDocuments = (int)$pendingIncoming + (int)$forReleaseCount;
+$openDocuments = (int)$pendingIncoming + (int)$forReleaseCount + $openBulkDocuments;
 $slaCompliance = $openDocuments > 0 ? max(0, (int)round((($openDocuments - $slaOverdue['documentCount']) / $openDocuments) * 100)) : 100;
 
 // Age of documents that are still open (Pending incoming, For Release outgoing).
@@ -448,12 +464,16 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
         </div>
         <?php if ($slaSettings['enabled']): ?>
             <div class="dashboard-sla-summary">
-                <?php foreach ([['Incoming', $overdueIncoming, (int)$slaSettings['incomingDays'], 'incoming?overdue=1'], ['Outgoing', $overdueOutgoing, (int)$slaSettings['outgoingDays'], 'outgoing?overdue=1']] as $limitTile): ?>
+                <?php foreach ([
+                    ['Incoming', $overdueIncoming, 'overdue after ' . $plural((int)$slaSettings['incomingDays'], 'day')],
+                    ['Outgoing', $overdueOutgoing, 'overdue after ' . $plural((int)$slaSettings['outgoingDays'], 'day')],
+                    ['Bulk Documents', $overdueBulkDocuments, 'open batches past their direction limit'],
+                ] as $limitTile): ?>
                     <?php $tileTag = $limitTile[1] > 0 ? 'button' : 'div'; ?>
-                    <<?php echo $tileTag; ?> class="dashboard-sla-stat <?php echo $limitTile[1] > 0 ? 'is-alert dashboard-sla-link' : 'is-ok'; ?>"<?php echo $limitTile[1] > 0 ? ' type="button" data-bs-toggle="modal" data-bs-target="#overdueModal' . sanitize($limitTile[0]) . '" aria-label="View the ' . (int)$limitTile[1] . ' overdue ' . strtolower(sanitize($limitTile[0])) . ' documents"' : ''; ?>>
+                    <<?php echo $tileTag; ?> class="dashboard-sla-stat <?php echo $limitTile[1] > 0 ? 'is-alert dashboard-sla-link' : 'is-ok'; ?>"<?php echo $limitTile[1] > 0 ? ' type="button" data-bs-toggle="modal" data-bs-target="#overdueModal' . sanitize(str_replace(' ', '', $limitTile[0])) . '" aria-label="View the ' . (int)$limitTile[1] . ' overdue ' . strtolower(sanitize($limitTile[0])) . '"' : ''; ?>>
                         <span><?php echo sanitize($limitTile[0]); ?></span>
                         <strong><?php echo number_format($limitTile[1]); ?></strong>
-                        <em>overdue after <?php echo sanitize($plural($limitTile[2], 'day')); ?></em>
+                        <em><?php echo sanitize($limitTile[2]); ?></em>
                     </<?php echo $tileTag; ?>>
                 <?php endforeach; ?>
                 <div class="dashboard-sla-stat">
@@ -480,7 +500,12 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
                                     <td data-label="Record"><span class="dashboard-activity-subject"><?php echo sanitize($row['subject']); ?></span></td>
                                     <td data-label="Type"><span class="badge <?php echo $row['type'] === 'Incoming' ? 'dashboard-direction-incoming' : ($row['type'] === 'Outgoing' ? 'dashboard-direction-outgoing' : 'admin-status-neutral'); ?>"><?php echo sanitize($row['type']); ?></span></td>
                                     <td data-label="Person"><?php echo sanitize($row['person'] !== '' ? $row['person'] : '-'); ?></td>
-                                    <td data-label="Status"><span class="badge <?php echo admin_status_badge_class($row['status']); ?>"><?php echo sanitize($row['status']); ?></span></td>
+                                    <td data-label="Status">
+                                        <div class="d-inline-flex flex-column align-items-center gap-1">
+                                            <span class="badge <?php echo admin_status_badge_class($row['status']); ?>"><?php echo sanitize($row['status']); ?></span>
+                                            <span class="badge text-bg-danger">Overdue</span>
+                                        </div>
+                                    </td>
                                     <td data-label="Overdue by"><span class="dashboard-overdue-days"><?php echo sanitize($plural(max(1, $row['late']), 'day')); ?></span><small class="d-block text-muted"><?php echo sanitize($plural($row['open'], 'day')); ?> open</small></td>
                                     <td data-label="Actions"><a class="btn btn-sm btn-outline-secondary" href="<?php echo sanitize($row['href']); ?>" aria-label="Review <?php echo sanitize($row['subject']); ?>">Review</a></td>
                                 </tr>
@@ -495,15 +520,16 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
         <?php endif; ?>
     </section>
 
-    <?php foreach (['Incoming' => $overdueIncoming, 'Outgoing' => $overdueOutgoing] as $modalType => $modalCount): ?>
+    <?php foreach (['Incoming' => $overdueIncoming, 'Outgoing' => $overdueOutgoing, 'Bulk Documents' => $overdueBulkDocuments] as $modalType => $modalCount): ?>
         <?php if ($modalCount > 0): ?>
-            <div class="modal fade overdue-modal" id="overdueModal<?php echo $modalType; ?>" tabindex="-1" aria-labelledby="overdueModal<?php echo $modalType; ?>Title" aria-hidden="true">
+            <?php $modalId = str_replace(' ', '', $modalType); ?>
+            <div class="modal fade overdue-modal" id="overdueModal<?php echo sanitize($modalId); ?>" tabindex="-1" aria-labelledby="overdueModal<?php echo sanitize($modalId); ?>Title" aria-hidden="true">
                 <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
                     <div class="modal-content">
                         <div class="modal-header">
                             <div>
-                                <h5 class="modal-title" id="overdueModal<?php echo $modalType; ?>Title">Overdue <?php echo strtolower($modalType); ?> documents</h5>
-                                <p class="overdue-modal-sub"><?php echo number_format($modalCount); ?> past the <?php echo sanitize($plural((int)$slaSettings[strtolower($modalType) . 'Days'], 'day')); ?> limit, most overdue first</p>
+                                <h5 class="modal-title" id="overdueModal<?php echo sanitize($modalId); ?>Title">Overdue <?php echo strtolower(sanitize($modalType)); ?></h5>
+                                <p class="overdue-modal-sub"><?php echo number_format($modalCount); ?> <?php echo $modalType === 'Bulk Documents' ? 'past the applicable incoming or outgoing time limit' : 'past the ' . sanitize($plural((int)$slaSettings[strtolower($modalType) . 'Days'], 'day')) . ' limit'; ?>, most overdue first</p>
                             </div>
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
@@ -524,7 +550,7 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
                             </ul>
                         </div>
                         <div class="modal-footer">
-                            <a class="btn btn-sm btn-outline-secondary" href="<?php echo $modalType === 'Incoming' ? 'incoming' : 'outgoing'; ?>?overdue=1">Open full list</a>
+                            <a class="btn btn-sm btn-outline-secondary" href="<?php echo $modalType === 'Incoming' ? 'incoming?overdue=1' : ($modalType === 'Outgoing' ? 'outgoing?overdue=1' : 'batch_papers?overdue=1'); ?>"><?php echo $modalType === 'Bulk Documents' ? 'Open overdue bulk documents' : 'Open full list'; ?></a>
                             <button type="button" class="btn btn-sm btn-primary" data-bs-dismiss="modal">Close</button>
                         </div>
                     </div>

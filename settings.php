@@ -455,7 +455,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
         <section class="card shadow-sm" id="sla-settings" aria-labelledby="sla-settings-title">
             <div class="card-header bg-white px-3 px-md-4 py-3">
                 <h5 class="mb-1 text-primary" id="sla-settings-title">Time limits for records</h5>
-                <p class="mb-0 small text-muted">Set how many days a record may stay open. Records that exceed a limit are flagged as overdue on the dashboard and in the sidebar.</p>
+                <p class="mb-0 small text-muted">Set how many days a record may stay open. Records that exceed a limit are flagged as overdue on the dashboard and in the sidebar. These same limits apply to bulk submissions of the matching Incoming or Outgoing type.</p>
             </div>
             <div class="card-body p-3 p-md-4">
                 <?php if ($formSettingsNotice !== '' && $formSettingsNoticeScope === 'sla'): ?>
@@ -471,12 +471,12 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                         <div class="col-12 col-md-4">
                             <label class="form-label fw-semibold" for="slaIncomingDays">Incoming documents pending (days)</label>
                             <input class="form-control" type="number" id="slaIncomingDays" name="sla_incoming_days" min="1" max="365" step="1" value="<?php echo (int)$slaSettings['incomingDays']; ?>" required>
-                            <div class="form-text">Overdue when still Pending after this many days.</div>
+                            <div class="form-text">Overdue when still Pending after this many days, including Incoming bulk submissions.</div>
                         </div>
                         <div class="col-12 col-md-4">
                             <label class="form-label fw-semibold" for="slaOutgoingDays">Outgoing documents awaiting release (days)</label>
                             <input class="form-control" type="number" id="slaOutgoingDays" name="sla_outgoing_days" min="1" max="365" step="1" value="<?php echo (int)$slaSettings['outgoingDays']; ?>" required>
-                            <div class="form-text">Overdue when still For Release after this many days.</div>
+                            <div class="form-text">Overdue when still For Release after this many days, including Outgoing bulk submissions.</div>
                         </div>
                         <div class="col-12 col-md-4">
                             <label class="form-label fw-semibold" for="slaLoanDays">Borrowed items (days)</label>
@@ -534,7 +534,21 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                                 <input class="form-check-input" type="checkbox" role="switch" id="printColumnStatus" name="print_columnStatus" value="1" <?php echo $printReportSettings['columnStatus'] ? 'checked' : ''; ?>>
                                 <label class="form-check-label" for="printColumnStatus">Status</label>
                             </div>
-                            <div class="form-text">Role and contact apply to Incoming and Outgoing reports. In All Reports they appear inside the Details text, so turning them off removes them there too. Date, names, subject and other main details always print.</div>
+                            <hr class="my-3">
+                            <p class="form-label fw-semibold mb-2">Bulk Reports columns</p>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="printBulkBatchCode" name="print_bulkBatchCode" value="1" <?php echo $printReportSettings['bulkBatchCode'] ? 'checked' : ''; ?>>
+                                <label class="form-check-label" for="printBulkBatchCode">Batch code</label>
+                            </div>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="printBulkReceivedCount" name="print_bulkReceivedCount" value="1" <?php echo $printReportSettings['bulkReceivedCount'] ? 'checked' : ''; ?>>
+                                <label class="form-check-label" for="printBulkReceivedCount">Received count and intake date</label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="printBulkPriority" name="print_bulkPriority" value="1" <?php echo $printReportSettings['bulkPriority'] ? 'checked' : ''; ?>>
+                                <label class="form-check-label" for="printBulkPriority">Priority</label>
+                            </div>
+                            <div class="form-text">Role and contact apply to Incoming and Outgoing reports. Role also appears in Bulk Reports. In All Reports they appear inside Details. Bulk column choices also apply to Excel when the matching-columns option is enabled.</div>
                         </div>
                         <div class="col-12 col-lg-4">
                             <p class="form-label fw-semibold mb-2">Footer and export</p>

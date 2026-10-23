@@ -3,10 +3,12 @@ require_once 'auth.php';
 require_once 'db.php';
 require_once 'batch_support.php';
 require_once 'mobile_form_settings.php';
+require_once 'sla_support.php';
 ensure_admin();
 
 $mobileFormLabels = get_mobile_form_labels($conn);
 $batchWorkflowSettings = get_batch_workflow_settings($conn);
+$slaSettings = get_sla_settings($conn);
 
 $setupError = false;
 try {
@@ -235,9 +237,17 @@ $paperCount = (int)($_POST['paper_count'] ?? 1);
 [$documentPagesJson, $validPages] = normalize_document_pages($_POST['document_pages'] ?? null, max(0, min($paperCount, 9999)));
 $batchRemarks = trim($_POST['remarks'] ?? '');
 $search = trim($_GET['search'] ?? '');
+$overdueOnly = ($_GET['overdue'] ?? '') === '1';
 
-$redirectToList = static function () use ($search) {
-    header('Location: batch_papers' . ($search !== '' ? '?search=' . rawurlencode($search) : ''));
+$redirectToList = static function () use ($search, $overdueOnly) {
+    $query = [];
+    if ($search !== '') {
+        $query['search'] = $search;
+    }
+    if ($overdueOnly) {
+        $query['overdue'] = '1';
+    }
+    header('Location: batch_papers' . ($query ? '?' . http_build_query($query) : ''));
     exit;
 };
 
@@ -788,20 +798,29 @@ $papersByBatch = [];
 if (!$setupError) {
     // Released batches go last; within each group priority comes first, then oldest open batches first.
     $orderSql = "ORDER BY (b.status = 'Released') ASC, b.is_priority DESC, CASE WHEN b.status <> 'Released' THEN b.batch_id END ASC, b.batch_id DESC";
+    $batchOverdueSql = !empty($slaSettings['enabled'])
+        ? "CASE WHEN ((b.document_type = 'Incoming' AND b.status = 'Pending' AND b.batch_date < (CURDATE() - INTERVAL " . (int)$slaSettings['incomingDays'] . " DAY))
+            OR (b.document_type = 'Outgoing' AND b.status = 'For Release' AND b.batch_date < (CURDATE() - INTERVAL " . (int)$slaSettings['outgoingDays'] . " DAY))) THEN 1 ELSE 0 END AS is_overdue"
+        : '0 AS is_overdue';
+    $overdueFilterSql = $overdueOnly && !empty($slaSettings['enabled'])
+        ? " AND ((b.document_type = 'Incoming' AND b.status = 'Pending' AND b.batch_date < (CURDATE() - INTERVAL " . (int)$slaSettings['incomingDays'] . " DAY))
+            OR (b.document_type = 'Outgoing' AND b.status = 'For Release' AND b.batch_date < (CURDATE() - INTERVAL " . (int)$slaSettings['outgoingDays'] . " DAY)))"
+        : '';
     if ($search !== '') {
         $term = '%' . addcslashes($search, '%_\\') . '%';
         $stmt = safe_query(
             $conn,
-            "SELECT b.*
+            "SELECT b.*, $batchOverdueSql
              FROM document_batches b
-             WHERE b.batch_code LIKE ? OR b.document_type LIKE ? OR b.batch_type LIKE ? OR b.status LIKE ? OR b.sender LIKE ? OR b.submitter_name LIKE ? OR b.recipient LIKE ? OR b.remarks LIKE ?
+            WHERE (b.batch_code LIKE ? OR b.document_type LIKE ? OR b.batch_type LIKE ? OR b.status LIKE ? OR b.sender LIKE ? OR b.submitter_name LIKE ? OR b.recipient LIKE ? OR b.remarks LIKE ?
                 OR EXISTS (SELECT 1 FROM batch_papers p WHERE p.batch_id = b.batch_id AND (p.subject LIKE ? OR p.remarks LIKE ?))
-             $orderSql",
+            ) $overdueFilterSql
+            $orderSql",
             'ssssssssss',
             array_fill(0, 10, $term)
         );
     } else {
-        $stmt = safe_query($conn, "SELECT b.* FROM document_batches b $orderSql");
+        $stmt = safe_query($conn, "SELECT b.*, $batchOverdueSql FROM document_batches b WHERE 1 = 1 $overdueFilterSql $orderSql");
     }
 
     if ($stmt !== false) {
@@ -951,8 +970,14 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
         <div class="card shadow-sm">
             <div class="card-body">
                 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-3">
-                    <h5 class="card-title text-primary mb-0">Bulk Documents History</h5>
+                    <div>
+                        <h5 class="card-title text-primary mb-0">Bulk Documents History</h5>
+                        <?php if ($overdueOnly): ?>
+                            <p class="small text-danger mb-0 mt-1">Showing open batches past their incoming or outgoing time limit. <a href="batch_papers">Clear overdue filter</a></p>
+                        <?php endif; ?>
+                    </div>
                     <form method="GET" class="d-flex gap-2">
+                        <?php if ($overdueOnly): ?><input type="hidden" name="overdue" value="1"><?php endif; ?>
                         <label class="visually-hidden" for="batchSearch">Search bulk documents</label>
                         <input class="form-control" type="search" id="batchSearch" name="search" placeholder="Search by reference or subject" value="<?php echo sanitize($search); ?>">
                         <button class="btn btn-outline-primary" type="submit" aria-label="Search"><i class="bi bi-search" aria-hidden="true"></i></button>
@@ -996,7 +1021,12 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                                 <br><small class="text-muted"><?php echo sanitize($pagesLabel); ?></small>
                                             <?php endif; ?>
                                         </td>
-                                        <td><span class="badge <?php echo admin_status_badge_class($batch['status']); ?>"><?php echo batch_text($batch['status']); ?></span></td>
+                                        <td>
+                                            <div class="d-inline-flex flex-column align-items-center gap-1">
+                                                <span class="badge <?php echo admin_status_badge_class($batch['status']); ?>"><?php echo batch_text($batch['status']); ?></span>
+                                                <?php if (!empty($batch['is_overdue'])): ?><span class="badge text-bg-danger" title="Past the applicable incoming or outgoing processing time limit">Overdue</span><?php endif; ?>
+                                            </div>
+                                        </td>
                                         <td><?php render_batch_priority_form($batch); ?></td>
                                         <td class="text-center"><?php render_batch_qr_button($batch); ?></td>
                                         <td>
@@ -1039,6 +1069,9 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                         </div>
                                         <span class="badge rounded-pill flex-shrink-0 <?php echo admin_status_badge_class($batch['status']); ?>"><?php echo batch_text($batch['status']); ?></span>
                                     </div>
+                                    <?php if (!empty($batch['is_overdue'])): ?>
+                                        <span class="badge text-bg-danger mt-2" title="Past the applicable incoming or outgoing processing time limit">Overdue</span>
+                                    <?php endif; ?>
                                     <div class="batch-priority-strip <?php echo $isPriority ? 'is-priority' : 'is-standard'; ?>">
                                         <div>
                                             <span class="small text-uppercase fw-bold">Handling</span>
