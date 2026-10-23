@@ -24,6 +24,7 @@
 ## Contents
 
 - [Overview](#overview)
+- [System flow and how it works](docs/SYSTEM-FLOW.md)
 - [Highlights](#highlights)
 - [Start here](#start-here)
 - [Quick start](#quick-start)
@@ -46,10 +47,16 @@ incoming and outgoing submissions, organize bulk papers, and keep track of
 borrowed items. The browser-based admin portal and mobile client use the same
 PHP API and MySQL database.
 
+> **New to the codebase?** Read [System Flow & How Everything Works](docs/SYSTEM-FLOW.md)
+> first. It explains the request path, authentication, every document and bulk-paper
+> lifecycle, QR tracking, the mobile API, SMS, reporting, and the workarounds behind
+> each design decision.
+
 ### Start here
 
 | Goal | Start with |
 | --- | --- |
+| Understand how the system works end to end | [System flow and how it works](docs/SYSTEM-FLOW.md) |
 | Set up the admin portal on Windows | [Windows setup guide](docs/WINDOWS-SETUP.md) |
 | Start the local/LAN server | Double-click [`start-office-server.bat`](start-office-server.bat) from the project folder inside XAMPP's `htdocs`. |
 | Move the app and records to another computer | [Transfer instructions](docs/WINDOWS-SETUP.md#move-the-application-and-database) |
@@ -572,6 +579,7 @@ another server, set `VITE_API_ENDPOINT` at build time to the complete
 │   ├── generate_dummy_data.js        # Regenerates dummy_data.sql
 │   └── promote_admin_to_super_admin.sql # Existing-install role upgrade
 ├── docs/
+│   ├── SYSTEM-FLOW.md                # End-to-end flow, workarounds, and internals
 │   ├── SECURITY.md                   # Security model and deployment checklist
 │   ├── WINDOWS-SETUP.md              # Windows setup and computer transfer
 │   └── Patch V1.00.md                # Project patch history
@@ -743,6 +751,8 @@ hosting setup:
 
 - Read the detailed [Security guide](docs/SECURITY.md) before enabling
   computer-to-computer or mobile access.
+- Read the [System flow guide](docs/SYSTEM-FLOW.md) before changing document or
+  bulk-paper status transitions, the mobile API, or the QR tracker.
 - Replace the seeded admin password immediately.
 - Use a dedicated MySQL account with a strong password; do not deploy with the
   default XAMPP `root` account.
