@@ -1,6 +1,7 @@
 <?php
 require_once 'auth.php';
 require_once 'db.php';
+require_once 'batch_support.php';
 require_once 'print_report_support.php';
 ensure_admin();
 
@@ -27,7 +28,7 @@ $docDetailsParts[] = "IF(NULLIF(recipient, '') IS NULL, NULL, CONCAT('To: ', rec
 $docDetailsSql = "CONCAT_WS(' | ', " . implode(', ', $docDetailsParts) . ')';
 
 if (isset($_GET['generate'])) {
-    $validTypes = ['All Reports', 'Incoming', 'Outgoing', 'Borrowed Items', 'SMS Logs'];
+    $validTypes = ['All Reports', 'Incoming', 'Outgoing', 'Bulk Reports', 'Borrowed Items', 'SMS Logs'];
     $fromDate = DateTime::createFromFormat('!Y-m-d', $from);
     $toDate = DateTime::createFromFormat('!Y-m-d', $to);
     if (!in_array($reportType, $validTypes, true)) {
@@ -76,10 +77,30 @@ if (isset($_GET['generate'])) {
         } elseif ($reportType === 'SMS Logs') {
             $dateField = 'date_sent';
             $stmt = safe_query($conn, "SELECT date_sent, recipient, message, status FROM sms_logs WHERE date_sent >= ? AND date_sent < DATE_ADD(?, INTERVAL 1 DAY) ORDER BY date_sent DESC", 'ss', [$from, $to]);
+        } elseif ($reportType === 'Bulk Reports') {
+            $dateField = 'batch_date';
+            try {
+                ensure_batch_storage($conn);
+                $stmt = safe_query(
+                    $conn,
+                    "SELECT b.batch_date, b.batch_code, b.batch_type, b.submitter_name, b.sender_type, b.recipient,
+                            (SELECT COUNT(*) FROM batch_papers p WHERE p.batch_id = b.batch_id) AS paper_count,
+                            b.received_paper_count, b.intake_expected_count, b.received_at, b.is_priority, b.status
+                     FROM document_batches b
+                     WHERE b.batch_date >= ? AND b.batch_date < DATE_ADD(?, INTERVAL 1 DAY)
+                     ORDER BY b.batch_date DESC, b.batch_id DESC",
+                    'ss',
+                    [$from, $to]
+                );
+            } catch (Throwable $error) {
+                error_log('Bulk report storage could not be initialized: ' . $error->getMessage());
+                $stmt = false;
+                $message = show_alert('Bulk reports could not be loaded. Check the database connection and permissions.', 'danger');
+            }
         } else {
             $stmt = safe_query($conn, "SELECT date_created, COALESCE(NULLIF(TRIM(submitter_name), ''), sender) AS sender, submitter_type, client_phone, recipient, subject, status FROM documents WHERE type = ? AND date_created >= ? AND date_created < DATE_ADD(?, INTERVAL 1 DAY) ORDER BY date_created DESC", 'sss', [$reportType, $from, $to]);
         }
-        if ($reportType !== 'All Reports') {
+        if ($reportType !== 'All Reports' && $message === '') {
             if ($stmt === false) {
                 $message = show_alert('The report could not be loaded. Please try again.', 'danger');
             } else {
@@ -119,6 +140,7 @@ function reportTitle(string $type): string
 {
     if ($type === 'Incoming') return 'Incoming Documents Report';
     if ($type === 'Outgoing') return 'Outgoing Documents Report';
+    if ($type === 'Bulk Reports') return 'Bulk Documents Report';
     if ($type === 'Borrowed Items') return 'Borrowed Items Report';
     if ($type === 'SMS Logs') return 'SMS Delivery Report';
     if ($type === 'All Reports') return 'All Reports';
@@ -126,7 +148,7 @@ function reportTitle(string $type): string
 }
 
 // Column count of the current table layout (used for full-width placeholder rows).
-$tableColumns = in_array($reportType, ['SMS Logs', 'Borrowed Items'], true) ? 4 : ($reportType === 'All Reports' ? 5 : 7);
+$tableColumns = $reportType === 'Bulk Reports' ? 10 : (in_array($reportType, ['SMS Logs', 'Borrowed Items'], true) ? 4 : ($reportType === 'All Reports' ? 5 : 7));
 
 // Printed report settings: which columns print, their widths, and which columns go to Excel.
 $reportLayout = report_column_layout($reportType);
@@ -678,7 +700,7 @@ $showPrintHeader = $reportGenerated && ($printSettings['letterhead'] || $printSe
     <?php echo $printColumnCss; ?>
     @page {
 
-        size: A4 portrait;
+        size: A4 <?php echo $reportType === 'Bulk Reports' ? 'landscape' : 'portrait'; ?>;
         margin: 0.5in 0.45in 0.55in;
     }
 }
@@ -702,6 +724,7 @@ $showPrintHeader = $reportGenerated && ($printSettings['letterhead'] || $printSe
                             <option value="All Reports" <?php echo $reportType === 'All Reports' ? 'selected' : ''; ?>>All Reports</option>
                             <option value="Incoming" <?php echo $reportType === 'Incoming' ? 'selected' : ''; ?>>Incoming Documents</option>
                             <option value="Outgoing" <?php echo $reportType === 'Outgoing' ? 'selected' : ''; ?>>Outgoing Documents</option>
+                            <option value="Bulk Reports" <?php echo $reportType === 'Bulk Reports' ? 'selected' : ''; ?>>Bulk Reports</option>
                             <option value="Borrowed Items" <?php echo $reportType === 'Borrowed Items' ? 'selected' : ''; ?>>Borrowed Items</option>
                             <option value="SMS Logs" <?php echo $reportType === 'SMS Logs' ? 'selected' : ''; ?>>SMS Logs</option>
                         </select>
@@ -857,8 +880,21 @@ $showPrintHeader = $reportGenerated && ($printSettings['letterhead'] || $printSe
                 </div>
                 <?php endif; ?>
                 <div class="table-responsive report-table-wrap">
-                    <table id="reportTable" data-no-pagination class="table table-hover align-middle mb-0 report-table <?php echo $reportType === 'All Reports' ? 'report-table--all' : ($reportType === 'SMS Logs' ? 'report-table--sms' : ($reportType === 'Borrowed Items' ? 'report-table--borrowed' : 'report-table--documents')); ?>">
-                        <?php if ($reportType === 'Borrowed Items'): ?>
+                    <table id="reportTable" data-no-pagination class="table table-hover align-middle mb-0 report-table <?php echo $reportType === 'All Reports' ? 'report-table--all' : ($reportType === 'Bulk Reports' ? 'report-table--bulk' : ($reportType === 'SMS Logs' ? 'report-table--sms' : ($reportType === 'Borrowed Items' ? 'report-table--borrowed' : 'report-table--documents'))); ?>">
+                        <?php if ($reportType === 'Bulk Reports'): ?>
+                            <colgroup>
+                                <col class="report-col-date">
+                                <col class="report-col-batch">
+                                <col class="report-col-subject">
+                                <col class="report-col-party">
+                                <col class="report-col-role">
+                                <col class="report-col-party">
+                                <col class="report-col-count">
+                                <col class="report-col-received">
+                                <col class="report-col-priority">
+                                <col class="report-col-status">
+                            </colgroup>
+                        <?php elseif ($reportType === 'Borrowed Items'): ?>
                             <colgroup>
                                 <col class="report-col-item">
                                 <col class="report-col-borrower">
@@ -893,7 +929,18 @@ $showPrintHeader = $reportGenerated && ($printSettings['letterhead'] || $printSe
                         <?php endif; ?>
                         <thead class="table-light">
                             <tr>
-                                <?php if ($reportType === 'Borrowed Items'): ?>
+                                <?php if ($reportType === 'Bulk Reports'): ?>
+                                    <th>Submission date</th>
+                                    <th>Batch code</th>
+                                    <th>Document name</th>
+                                    <th>Submitter</th>
+                                    <th>Role</th>
+                                    <th>Recipient</th>
+                                    <th>Documents</th>
+                                    <th>Received</th>
+                                    <th>Priority</th>
+                                    <th>Status</th>
+                                <?php elseif ($reportType === 'Borrowed Items'): ?>
                                     <th>Item</th>
                                     <th>Borrower</th>
                                     <th>Date borrowed</th>
@@ -928,7 +975,25 @@ $showPrintHeader = $reportGenerated && ($printSettings['letterhead'] || $printSe
                             <?php else: ?>
                                 <?php foreach ($preview as $row): ?>
                                     <tr data-status="<?php echo sanitize((string)($row['status'] ?? 'Unknown')); ?>">
-                                        <?php if ($reportType === 'Borrowed Items'): ?>
+                                        <?php if ($reportType === 'Bulk Reports'): ?>
+                                            <td class="report-date-cell" data-csv-value="<?php echo sanitize((string)$row['batch_date']); ?>"><?php echo sanitize(date('M j, Y', strtotime((string)$row['batch_date']))); ?></td>
+                                            <td class="fw-semibold"><?php echo sanitize((string)$row['batch_code']); ?></td>
+                                            <td><?php echo sanitize((string)$row['batch_type']); ?></td>
+                                            <td><?php echo sanitize((string)$row['submitter_name']); ?></td>
+                                            <td><?php echo sanitize((string)$row['sender_type']); ?></td>
+                                            <td><?php echo sanitize((string)$row['recipient']); ?></td>
+                                            <td><?php echo number_format((int)$row['paper_count']); ?></td>
+                                            <td data-csv-value="<?php echo $row['received_paper_count'] === null ? 'Not recorded' : sanitize((string)$row['received_paper_count'] . ' / ' . (string)$row['intake_expected_count']); ?>">
+                                                <?php if ($row['received_paper_count'] === null): ?>
+                                                    <span class="text-muted">Not recorded</span>
+                                                <?php else: ?>
+                                                    <?php echo number_format((int)$row['received_paper_count']); ?> / <?php echo number_format((int)$row['intake_expected_count']); ?>
+                                                    <?php if (!empty($row['received_at'])): ?><small class="d-block text-muted"><?php echo sanitize(date('M j, Y g:i A', strtotime((string)$row['received_at']))); ?></small><?php endif; ?>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td><?php echo (int)$row['is_priority'] === 1 ? 'Priority' : 'Standard'; ?></td>
+                                            <td><span class="badge <?php echo admin_status_badge_class($row['status']); ?>"><?php echo sanitize((string)$row['status']); ?></span></td>
+                                        <?php elseif ($reportType === 'Borrowed Items'): ?>
                                             <td><?php echo sanitize((string)$row['item_name']); ?></td>
                                             <td><?php echo sanitize((string)$row['borrower']); ?></td>
                                             <td data-csv-value="<?php echo sanitize((string)$row['date_borrowed']); ?>"><?php echo sanitize(date('M j, Y', strtotime((string)$row['date_borrowed']))); ?></td>

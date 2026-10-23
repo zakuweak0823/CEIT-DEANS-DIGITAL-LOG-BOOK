@@ -15,6 +15,9 @@ function print_report_settings_defaults(): array
         'columnRole' => true,          // Student / Faculty
         'columnContact' => true,       // Contact number
         'columnStatus' => false,       // Status
+        'bulkBatchCode' => true,       // Batch code in Bulk Reports
+        'bulkReceivedCount' => true,   // Intake count in Bulk Reports
+        'bulkPriority' => true,        // Priority in Bulk Reports
         'excelFollowsPrint' => true,   // Excel export uses the same column choices
     ];
 }
@@ -73,6 +76,20 @@ function save_print_report_settings($conn, array $submitted): bool
 // 'print' = relative print width, 'excel' = Excel column width.
 function report_column_layout(string $reportType): array
 {
+    if ($reportType === 'Bulk Reports') {
+        return [
+            ['key' => 'date', 'print' => 12, 'excel' => 16],
+            ['key' => 'batch', 'print' => 14, 'excel' => 20],
+            ['key' => 'subject', 'print' => 20, 'excel' => 34],
+            ['key' => 'sender', 'print' => 16, 'excel' => 24],
+            ['key' => 'role', 'print' => 9, 'excel' => 12],
+            ['key' => 'recipient', 'print' => 14, 'excel' => 24],
+            ['key' => 'count', 'print' => 8, 'excel' => 12],
+            ['key' => 'received', 'print' => 9, 'excel' => 16],
+            ['key' => 'priority', 'print' => 8, 'excel' => 12],
+            ['key' => 'status', 'print' => 10, 'excel' => 18],
+        ];
+    }
     if ($reportType === 'All Reports') {
         return [
             ['key' => 'date', 'print' => 18, 'excel' => 23],
@@ -120,6 +137,15 @@ function report_hidden_columns(array $settings): array
     }
     if (empty($settings['columnContact'])) {
         $hidden[] = 'contact';
+    }
+    if (empty($settings['bulkBatchCode'])) {
+        $hidden[] = 'batch';
+    }
+    if (empty($settings['bulkReceivedCount'])) {
+        $hidden[] = 'received';
+    }
+    if (empty($settings['bulkPriority'])) {
+        $hidden[] = 'priority';
     }
     return $hidden;
 }

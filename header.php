@@ -36,8 +36,8 @@ $currentReportType = $_GET['report_type'] ?? '';
 $sidebarActiveClass = static function (string $page) use ($currentPage): string {
     return $currentPage === $page ? ' active' : '';
 };
-$isDocumentReportActive = $currentPage === 'reports.php' && !in_array($currentReportType, ['Borrowed Items', 'SMS Logs'], true);
-$isSmsReportActive = $currentPage === 'reports.php' && $currentReportType === 'SMS Logs';
+$isDocumentReportActive = $currentPage === 'reports.php' && !in_array($currentReportType, ['Borrowed Items', 'SMS Logs', 'Bulk Reports'], true);
+$isBulkReportActive = $currentPage === 'reports.php' && $currentReportType === 'Bulk Reports';
 $pendingDocumentCount = null;
 $slaOverdueBadgeCount = 0;
 if ($adminName && isset($conn) && function_exists('safe_query') && !$isLoginPage) {
@@ -178,7 +178,7 @@ try {
             <a href="notification_settings" class="sidebar-link<?php echo $sidebarActiveClass('notification_settings.php'); ?>"<?php echo $currentPage === 'notification_settings.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots me-2"></i>Communication Settings</a>
             <div class="sidebar-section text-uppercase fw-semibold text-muted mt-4 mb-2">Reports</div>
             <a href="reports?report_type=All%20Reports&amp;generate=1" class="sidebar-link<?php echo $isDocumentReportActive ? ' active' : ''; ?>"<?php echo $isDocumentReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-file-earmark-text me-2"></i>All Reports</a>
-            <a href="reports?report_type=SMS%20Logs&amp;generate=1" class="sidebar-link<?php echo $isSmsReportActive ? ' active' : ''; ?>"<?php echo $isSmsReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-left-text me-2"></i>SMS Reports</a>
+            <a href="reports?report_type=Bulk%20Reports&amp;generate=1" class="sidebar-link<?php echo $isBulkReportActive ? ' active' : ''; ?>"<?php echo $isBulkReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-files me-2"></i>Bulk Reports</a>
         </div>
         <div class="civic-sidebar-footer">
             <span class="civic-sidebar-status"><i aria-hidden="true"></i> LOCAL WORKSPACE</span>
@@ -277,7 +277,7 @@ try {
                     <a href="sms"<?php echo $currentPage === 'sms.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots" aria-hidden="true"></i><span>SMS logs</span></a>
                     <a href="notification_settings"<?php echo $currentPage === 'notification_settings.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots" aria-hidden="true"></i><span>Communication</span></a>
                     <a href="reports?report_type=All%20Reports&amp;generate=1"<?php echo $isDocumentReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-file-earmark-bar-graph" aria-hidden="true"></i><span>All Reports</span></a>
-                    <a href="reports?report_type=SMS%20Logs&amp;generate=1"<?php echo $currentPage === 'reports.php' && $currentReportType === 'SMS Logs' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-left-text" aria-hidden="true"></i><span>SMS reports</span></a>
+                    <a href="reports?report_type=Bulk%20Reports&amp;generate=1"<?php echo $isBulkReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-files" aria-hidden="true"></i><span>Bulk Reports</span></a>
                     <a href="settings"<?php echo $currentPage === 'settings.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-gear" aria-hidden="true"></i><span>Settings</span></a>
                     <?php if ($adminRole === 'super_admin'): ?>
                         <a href="users"<?php echo $currentPage === 'users.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-people" aria-hidden="true"></i><span>Administrator accounts</span></a>
@@ -310,7 +310,7 @@ try {
                     <a href="notification_settings" class="sidebar-link<?php echo $sidebarActiveClass('notification_settings.php'); ?>"<?php echo $currentPage === 'notification_settings.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots me-2"></i>Communication Settings</a>
                     <div class="sidebar-section text-uppercase fw-semibold text-muted mt-4 mb-2">Reports</div>
                     <a href="reports?report_type=All%20Reports&amp;generate=1" class="sidebar-link<?php echo $isDocumentReportActive ? ' active' : ''; ?>"<?php echo $isDocumentReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-file-earmark-text me-2"></i>All Reports</a>
-                    <a href="reports?report_type=SMS%20Logs&amp;generate=1" class="sidebar-link<?php echo $isSmsReportActive ? ' active' : ''; ?>"<?php echo $isSmsReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-left-text me-2"></i>SMS Reports</a>
+                    <a href="reports?report_type=Bulk%20Reports&amp;generate=1" class="sidebar-link<?php echo $isBulkReportActive ? ' active' : ''; ?>"<?php echo $isBulkReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-files me-2"></i>Bulk Reports</a>
                 </div>
             </div>
         </div>
