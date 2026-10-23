@@ -1,6 +1,7 @@
 <?php
 require_once 'auth.php';
 require_once 'db.php';
+require_once 'print_report_support.php';
 ensure_admin();
 
 $reportType = isset($_GET['report_type']) && is_string($_GET['report_type']) ? $_GET['report_type'] : '';
@@ -12,6 +13,18 @@ $reportGenerated = false;
 $statusCounts = [];
 $dailyCounts = [];
 $dateField = 'date_created';
+$printSettings = get_print_report_settings($conn);
+
+// Details text for document rows in the combined report. Role and contact follow the printed report settings.
+$docDetailsParts = ["CONCAT('From: ', COALESCE(NULLIF(TRIM(submitter_name), ''), sender))"];
+if ($printSettings['columnRole']) {
+    $docDetailsParts[] = "IF(NULLIF(submitter_type, '') IS NULL, NULL, CONCAT('Role: ', submitter_type))";
+}
+if ($printSettings['columnContact']) {
+    $docDetailsParts[] = "IF(NULLIF(client_phone, '') IS NULL, NULL, CONCAT('Contact: ', client_phone))";
+}
+$docDetailsParts[] = "IF(NULLIF(recipient, '') IS NULL, NULL, CONCAT('To: ', recipient))";
+$docDetailsSql = "CONCAT_WS(' | ', " . implode(', ', $docDetailsParts) . ')';
 
 if (isset($_GET['generate'])) {
     $validTypes = ['All Reports', 'Incoming', 'Outgoing', 'Borrowed Items', 'SMS Logs'];
@@ -26,8 +39,8 @@ if (isset($_GET['generate'])) {
         if ($reportType === 'All Reports') {
             $dateField = 'report_date';
             $reportQueries = [
-                ['Incoming Documents', "SELECT date_created AS report_date, 'Incoming Documents' AS report_category, subject AS report_record, CONCAT_WS(' | ', CONCAT('From: ', sender), IF(NULLIF(recipient, '') IS NULL, NULL, CONCAT('To: ', recipient))) AS report_details, status FROM documents WHERE type = 'Incoming' AND date_created >= ? AND date_created < DATE_ADD(?, INTERVAL 1 DAY)", 'ss'],
-                ['Outgoing Documents', "SELECT date_created AS report_date, 'Outgoing Documents' AS report_category, subject AS report_record, CONCAT_WS(' | ', CONCAT('From: ', sender), IF(NULLIF(recipient, '') IS NULL, NULL, CONCAT('To: ', recipient))) AS report_details, status FROM documents WHERE type = 'Outgoing' AND date_created >= ? AND date_created < DATE_ADD(?, INTERVAL 1 DAY)", 'ss'],
+                ['Incoming Documents', "SELECT date_created AS report_date, 'Incoming Documents' AS report_category, subject AS report_record, {$docDetailsSql} AS report_details, status FROM documents WHERE type = 'Incoming' AND date_created >= ? AND date_created < DATE_ADD(?, INTERVAL 1 DAY)", 'ss'],
+                ['Outgoing Documents', "SELECT date_created AS report_date, 'Outgoing Documents' AS report_category, subject AS report_record, {$docDetailsSql} AS report_details, status FROM documents WHERE type = 'Outgoing' AND date_created >= ? AND date_created < DATE_ADD(?, INTERVAL 1 DAY)", 'ss'],
                 ['Borrowed Items', "SELECT date_borrowed AS report_date, 'Borrowed Items' AS report_category, item_name AS report_record, CONCAT('Borrower: ', borrower) AS report_details, CASE WHEN status = 'Returned' THEN 'Returned' ELSE 'Borrowed' END AS status FROM borrowed_items WHERE date_borrowed >= ? AND date_borrowed < DATE_ADD(?, INTERVAL 1 DAY)", 'ss'],
                 ['SMS Logs', "SELECT date_sent AS report_date, 'SMS Logs' AS report_category, 'SMS notification' AS report_record, CONCAT('To: ', recipient, ' | ', message) AS report_details, status FROM sms_logs WHERE date_sent >= ? AND date_sent < DATE_ADD(?, INTERVAL 1 DAY)", 'ss'],
             ];
@@ -64,7 +77,7 @@ if (isset($_GET['generate'])) {
             $dateField = 'date_sent';
             $stmt = safe_query($conn, "SELECT date_sent, recipient, message, status FROM sms_logs WHERE date_sent >= ? AND date_sent < DATE_ADD(?, INTERVAL 1 DAY) ORDER BY date_sent DESC", 'ss', [$from, $to]);
         } else {
-            $stmt = safe_query($conn, "SELECT date_created, sender, recipient, subject, status FROM documents WHERE type = ? AND date_created >= ? AND date_created < DATE_ADD(?, INTERVAL 1 DAY) ORDER BY date_created DESC", 'sss', [$reportType, $from, $to]);
+            $stmt = safe_query($conn, "SELECT date_created, COALESCE(NULLIF(TRIM(submitter_name), ''), sender) AS sender, submitter_type, client_phone, recipient, subject, status FROM documents WHERE type = ? AND date_created >= ? AND date_created < DATE_ADD(?, INTERVAL 1 DAY) ORDER BY date_created DESC", 'sss', [$reportType, $from, $to]);
         }
         if ($reportType !== 'All Reports') {
             if ($stmt === false) {
@@ -111,6 +124,43 @@ function reportTitle(string $type): string
     if ($type === 'All Reports') return 'All Reports';
     return 'Report Preview';
 }
+
+// Column count of the current table layout (used for full-width placeholder rows).
+$tableColumns = in_array($reportType, ['SMS Logs', 'Borrowed Items'], true) ? 4 : ($reportType === 'All Reports' ? 5 : 7);
+
+// Printed report settings: which columns print, their widths, and which columns go to Excel.
+$reportLayout = report_column_layout($reportType);
+$hiddenPrintColumns = report_hidden_columns($printSettings);
+$printWeightTotal = 0;
+foreach ($reportLayout as $column) {
+    if (!in_array($column['key'], $hiddenPrintColumns, true)) {
+        $printWeightTotal += $column['print'];
+    }
+}
+$printWeightTotal = max(1, $printWeightTotal);
+$printColumnRules = [];
+$hiddenSelectors = [];
+$exportIndexes = [];
+$exportWidths = [];
+foreach ($reportLayout as $index => $column) {
+    $position = $index + 1;
+    $isHidden = in_array($column['key'], $hiddenPrintColumns, true);
+    if ($isHidden) {
+        $hiddenSelectors[] = "#reportTable th:nth-child({$position}), #reportTable td:nth-child({$position}), #reportTable col:nth-child({$position})";
+    } else {
+        $width = number_format(($column['print'] / $printWeightTotal) * 100, 2, '.', '');
+        $printColumnRules[] = "#reportTable col:nth-child({$position}) { width: {$width}%; }";
+    }
+    if (!$isHidden || !$printSettings['excelFollowsPrint']) {
+        $exportIndexes[] = $index;
+        $exportWidths[] = $column['excel'];
+    }
+}
+if ($hiddenSelectors) {
+    $printColumnRules[] = implode(",\n    ", $hiddenSelectors) . ' { display: none !important; }';
+}
+$printColumnCss = implode("\n    ", $printColumnRules);
+$showPrintHeader = $reportGenerated && ($printSettings['letterhead'] || $printSettings['title'] || $printSettings['period']);
 ?>
 <?php include 'header.php'; ?>
 <style>
@@ -624,7 +674,10 @@ function reportTitle(string $type): string
     .report-page .report-table .badge {
         white-space: normal;
     }
+    /* Column visibility and widths come from Admin Settings > Printed report settings. */
+    <?php echo $printColumnCss; ?>
     @page {
+
         size: A4 portrait;
         margin: 0.5in 0.45in 0.55in;
     }
@@ -735,8 +788,9 @@ function reportTitle(string $type): string
     <div class="col-12">
         <div class="card shadow-sm report-document-card">
             <div class="card-body">
-                <?php if ($reportGenerated): ?>
+                <?php if ($showPrintHeader): ?>
                 <header class="report-print-header">
+                    <?php if ($printSettings['letterhead']): ?>
                     <div class="report-letterhead">
                         <img class="report-letterhead-mark" src="mobile-ui/src/office-logo.png" alt="Cavite State University seal">
                         <div class="report-letterhead-copy">
@@ -746,7 +800,11 @@ function reportTitle(string $type): string
                             <p class="report-college-name">COLLEGE OF ENGINEERING AND INFORMATION TECHNOLOGY</p>
                         </div>
                     </div>
+                    <?php endif; ?>
+                    <?php if ($printSettings['title']): ?>
                     <h1 class="report-print-title"><?php echo sanitize(reportTitle($reportType)); ?></h1>
+                    <?php endif; ?>
+                    <?php if ($printSettings['period']): ?>
                     <dl class="report-print-meta">
                         <div>
                             <dt>Reporting period</dt>
@@ -757,10 +815,11 @@ function reportTitle(string $type): string
                             <dd id="reportPrintRecordCount"><?php echo number_format(count($preview)); ?></dd>
                         </div>
                     </dl>
+                    <?php endif; ?>
                     <?php if ($reportType === 'All Reports'): ?>
                         <p class="report-print-note">Long record details are shortened for print. Export to Excel for complete details.</p>
                     <?php endif; ?>
-                    <?php if ($reportType === 'All Reports' || $reportType === 'SMS Logs'): ?>
+                    <?php if ($printSettings['columnStatus'] && ($reportType === 'All Reports' || $reportType === 'SMS Logs')): ?>
                         <p class="report-print-note report-status-key"><strong>SMS status guide:</strong> Delivered = confirmed received on the recipient's phone. Pending = awaiting confirmation. Failed = not delivered.</p>
                     <?php endif; ?>
                 </header>
@@ -825,6 +884,8 @@ function reportTitle(string $type): string
                             <colgroup>
                                 <col class="report-col-date">
                                 <col class="report-col-party">
+                                <col class="report-col-role">
+                                <col class="report-col-contact">
                                 <col class="report-col-party">
                                 <col class="report-col-subject">
                                 <col class="report-col-status">
@@ -851,6 +912,8 @@ function reportTitle(string $type): string
                                 <?php else: ?>
                                     <th>Date and time</th>
                                     <th>Sender</th>
+                                    <th>Role</th>
+                                    <th>Contact</th>
                                     <th>Recipient</th>
                                     <th>Subject</th>
                                     <th>Status</th>
@@ -859,9 +922,9 @@ function reportTitle(string $type): string
                         </thead>
                         <tbody>
                             <?php if (!$reportGenerated): ?>
-                                <tr><td colspan="<?php echo in_array($reportType, ['SMS Logs', 'Borrowed Items'], true) ? '4' : '5'; ?>" class="text-center text-muted py-5"><i class="bi bi-bar-chart-line fs-3 d-block mb-2" aria-hidden="true"></i>Select a report type and date range, then generate your report.</td></tr>
+                                <tr><td colspan="<?php echo $tableColumns; ?>" class="text-center text-muted py-5"><i class="bi bi-bar-chart-line fs-3 d-block mb-2" aria-hidden="true"></i>Select a report type and date range, then generate your report.</td></tr>
                             <?php elseif (count($preview) === 0): ?>
-                                <tr><td colspan="<?php echo in_array($reportType, ['SMS Logs', 'Borrowed Items'], true) ? '4' : '5'; ?>" class="text-center text-muted py-5">No records found for this selection.</td></tr>
+                                <tr><td colspan="<?php echo $tableColumns; ?>" class="text-center text-muted py-5">No records found for this selection.</td></tr>
                             <?php else: ?>
                                 <?php foreach ($preview as $row): ?>
                                     <tr data-status="<?php echo sanitize((string)($row['status'] ?? 'Unknown')); ?>">
@@ -893,6 +956,8 @@ function reportTitle(string $type): string
                                                 <span class="report-date-part"><?php echo sanitize(date('g:i A', strtotime((string)$row['date_created']))); ?></span>
                                             </td>
                                             <td><?php echo sanitize((string)$row['sender']); ?></td>
+                                            <td><?php echo sanitize(trim((string)($row['submitter_type'] ?? '')) ?: '—'); ?></td>
+                                            <td><?php echo sanitize(trim((string)($row['client_phone'] ?? '')) ?: '—'); ?></td>
                                             <td><?php echo sanitize((string)$row['recipient']); ?></td>
                                             <td><?php echo sanitize((string)$row['subject']); ?></td>
                                             <td><span class="badge <?php echo admin_status_badge_class($row['status']); ?>"><?php echo sanitize((string)$row['status']); ?></span></td>
@@ -901,7 +966,7 @@ function reportTitle(string $type): string
                                 <?php endforeach; ?>
                             <?php endif; ?>
                             <?php if ($reportGenerated && count($preview) > 0): ?>
-                                <tr id="reportNoMatches" hidden><td colspan="<?php echo in_array($reportType, ['SMS Logs', 'Borrowed Items'], true) ? '4' : '5'; ?>" class="text-center text-muted py-4">No records match your search and status filters.</td></tr>
+                                <tr id="reportNoMatches" hidden><td colspan="<?php echo $tableColumns; ?>" class="text-center text-muted py-4">No records match your search and status filters.</td></tr>
                             <?php endif; ?>
                         </tbody>
                     </table>
@@ -909,12 +974,14 @@ function reportTitle(string $type): string
                 <?php if ($reportGenerated && count($preview) > 0): ?>
                     <div class="small text-muted mt-3" id="reportResultCount" aria-live="polite"></div>
                 <?php endif; ?>
-                <?php if ($reportGenerated && count($preview) > 0): ?>
+                <?php if ($printSettings['footer'] && $reportGenerated && count($preview) > 0): ?>
                     <footer class="report-print-footer">
                         <span>CEIT Dean’s Office Digital Logbook</span>
                         <span class="report-print-footer-meta">
                             <span>Generated <?php echo sanitize(date('F j, Y · g:i A')); ?></span>
+                            <?php if ($printSettings['preparedBy']): ?>
                             <span>Prepared by: <?php echo sanitize((string)($_SESSION['admin'] ?? 'Administrator')); ?></span>
+                            <?php endif; ?>
                         </span>
                     </footer>
                 <?php endif; ?>
@@ -1058,7 +1125,7 @@ function filterReportRows() {
     });
     reportNoMatches.hidden = visibleCount > 0;
     reportResultCount.textContent = 'Showing ' + visibleCount.toLocaleString() + ' of ' + reportRows.length.toLocaleString() + ' records';
-    reportPrintRecordCount.textContent = visibleCount.toLocaleString();
+    if (reportPrintRecordCount) reportPrintRecordCount.textContent = visibleCount.toLocaleString();
     reportPage = 1;
     renderReportPage();
 }
@@ -1071,18 +1138,20 @@ document.getElementById('exportExcel').addEventListener('click', function () {
     const visibleRows = Array.from(table.querySelectorAll('tbody tr[data-status]')).filter(function (row) {
         return !row.hidden;
     });
-    const headers = Array.from(table.querySelectorAll('thead th')).map(function (cell) {
+    // Columns kept in the export follow Admin Settings > Printed report settings.
+    const exportColumns = <?php echo json_encode($exportIndexes); ?>;
+    const pickColumns = function (cells) {
+        return exportColumns.map(function (index) { return cells[index]; });
+    };
+    const headers = pickColumns(Array.from(table.querySelectorAll('thead th')).map(function (cell) {
         return cell.innerText.replace(/\r?\n/g, ' ').trim();
-    });
+    }));
     const rows = visibleRows.map(function (row) {
-        return Array.from(row.querySelectorAll('td')).map(function (cell) {
+        return pickColumns(Array.from(row.querySelectorAll('td')).map(function (cell) {
             return (cell.dataset.csvValue || cell.innerText).replace(/\r?\n/g, ' ').trim();
-        });
+        }));
     });
-    const columnWidths = <?php echo json_encode(
-        $reportType === 'All Reports' ? [23, 27, 38, 65, 18] : ($reportType === 'SMS Logs' ? [23, 20, 70, 18] : ($reportType === 'Borrowed Items' ? [34, 28, 20, 18] : [23, 24, 24, 48, 18])),
-        JSON_THROW_ON_ERROR
-    ); ?>;
+    const columnWidths = <?php echo json_encode($exportWidths); ?>;
 
     window.downloadReportWorkbook({
         title: reportExportTitle,

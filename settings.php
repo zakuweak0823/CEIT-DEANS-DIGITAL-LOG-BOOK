@@ -6,6 +6,7 @@ require_once 'mobile_app_settings.php';
 require_once 'batch_support.php';
 require_once 'document_tracking.php';
 require_once 'sla_support.php';
+require_once 'print_report_support.php';
 ensure_admin();
 
 if (isset($_GET['download_network_repair']) && $_GET['download_network_repair'] === '1') {
@@ -139,6 +140,18 @@ if (isset($_POST['save_mobile_access'])) {
         $formSettingsNotice = 'Service level agreement settings could not be saved. Check the server log and try again.';
         $formSettingsNoticeType = 'danger';
     }
+} elseif (isset($_POST['save_print_report_settings'])) {
+    $formSettingsNoticeScope = 'print-report';
+    $printReportSubmitted = [];
+    foreach (array_keys(print_report_settings_defaults()) as $printReportKey) {
+        $printReportSubmitted[$printReportKey] = ($_POST['print_' . $printReportKey] ?? '') === '1';
+    }
+    if (save_print_report_settings($conn, $printReportSubmitted)) {
+        $formSettingsNotice = 'Printed report settings saved.';
+    } else {
+        $formSettingsNotice = 'Printed report settings could not be saved. Check the server log and try again.';
+        $formSettingsNoticeType = 'danger';
+    }
 } elseif (isset($_POST['save_batch_workflow'])) {
     $formSettingsNoticeScope = 'workflow';
     $confirmationMode = $_POST['intake_confirmation_mode'] ?? '';
@@ -225,6 +238,7 @@ $mobileFormLabels = get_mobile_form_labels($conn);
 $mobileAppSettings = get_mobile_app_settings($conn);
 $batchWorkflowSettings = get_batch_workflow_settings($conn);
 $slaSettings = get_sla_settings($conn);
+$printReportSettings = get_print_report_settings($conn);
 try {
     $documentTrackingSettings = get_document_tracking_settings($conn);
 } catch (Throwable $error) {
@@ -472,6 +486,76 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                     </div>
                     <button class="btn btn-primary mt-3" type="submit" name="save_sla_settings" value="1">
                         <i class="bi bi-check2 me-1" aria-hidden="true"></i>Save time limits
+                    </button>
+                </form>
+            </div>
+        </section>
+    </div>
+
+    <div class="col-12">
+        <section class="card shadow-sm" id="print-report-settings" aria-labelledby="print-report-settings-title">
+            <div class="card-header bg-white px-3 px-md-4 py-3">
+                <h5 class="mb-1 text-primary" id="print-report-settings-title">Printed report settings</h5>
+                <p class="mb-0 small text-muted">Choose what appears when a report is printed or saved as PDF. These choices apply to every report type and to everyone using the admin portal.</p>
+            </div>
+            <div class="card-body p-3 p-md-4">
+                <?php if ($formSettingsNotice !== '' && $formSettingsNoticeScope === 'print-report'): ?>
+                    <div class="alert alert-<?php echo sanitize($formSettingsNoticeType); ?>" role="status"><?php echo sanitize($formSettingsNotice); ?></div>
+                <?php endif; ?>
+                <form method="POST">
+                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                    <div class="row g-4">
+                        <div class="col-12 col-lg-4">
+                            <p class="form-label fw-semibold mb-2">Report header</p>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="printLetterhead" name="print_letterhead" value="1" <?php echo $printReportSettings['letterhead'] ? 'checked' : ''; ?>>
+                                <label class="form-check-label" for="printLetterhead">University letterhead and seal</label>
+                            </div>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="printTitle" name="print_title" value="1" <?php echo $printReportSettings['title'] ? 'checked' : ''; ?>>
+                                <label class="form-check-label" for="printTitle">Report title</label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="printPeriod" name="print_period" value="1" <?php echo $printReportSettings['period'] ? 'checked' : ''; ?>>
+                                <label class="form-check-label" for="printPeriod">Reporting period and record count</label>
+                            </div>
+                        </div>
+                        <div class="col-12 col-lg-4">
+                            <p class="form-label fw-semibold mb-2">Optional columns</p>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="printColumnRole" name="print_columnRole" value="1" <?php echo $printReportSettings['columnRole'] ? 'checked' : ''; ?>>
+                                <label class="form-check-label" for="printColumnRole">Role (Student / Faculty)</label>
+                            </div>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="printColumnContact" name="print_columnContact" value="1" <?php echo $printReportSettings['columnContact'] ? 'checked' : ''; ?>>
+                                <label class="form-check-label" for="printColumnContact">Contact number</label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="printColumnStatus" name="print_columnStatus" value="1" <?php echo $printReportSettings['columnStatus'] ? 'checked' : ''; ?>>
+                                <label class="form-check-label" for="printColumnStatus">Status</label>
+                            </div>
+                            <div class="form-text">Role and contact apply to Incoming and Outgoing reports. In All Reports they appear inside the Details text, so turning them off removes them there too. Date, names, subject and other main details always print.</div>
+                        </div>
+                        <div class="col-12 col-lg-4">
+                            <p class="form-label fw-semibold mb-2">Footer and export</p>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="printFooter" name="print_footer" value="1" <?php echo $printReportSettings['footer'] ? 'checked' : ''; ?>>
+                                <label class="form-check-label" for="printFooter">Footer with office name and date generated</label>
+                            </div>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" role="switch" id="printPreparedBy" name="print_preparedBy" value="1" <?php echo $printReportSettings['preparedBy'] ? 'checked' : ''; ?>>
+                                <label class="form-check-label" for="printPreparedBy">“Prepared by” name in the footer</label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="printExcelFollows" name="print_excelFollowsPrint" value="1" <?php echo $printReportSettings['excelFollowsPrint'] ? 'checked' : ''; ?>>
+                                <label class="form-check-label" for="printExcelFollows">Use the same columns for the Excel export</label>
+                            </div>
+                            <div class="form-text">The “Prepared by” line is part of the footer, so it is hidden when the footer is off. When the Excel option is off, Excel always includes every column.</div>
+                        </div>
+                    </div>
+                    <p class="form-text mt-3 mb-0">The on-screen report is not affected, so you can still search and filter by status. If you turn on Status, an SMS status guide is added to the printed header for SMS and All Reports.</p>
+                    <button class="btn btn-primary mt-3" type="submit" name="save_print_report_settings" value="1">
+                        <i class="bi bi-check2 me-1" aria-hidden="true"></i>Save printed report settings
                     </button>
                 </form>
             </div>
