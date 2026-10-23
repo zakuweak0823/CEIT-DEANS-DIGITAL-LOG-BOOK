@@ -10,6 +10,8 @@ if (!empty($_SESSION['admin'])) {
 
 $error = '';
 $username = '';
+$notice = (string)($_SESSION['login_notice'] ?? '');
+unset($_SESSION['login_notice']);
 if (isset($_POST['login'])) {
     $username = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
@@ -83,6 +85,12 @@ if (isset($_POST['login'])) {
                 <h1 id="loginTitle">Administrator Login</h1>
                 <p class="login-intro">Use your authorized account to access the logbook.</p>
             </div>
+            <?php if ($notice !== '' && !$error): ?>
+                <div class="alert alert-success d-flex align-items-center gap-2" role="status">
+                    <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+                    <span><?php echo sanitize($notice); ?></span>
+                </div>
+            <?php endif; ?>
             <?php if ($error): ?>
                 <div class="alert alert-danger login-error" role="alert">
                     <i class="bi bi-exclamation-circle-fill" aria-hidden="true"></i>

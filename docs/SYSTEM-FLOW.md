@@ -100,7 +100,7 @@ can only ever read a limited status subset from the tracker page.
 | `router.php` | Router used **only** by PHP's built-in server (`php -S`). Apache uses `.htaccess` instead. |
 | `.htaccess` | Apache rewrite rules for extension-free URLs and the `document-tracker` alias. |
 | `header.php` / `footer.php` | Shared layout, sidebar, page titles, live status widgets. `header.php` reads `SCRIPT_FILENAME` (set by the router) so navigation highlighting works with clean URLs. |
-| `login.php` / `logout.php` / `forgot_password.php` | Sign-in, sign-out, recovery guidance. |
+| `login.php` / `logout.php` / `forgot_password.php` | Sign-in, sign-out, SMS one-time-code password recovery (`password_reset_support.php`). |
 | `users.php` | Super Admin account management (create / reset / delete / change own password). |
 | `incoming.php` | Incoming document create, edit, tracking QR issue, priority toggle, **Prepare for Release**. |
 | `outgoing.php` | Outgoing document edit, status change, SMS notification, tracking QR. |

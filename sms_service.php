@@ -245,10 +245,12 @@ function persist_sms_attempt($conn, $recipient, $message, $status, $messageId = 
     return log_sms_attempt($conn, $recipient, $message, $status, $messageId);
 }
 
-function send_logged_sms($conn, $recipient, $message, $existingSmsId = null)
+function send_logged_sms($conn, $recipient, $message, $existingSmsId = null, $logMessage = null)
 {
     $recipient = trim((string)$recipient);
     $message = trim((string)$message);
+    // Messages that carry secrets (such as one-time codes) are logged under a masked text instead.
+    $storedMessage = $logMessage !== null ? trim((string)$logMessage) : $message;
     if ($recipient === '' || $message === '') {
         return ['success' => false, 'status' => 'Failed', 'message' => 'Recipient number and message are required.'];
     }
@@ -262,12 +264,12 @@ function send_logged_sms($conn, $recipient, $message, $existingSmsId = null)
 
     $smsEnabled = safe_scalar($conn, "SELECT value FROM settings WHERE key_name = 'sms_enabled' LIMIT 1");
     if (empty($smsEnabled)) {
-        persist_sms_attempt($conn, $recipient, $message, 'Failed', null, $existingSmsId);
+        persist_sms_attempt($conn, $recipient, $storedMessage, 'Failed', null, $existingSmsId);
         return ['success' => false, 'status' => 'Failed', 'message' => 'SMS delivery is disabled in Communication Settings.'];
     }
     $apiToken = get_philsms_api_token($conn);
     if ($apiToken === '') {
-        persist_sms_attempt($conn, $recipient, $message, 'Failed', null, $existingSmsId);
+        persist_sms_attempt($conn, $recipient, $storedMessage, 'Failed', null, $existingSmsId);
         return ['success' => false, 'status' => 'Failed', 'message' => 'No PhilSMS API token is configured in Communication Settings.'];
     }
 
@@ -286,7 +288,7 @@ function send_logged_sms($conn, $recipient, $message, $existingSmsId = null)
     // PhilSMS accepts a successful API response even if an ID is unexpectedly omitted.
     // Keep it Pending rather than implying delivery or encouraging an unsafe duplicate retry.
     $logStatus = $accepted ? ($providerStatus !== '' ? $providerStatus : 'Pending') : 'Failed';
-    $logged = persist_sms_attempt($conn, $recipient, $message, $logStatus, $messageId, $existingSmsId);
+    $logged = persist_sms_attempt($conn, $recipient, $storedMessage, $logStatus, $messageId, $existingSmsId);
     if (!$logged && $accepted) {
         $error = 'PhilSMS accepted the message, but its delivery record could not be saved.';
     }

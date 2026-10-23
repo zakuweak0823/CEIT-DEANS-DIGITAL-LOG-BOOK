@@ -97,7 +97,7 @@ if (isset($_POST['resend_failed_sms'])) {
         if (!$claimError) {
             $stmt = safe_query(
                 $conn,
-                "SELECT recipient, message FROM sms_logs WHERE sms_id = ? AND LOWER(status) = 'failed' LIMIT 1 FOR UPDATE",
+                "SELECT recipient, message FROM sms_logs WHERE sms_id = ? AND LOWER(status) = 'failed' AND message NOT LIKE '[Security]%' LIMIT 1 FOR UPDATE",
                 'i',
                 [$smsId]
             );
@@ -311,7 +311,7 @@ $smsStatusInfo = static function (array $log): array {
                                             <?php endif; ?>
                                         </td>
                                         <td>
-                                            <?php if (strtolower((string)$log['status']) === 'failed'): ?>
+                                            <?php if (strtolower((string)$log['status']) === 'failed' && strpos((string)$log['message'], '[Security]') !== 0): ?>
                                                 <form method="POST" class="d-inline sms-confirm-form" data-admin-confirm="false" data-confirm-title="Resend failed SMS?" data-confirm-message="This retries the message to the same recipient and updates this SMS log instead of creating a duplicate. The provider may still charge for the resend." data-confirm-button="Resend SMS">
                                                     <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                                                     <input type="hidden" name="sms_id" value="<?php echo (int)$log['sms_id']; ?>">

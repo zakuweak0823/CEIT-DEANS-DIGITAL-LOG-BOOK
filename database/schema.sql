@@ -5,8 +5,10 @@ CREATE TABLE IF NOT EXISTS users (
     user_id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(100) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
-    role VARCHAR(50) NOT NULL DEFAULT 'admin'
+    role VARCHAR(50) NOT NULL DEFAULT 'admin',
+    recovery_phone VARCHAR(20) DEFAULT NULL
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_phone VARCHAR(20) DEFAULT NULL;
 
 CREATE TABLE IF NOT EXISTS mobile_api_tokens (
     token_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -16,6 +18,24 @@ CREATE TABLE IF NOT EXISTS mobile_api_tokens (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_mobile_api_tokens_expiry (expires_at),
     CONSTRAINT fk_mobile_api_tokens_user FOREIGN KEY (user_id)
+        REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS password_resets (
+    reset_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT DEFAULT NULL,
+    username_key CHAR(64) NOT NULL,
+    request_ip VARCHAR(45) NOT NULL DEFAULT '',
+    code_salt CHAR(32) DEFAULT NULL,
+    code_hash CHAR(64) DEFAULT NULL,
+    attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    expires_at DATETIME NOT NULL,
+    used_at DATETIME DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_password_resets_user (user_id, used_at, expires_at),
+    INDEX idx_password_resets_key (username_key, created_at),
+    INDEX idx_password_resets_ip (request_ip, created_at),
+    CONSTRAINT fk_password_resets_user FOREIGN KEY (user_id)
         REFERENCES users(user_id) ON DELETE CASCADE
 );
 

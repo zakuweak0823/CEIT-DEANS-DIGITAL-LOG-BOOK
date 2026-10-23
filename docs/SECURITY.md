@@ -100,9 +100,15 @@ control for the mobile API or admin portal.
 - The seeded `admin` / `admin` account is public setup information. A fresh
   installation must not be left reachable with these credentials.
 - Super Admins can create, reset, and remove standard administrator accounts.
-  Forgotten standard-admin passwords must be reset by a Super Admin. Recovery
-  of an inaccessible Super Admin account requires trusted system/database
-  administrator access; the app does not send password-reset email.
+  Administrators with a recovery phone can also reset a forgotten password
+  themselves with a one-time SMS code (6 digits, 10 minutes, single use, locked
+  after 5 wrong tries, requests throttled, codes never stored in the SMS logs).
+  Without a recovery phone, a Super Admin must reset it. A Super Admin without
+  a recovery phone needs the server owner to run
+  `php tools/reset_admin_password.php <username>` (command line only) or use
+  database access; the app does not send password-reset email. SMS recovery is
+  only as strong as control of the recovery phone, so keep those numbers
+  accurate and use phones only the account holder controls.
 - Mobile kiosk mode is intentionally unauthenticated. When enabled, anyone
   able to reach the configured mobile API may use its kiosk workflows. A
   firewall or trusted network boundary is essential in that mode.

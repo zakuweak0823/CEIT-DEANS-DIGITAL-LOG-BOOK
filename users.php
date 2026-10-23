@@ -1,7 +1,9 @@
 <?php
 require_once 'auth.php';
 require_once 'db.php';
+require_once 'password_reset_support.php';
 ensure_super_admin();
+ensure_password_reset_schema($conn);
 
 $notice = '';
 $noticeType = 'success';
@@ -12,6 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $username = trim((string)($_POST['username'] ?? ''));
         $password = (string)($_POST['password'] ?? '');
         $passwordConfirmation = (string)($_POST['password_confirmation'] ?? '');
+        $recoveryPhone = contact_number_input($_POST['recovery_phone'] ?? '');
 
         if (preg_match('/^[A-Za-z0-9_.-]{3,100}$/', $username) !== 1) {
             $notice = 'Use 3–100 characters for the username: letters, numbers, periods, underscores, or hyphens.';
@@ -22,10 +25,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($password !== $passwordConfirmation) {
             $notice = 'The password fields do not match.';
             $noticeType = 'danger';
+        } elseif ($recoveryPhone !== '' && !is_valid_contact_number($recoveryPhone)) {
+            $notice = 'Enter the recovery phone as exactly 11 digits, or leave it empty.';
+            $noticeType = 'danger';
         } else {
             try {
                 $passwordHash = password_hash($password, PASSWORD_DEFAULT);
-                $stmt = safe_query($conn, "INSERT INTO users (username, password, role) VALUES (?, ?, 'admin')", 'ss', [$username, $passwordHash]);
+                $stmt = safe_query($conn, "INSERT INTO users (username, password, role, recovery_phone) VALUES (?, ?, 'admin', ?)", 'sss', [$username, $passwordHash, $recoveryPhone !== '' ? $recoveryPhone : null]);
                 if ($stmt === false) {
                     $notice = 'The administrator account could not be created. Check the server log and try again.';
                     $noticeType = 'danger';
@@ -106,6 +112,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
+    } elseif ($action === 'set_recovery_phone') {
+        $userId = filter_var($_POST['user_id'] ?? null, FILTER_VALIDATE_INT);
+        $recoveryPhone = contact_number_input($_POST['recovery_phone'] ?? '');
+        if (!$userId || $userId < 1) {
+            $notice = 'Select a valid administrator account.';
+            $noticeType = 'danger';
+        } elseif ($recoveryPhone !== '' && !is_valid_contact_number($recoveryPhone)) {
+            $notice = 'Enter the recovery phone as exactly 11 digits, or leave it empty to turn SMS recovery off.';
+            $noticeType = 'danger';
+        } else {
+            $stmt = safe_query($conn, "UPDATE users SET recovery_phone = ? WHERE user_id = ? AND role = 'admin'", 'si', [$recoveryPhone !== '' ? $recoveryPhone : null, $userId]);
+            if ($stmt === false) {
+                $notice = 'The recovery phone could not be saved. Check the server log and try again.';
+                $noticeType = 'danger';
+            } else {
+                mysqli_stmt_close($stmt);
+                $notice = $recoveryPhone !== '' ? 'Recovery phone saved. SMS password recovery is on for this account.' : 'Recovery phone removed. SMS password recovery is off for this account.';
+            }
+        }
+    } elseif ($action === 'set_own_recovery_phone') {
+        $currentPassword = (string)($_POST['current_password'] ?? '');
+        $recoveryPhone = contact_number_input($_POST['recovery_phone'] ?? '');
+        $stmt = safe_query($conn, "SELECT password FROM users WHERE username = ? AND role = 'super_admin' LIMIT 1", 's', [$_SESSION['admin']]);
+        $account = null;
+        if ($stmt !== false) {
+            $result = mysqli_stmt_get_result($stmt);
+            $account = $result === false ? null : mysqli_fetch_assoc($result);
+            mysqli_stmt_close($stmt);
+        }
+        if (!$account || !password_verify($currentPassword, $account['password'])) {
+            $notice = 'The current password is incorrect.';
+            $noticeType = 'danger';
+        } elseif ($recoveryPhone !== '' && !is_valid_contact_number($recoveryPhone)) {
+            $notice = 'Enter the recovery phone as exactly 11 digits, or leave it empty to turn SMS recovery off.';
+            $noticeType = 'danger';
+        } else {
+            $stmt = safe_query($conn, "UPDATE users SET recovery_phone = ? WHERE username = ? AND role = 'super_admin'", 'ss', [$recoveryPhone !== '' ? $recoveryPhone : null, $_SESSION['admin']]);
+            if ($stmt === false) {
+                $notice = 'Your recovery phone could not be saved. Check the server log and try again.';
+                $noticeType = 'danger';
+            } else {
+                mysqli_stmt_close($stmt);
+                $notice = $recoveryPhone !== '' ? 'Your recovery phone was saved.' : 'Your recovery phone was removed.';
+            }
+        }
     } elseif ($action === 'delete_admin') {
         $userId = filter_var($_POST['user_id'] ?? null, FILTER_VALIDATE_INT);
         if (!$userId || $userId < 1) {
@@ -133,7 +184,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $users = [];
-$stmt = safe_query($conn, 'SELECT user_id, username, role FROM users ORDER BY CASE WHEN role = \'super_admin\' THEN 0 ELSE 1 END, username');
+$stmt = safe_query($conn, 'SELECT user_id, username, role, recovery_phone FROM users ORDER BY CASE WHEN role = \'super_admin\' THEN 0 ELSE 1 END, username');
 if ($stmt === false) {
     http_response_code(500);
     exit('Administrator accounts could not be loaded. Check the server log and try again.');
@@ -180,6 +231,11 @@ mysqli_stmt_close($stmt);
                         <label class="form-label" for="newAdminPasswordConfirmation">Confirm password</label>
                         <input class="form-control" type="password" id="newAdminPasswordConfirmation" name="password_confirmation" minlength="12" autocomplete="new-password" required>
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="newAdminRecoveryPhone">Recovery phone <span class="text-muted">(optional)</span></label>
+                        <input class="form-control" type="tel" id="newAdminRecoveryPhone" name="recovery_phone" inputmode="numeric" pattern="[0-9]{11}" maxlength="11" placeholder="09123456789" autocomplete="off">
+                        <div class="form-text">Lets this administrator reset a forgotten password with an SMS code.</div>
+                    </div>
                     <button class="btn btn-primary" type="submit"><i class="bi bi-person-plus me-1" aria-hidden="true"></i>Create account</button>
                 </form>
             </div>
@@ -200,6 +256,7 @@ mysqli_stmt_close($stmt);
                                 <th scope="col">Username</th>
                                 <th scope="col">Role</th>
                                 <th scope="col">Password</th>
+                                <th scope="col">Recovery phone</th>
                                 <th scope="col">Account</th>
                             </tr>
                         </thead>
@@ -229,6 +286,31 @@ mysqli_stmt_close($stmt);
                                             </details>
                                         <?php else: ?>
                                             <span class="text-muted">Managed by system administrator</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td data-label="Recovery phone">
+                                        <?php $maskedPhone = password_reset_mask_phone($user['recovery_phone'] ?? ''); ?>
+                                        <?php if ($maskedPhone !== ''): ?>
+                                            <span class="badge text-bg-success"><i class="bi bi-shield-check me-1" aria-hidden="true"></i>SMS recovery on</span>
+                                            <div class="small text-muted mt-1"><?php echo sanitize($maskedPhone); ?></div>
+                                        <?php else: ?>
+                                            <span class="badge text-bg-secondary">Not set</span>
+                                        <?php endif; ?>
+                                        <?php if ($user['role'] === 'admin'): ?>
+                                            <details class="admin-password-reset mt-1">
+                                                <summary class="btn btn-sm btn-outline-primary"><?php echo $maskedPhone !== '' ? 'Change' : 'Add phone'; ?></summary>
+                                                <form method="POST" class="admin-password-reset-form">
+                                                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                                                    <input type="hidden" name="action" value="set_recovery_phone">
+                                                    <input type="hidden" name="user_id" value="<?php echo (int)$user['user_id']; ?>">
+                                                    <label class="form-label" for="recoveryPhone<?php echo (int)$user['user_id']; ?>">Recovery phone</label>
+                                                    <input class="form-control mb-1" type="tel" id="recoveryPhone<?php echo (int)$user['user_id']; ?>" name="recovery_phone" inputmode="numeric" pattern="[0-9]{11}" maxlength="11" placeholder="09123456789" autocomplete="off">
+                                                    <div class="form-text mb-2">11 digits. Leave empty to turn SMS recovery off.</div>
+                                                    <button class="btn btn-primary btn-sm" type="submit">Save phone</button>
+                                                </form>
+                                            </details>
+                                        <?php elseif ($user['username'] === $_SESSION['admin']): ?>
+                                            <div class="small text-muted mt-1">Change it in the section below.</div>
                                         <?php endif; ?>
                                     </td>
                                     <td data-label="Account">
@@ -274,6 +356,31 @@ mysqli_stmt_close($stmt);
                     </div>
                     <div class="col-12">
                         <button class="btn btn-primary" type="submit">Change password</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+    </div>
+
+    <div class="col-12">
+        <section class="card shadow-sm" aria-labelledby="ownRecoveryPhoneTitle">
+            <div class="card-body">
+                <h2 class="h5 card-title text-primary" id="ownRecoveryPhoneTitle">Your recovery phone</h2>
+                <p class="small text-muted">If you forget your password, a one-time code is sent to this number so you can choose a new one. Use a phone only you control.</p>
+                <form method="POST" class="row g-3 align-items-end">
+                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                    <input type="hidden" name="action" value="set_own_recovery_phone">
+                    <div class="col-12 col-md-4">
+                        <label class="form-label" for="ownRecoveryPhone">Recovery phone</label>
+                        <input class="form-control" type="tel" id="ownRecoveryPhone" name="recovery_phone" inputmode="numeric" pattern="[0-9]{11}" maxlength="11" placeholder="09123456789" autocomplete="off">
+                        <div class="form-text">11 digits. Leave empty to turn SMS recovery off.</div>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label" for="ownRecoveryPhonePassword">Current password</label>
+                        <input class="form-control" type="password" id="ownRecoveryPhonePassword" name="current_password" autocomplete="current-password" required>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <button class="btn btn-primary" type="submit">Save recovery phone</button>
                     </div>
                 </form>
             </div>

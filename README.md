@@ -333,22 +333,38 @@ stored or sent until you press **Sign In**.
 of at least 12 characters, confirmed twice → **Create account**. Share the initial password through a
 secure channel, such as in person.
 
-**A standard admin forgot their password:**
+**A standard admin forgot their password (self-service by SMS):**
 
-1. On the login page, they choose **Forgot your password?** and follow the
-   on-screen steps.
-2. They ask a Super Admin to reset it.
-3. The Super Admin opens **Administrator accounts**, selects **Reset password**
-   for that account, enters a new temporary password (12+ characters) twice,
-   and chooses **Save password**.
-4. The Super Admin shares the temporary password securely. Resetting a
-   password signs that account out of any existing sessions.
+1. On the login page they choose **Forgot your password?**, enter their
+   username, and choose **Send recovery code**.
+2. A 6-digit code is texted to the account's **recovery phone**. It expires
+   after 10 minutes, works once, and is locked after 5 wrong tries.
+3. They enter the code and a new password (12+ characters, typed twice). The
+   account is signed out everywhere, including the mobile app, and a notice
+   SMS confirms the change.
 
-**The Super Admin forgot their password:** the web portal cannot reset a Super
-Admin password. The trusted system administrator must recover it through
-direct database access (for example, phpMyAdmin) after backing up the
-database. Store the Super Admin credentials in an approved password manager or
-sealed offline record so this is rarely needed.
+SMS recovery needs two things: SMS is enabled with a PhilSMS token in
+**Communication Settings**, and the account has a recovery phone. A Super Admin
+adds or changes it under **Administrator accounts → Recovery phone** (or while
+creating the account). The page gives the same reply for unknown accounts,
+accounts without a phone and valid accounts, requests are limited (one code a
+minute, 3 an hour per username, 10 an hour per device), and codes never
+appear in the SMS logs.
+
+**No recovery phone, or SMS is unavailable:** ask a Super Admin to reset it.
+They open **Administrator accounts**, select **Reset password**, enter a new
+temporary password (12+ characters) twice, and choose **Save password**, then
+share it securely. Resetting a password signs that account out of any
+existing sessions.
+
+**The Super Admin forgot their password:** a Super Admin can also use SMS
+recovery once they have saved their own recovery phone under **Administrator
+accounts → Your recovery phone** (this needs their current password). If that
+is not set up, the server owner runs
+`php tools/reset_admin_password.php <username>` from a command prompt on the
+server (it works from the command line only), or recovers it through the
+database after taking a backup. Store the Super Admin credentials in an
+approved password manager or sealed offline record so this is rarely needed.
 
 Password reset by email is intentionally not provided: admin accounts have no
 recovery email address and the system does not require SMTP to be configured.
@@ -589,7 +605,7 @@ another server, set `VITE_API_ENDPOINT` at build time to the complete
 │   └── start_mobile_submission_log.bat
 ├── start-office-server.bat           # Double-click Windows launcher
 ├── auth.php                          # Sessions, CSRF checks, and role enforcement
-├── login.php / forgot_password.php   # Sign-in (with show/hide password) and recovery guidance
+├── login.php / forgot_password.php   # Sign-in (with show/hide password) and SMS password recovery
 ├── users.php                         # Super Admin account management
 ├── sla_support.php                   # Overdue-record time limits
 ├── db.php                            # Database connection and query helpers
@@ -667,10 +683,14 @@ A summary of the protections built into the system, grouped by type. See the
 - **Role-based access control:** Super Admin and Admin roles are re-verified
   against the database on every protected request. Account management is
   restricted to Super Admins.
-- **Account safeguards:** Super Admin accounts cannot be reset or deleted
-  through the portal, and an administrator cannot delete their own account.
-- **Controlled recovery:** there is no self-service reset link that an attacker
-  could abuse; resets require a Super Admin or trusted database access.
+- **Account safeguards:** a Super Admin account cannot be reset by another
+  administrator or deleted through the portal, and an administrator cannot
+  delete their own account.
+- **Guarded self-service recovery:** an administrator with a recovery phone can
+  reset a forgotten password with a one-time SMS code. Codes are hashed,
+  expire in 10 minutes, work once and lock after 5 wrong tries; requests are
+  throttled and the page never reveals whether an account exists. Without a
+  recovery phone, resets require a Super Admin or trusted server access.
 
 ### Session security
 
@@ -778,7 +798,7 @@ hosting setup:
 | Mobile app cannot reach the API | Keep Apache/MySQL running and verify the Vite proxy or `VITE_API_ENDPOINT`. On Android emulators, use `10.0.2.2` rather than `localhost`. |
 | `npm run dev:lan` says the LAN certificate files are missing | Run it as `npm run dev:lan` inside `mobile-ui`; its `predev:lan` setup creates a host-specific certificate with XAMPP OpenSSL. If setup reports OpenSSL or permission errors, verify XAMPP is above this project in `htdocs`, `apache\bin\openssl.exe` exists, and the account can write to Apache's `conf\ssl.crt` and `conf\ssl.key` folders. Then download the public CA from Admin Settings and install/trust it on the phone. |
 | Document tracker says “Failed to fetch” | Open the QR link on the same HTTPS Apache address and project-folder path used by the office. Confirm Admin Settings → Document status tracking has the correct Tracker base URL, and that Apache/PHP and MySQL are running. Do not use the Vite `:5173` URL as the tracker URL; it serves the mobile app, while the QR status API is served by Apache. |
-| I forgot my admin password | Standard admin: ask a Super Admin to reset it under **Administrator accounts**. Super Admin: the system administrator must recover it through database access. See [Administrator accounts and password recovery](#administrator-accounts-and-password-recovery). |
+| I forgot my admin password | Use **Forgot your password?** on the login page to get an SMS code on your recovery phone. No recovery phone: ask a Super Admin to reset it under **Administrator accounts**. Super Admin without one: the server owner runs `php tools/reset_admin_password.php <username>`. See [Administrator accounts and password recovery](#administrator-accounts-and-password-recovery). |
 | The Show password button does nothing | Hard-refresh the login page (Ctrl+F5) to clear cached scripts and styles, and confirm JavaScript is enabled in the browser. |
 | Sign-in is rejected after a password reset | Existing sessions are signed out when a password changes. Sign in again with the new password. |
 | SMS sending fails | Check cURL, Communication Settings, provider credentials, and provider account status. |
