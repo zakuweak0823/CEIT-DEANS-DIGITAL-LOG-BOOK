@@ -10146,15 +10146,37 @@ body.admin-theme-civic .dashboard-page .dashboard-stat-icon-borrowed .bi {
         text-align: left;
     }
 
-    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > thead > tr > th:nth-child(1) { width: 24%; }
+    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > thead > tr > th:nth-child(1) { width: 26%; }
     .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > thead > tr > th:nth-child(2) { width: 12%; }
-    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > thead > tr > th:nth-child(3) { width: 24%; }
-    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > thead > tr > th:nth-child(4) { width: 13%; }
-    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > thead > tr > th:nth-child(5) { width: 15%; }
-    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > thead > tr > th:nth-child(6) { width: 12%; }
+    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > thead > tr > th:nth-child(3) { width: 20%; }
+    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > thead > tr > th:nth-child(4) { width: 19%; }
+    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > thead > tr > th:nth-child(5) { width: 12%; }
+    .admin-body .admin-content .dashboard-activity-table.admin-table-has-actions > thead > tr > th:nth-child(6) { width: 11%; }
 
     .admin-body .admin-content .dashboard-activity-table .cell-clamp {
         max-width: 100%;
+    }
+}
+
+/* Compact overdue rows: status and Overdue badges share a line and the Review button stays small. */
+.dashboard-redesign .dashboard-status-stack {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+}
+
+@media (min-width: 1200px) {
+    .admin-body .admin-content .dashboard-overdue-table > tbody > tr > td {
+        padding-top: 0.5rem;
+        padding-bottom: 0.5rem;
+    }
+
+    .admin-body .admin-content .dashboard-overdue-table > tbody > tr > td .btn {
+        min-height: 0;
+        padding: 0.25rem 0.7rem;
+        font-size: 0.78rem;
     }
 }
 
@@ -10418,4 +10440,159 @@ button.dashboard-sla-stat.dashboard-sla-link { width: 100%; text-align: left; fo
         min-height: 2.6rem;
         white-space: normal;
     }
+}
+
+/* Chart with its legend beside it, kept inside the panel. */
+.dashboard-redesign .dashboard-chart-with-legend {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.dashboard-redesign .dashboard-chart-with-legend .dashboard-chart-container {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.dashboard-redesign .dashboard-chart-legend {
+    display: flex;
+    flex: 0 1 14rem;
+    flex-direction: column;
+    gap: 0.45rem;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.dashboard-redesign .dashboard-chart-legend li {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: 0;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid #e6ebe4;
+    border-radius: 0.6rem;
+    background: #fafbf8;
+}
+
+.dashboard-redesign .dashboard-chart-legend li.is-empty {
+    color: #78847b;
+    font-size: 0.78rem;
+}
+
+.dashboard-redesign .dashboard-legend-swatch {
+    flex: 0 0 0.7rem;
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 50%;
+}
+
+.dashboard-redesign .dashboard-legend-text {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.25;
+}
+
+.dashboard-redesign .dashboard-legend-text strong {
+    color: #263a2f;
+    font-size: 0.78rem;
+}
+
+.dashboard-redesign .dashboard-legend-text small {
+    color: #78847b;
+    font-size: 0.68rem;
+}
+
+.dashboard-redesign .dashboard-legend-value {
+    flex: 0 0 auto;
+    color: #405347;
+    font-size: 0.74rem;
+    font-weight: 650;
+    white-space: nowrap;
+}
+
+@media (max-width: 575.98px) {
+    .dashboard-redesign .dashboard-chart-with-legend {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .dashboard-redesign .dashboard-chart-legend {
+        flex-basis: auto;
+    }
+}
+
+/* SMS logs: status filters and priority rows for failed and waiting messages. */
+.sms-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.sms-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.8rem;
+    border: 1px solid #dfe5dc;
+    border-radius: 999px;
+    background: #fff;
+    color: #405347;
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.sms-filter-chip:hover {
+    background: #f4f7f2;
+    color: #263a2f;
+}
+
+.sms-filter-chip.is-active {
+    border-color: #17613e;
+    background: #17613e;
+    color: #fff;
+}
+
+.sms-filter-chip.sms-filter-failed:not(.is-active) strong { color: #9f1239; }
+.sms-filter-chip.sms-filter-pending:not(.is-active) strong { color: #8a6500; }
+
+.sms-filter-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: auto;
+    color: #9f1239;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.sms-status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.6rem;
+    font-weight: 700;
+}
+
+.sms-log-table > tbody > tr.sms-row-failed > td:first-child {
+    box-shadow: inset 4px 0 0 #e11d48;
+}
+
+.sms-log-table > tbody > tr.sms-row-pending > td:first-child {
+    box-shadow: inset 4px 0 0 #f0b429;
+}
+
+.sms-log-table > tbody > tr.sms-row-failed > td {
+    background-color: #fff6f7;
+}
+
+.sms-log-table > tbody > tr.sms-row-pending.is-urgent > td {
+    background-color: #fffaf0;
 }

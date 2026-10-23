@@ -174,8 +174,43 @@ if (isset($_POST['resend_failed_sms'])) {
     }
 }
 
+// Failed messages come first, then messages still waiting (longest wait first), then everything else by newest.
+$smsGroupSql = "CASE WHEN LOWER(status) = 'failed' THEN 'failed' WHEN LOWER(status) IN ('pending', 'queued', 'sending') THEN 'pending' WHEN LOWER(status) IN ('delivered', 'sent', 'success') THEN 'delivered' ELSE 'other' END";
+$smsFilters = [
+    'all' => ['All', ''],
+    'failed' => ['Failed', "WHERE $smsGroupSql = 'failed'"],
+    'pending' => ['Pending', "WHERE $smsGroupSql = 'pending'"],
+    'delivered' => ['Delivered', "WHERE $smsGroupSql = 'delivered'"],
+];
+$smsFilter = (string)($_GET['status'] ?? 'all');
+if (!isset($smsFilters[$smsFilter])) {
+    $smsFilter = 'all';
+}
+
+$smsCounts = ['all' => 0, 'failed' => 0, 'pending' => 0, 'delivered' => 0, 'stuck' => 0];
+$stmt = safe_query($conn, "SELECT $smsGroupSql AS grp, COUNT(*) AS total FROM sms_logs GROUP BY grp");
+if ($stmt !== false) {
+    $result = mysqli_stmt_get_result($stmt);
+    while ($result && ($row = mysqli_fetch_assoc($result))) {
+        $smsCounts['all'] += (int)$row['total'];
+        if (isset($smsCounts[$row['grp']])) {
+            $smsCounts[$row['grp']] = (int)$row['total'];
+        }
+    }
+    mysqli_stmt_close($stmt);
+}
+$smsCounts['stuck'] = (int)safe_scalar($conn, "SELECT COUNT(*) FROM sms_logs WHERE $smsGroupSql = 'pending' AND date_sent < (NOW() - INTERVAL 1 DAY)");
+
+$smsLimit = 50;
 $smsLogs = [];
-$stmt = safe_query($conn, "SELECT * FROM sms_logs ORDER BY date_sent DESC LIMIT 50");
+$stmt = safe_query(
+    $conn,
+    "SELECT * FROM sms_logs {$smsFilters[$smsFilter][1]}
+     ORDER BY CASE $smsGroupSql WHEN 'failed' THEN 0 WHEN 'pending' THEN 1 ELSE 2 END ASC,
+              CASE WHEN $smsGroupSql = 'pending' THEN date_sent END ASC,
+              date_sent DESC
+     LIMIT $smsLimit"
+);
 if ($stmt !== false) {
     $result = mysqli_stmt_get_result($stmt);
     if ($result) {
@@ -185,6 +220,28 @@ if ($stmt !== false) {
     }
     mysqli_stmt_close($stmt);
 }
+
+$smsStatusInfo = static function (array $log): array {
+    $status = strtolower(trim((string)($log['status'] ?? '')));
+    $sentAt = strtotime((string)($log['date_sent'] ?? ''));
+    $waitSeconds = $sentAt ? max(0, time() - $sentAt) : 0;
+    $waitLabel = $waitSeconds >= 86400 ? floor($waitSeconds / 86400) . 'd' : ($waitSeconds >= 3600 ? floor($waitSeconds / 3600) . 'h' : max(1, floor($waitSeconds / 60)) . 'm');
+    if ($status === 'failed') {
+        return ['group' => 'failed', 'class' => 'admin-status-error', 'icon' => 'bi-x-circle-fill', 'hint' => 'Not delivered. Resend or contact the recipient.', 'urgent' => true];
+    }
+    if (in_array($status, ['pending', 'queued', 'sending'], true)) {
+        $stuck = $waitSeconds > 86400;
+        $hint = $status === 'sending' ? 'Being sent now' : ($stuck ? 'No update for ' . $waitLabel . '. Refresh statuses or check the provider.' : 'Waiting for ' . $waitLabel);
+        return ['group' => 'pending', 'class' => 'admin-status-pending', 'icon' => 'bi-hourglass-split', 'hint' => $hint, 'urgent' => $stuck];
+    }
+    if (in_array($status, ['delivered', 'success'], true)) {
+        return ['group' => 'delivered', 'class' => 'admin-status-complete', 'icon' => 'bi-check-circle-fill', 'hint' => 'Confirmed delivered', 'urgent' => false];
+    }
+    if ($status === 'sent') {
+        return ['group' => 'delivered', 'class' => 'admin-status-complete', 'icon' => 'bi-send-check-fill', 'hint' => 'Handed to the network', 'urgent' => false];
+    }
+    return ['group' => 'other', 'class' => 'admin-status-neutral', 'icon' => 'bi-question-circle', 'hint' => 'Unrecognized status', 'urgent' => false];
+};
 ?>
 <?php include 'header.php'; ?>
 <div class="row g-4">
@@ -214,9 +271,19 @@ if ($stmt !== false) {
                         </button>
                     </form>
                 </div>
+                <nav class="sms-filter-bar" aria-label="Filter SMS logs by status">
+                    <?php foreach ($smsFilters as $filterKey => $filterInfo): ?>
+                        <a href="sms<?php echo $filterKey === 'all' ? '' : '?status=' . $filterKey; ?>" class="sms-filter-chip sms-filter-<?php echo $filterKey; ?><?php echo $smsFilter === $filterKey ? ' is-active' : ''; ?>"<?php echo $smsFilter === $filterKey ? ' aria-current="true"' : ''; ?>>
+                            <?php echo sanitize($filterInfo[0]); ?> <strong><?php echo number_format($smsCounts[$filterKey]); ?></strong>
+                        </a>
+                    <?php endforeach; ?>
+                    <?php if ($smsCounts['stuck'] > 0): ?>
+                        <span class="sms-filter-note"><i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i><?php echo number_format($smsCounts['stuck']); ?> pending for over 24 hours</span>
+                    <?php endif; ?>
+                </nav>
                 <!-- Use the shared row-separated table skin consistently across admin lists. -->
                 <div class="table-responsive">
-                    <table class="table align-middle mb-0">
+                    <table class="table align-middle mb-0 sms-log-table">
                         <thead class="table-light">
                             <tr>
                                 <th scope="col">Date Sent</th>
@@ -228,15 +295,17 @@ if ($stmt !== false) {
                         </thead>
                         <tbody>
                             <?php if (count($smsLogs) === 0): ?>
-                                <tr><td colspan="5" class="text-center text-muted">No SMS logs found.</td></tr>
+                                <tr><td colspan="5" class="text-center text-muted"><?php echo $smsFilter === 'all' ? 'No SMS logs found.' : 'No ' . sanitize(strtolower($smsFilters[$smsFilter][0])) . ' messages.'; ?></td></tr>
                             <?php else: ?>
                                 <?php foreach ($smsLogs as $log): ?>
-                                    <tr>
-                                        <td><?php echo sanitize($log['date_sent']); ?></td>
+                                    <?php $info = $smsStatusInfo($log); ?>
+                                    <tr class="sms-row-<?php echo $info['group']; ?><?php echo $info['urgent'] ? ' is-urgent' : ''; ?>">
+                                        <td class="text-nowrap"><?php echo sanitize(date('M j, Y', strtotime($log['date_sent']))); ?><div class="small text-muted"><?php echo sanitize(date('g:i A', strtotime($log['date_sent']))); ?></div></td>
                                         <td><?php echo sanitize($log['recipient']); ?></td>
-                                        <td><?php echo sanitize(substr($log['message'], 0, 50)) . (strlen($log['message']) > 50 ? '...' : ''); ?></td>
+                                        <td title="<?php echo sanitize($log['message']); ?>"><?php echo sanitize(mb_substr($log['message'], 0, 50)) . (mb_strlen($log['message']) > 50 ? '...' : ''); ?></td>
                                         <td>
-                                            <?php echo sanitize($log['status']); ?>
+                                            <span class="badge sms-status-badge <?php echo $info['class']; ?>"><i class="bi <?php echo $info['icon']; ?> me-1" aria-hidden="true"></i><?php echo sanitize(ucfirst(strtolower((string)$log['status']))); ?></span>
+                                            <div class="small <?php echo $info['urgent'] ? 'text-danger fw-semibold' : 'text-muted'; ?>"><?php echo sanitize($info['hint']); ?></div>
                                             <?php if (!empty($log['provider_message_id'])): ?>
                                                 <div class="small text-muted"><?php echo sanitize($log['provider_name'] ?? 'Semaphore'); ?> ID: <?php echo sanitize($log['provider_message_id']); ?></div>
                                             <?php endif; ?>
@@ -260,6 +329,9 @@ if ($stmt !== false) {
                         </tbody>
                     </table>
                 </div>
+                <?php if ($smsCounts[$smsFilter] > count($smsLogs)): ?>
+                    <p class="small text-muted mt-3 mb-0">Showing the first <?php echo number_format(count($smsLogs)); ?> of <?php echo number_format($smsCounts[$smsFilter]); ?> messages. Failed and pending messages are listed first.</p>
+                <?php endif; ?>
             </div>
         </div>
     </div>
