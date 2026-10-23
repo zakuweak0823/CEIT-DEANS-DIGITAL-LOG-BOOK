@@ -339,9 +339,6 @@ $clearFilterQuery = $submitterFilter !== 'All' ? ['submitter' => $submitterFilte
             <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#incomingForm">
                 <i class="bi bi-plus-lg"></i> Add Document
             </button>
-            <a class="btn btn-primary" href="quick_document">
-                <i class="bi bi-lightning-charge"></i> Quick Submit
-            </a>
             </div>
         </div>
     </div>

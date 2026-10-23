@@ -884,9 +884,6 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                 <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#create-batch" <?php echo $setupError ? 'disabled' : ''; ?>>
                     <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Add Bulk Documents
                 </button>
-                <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#batchScannerModal" <?php echo $setupError ? 'disabled' : ''; ?>>
-                    <i class="bi bi-qr-code-scan me-1" aria-hidden="true"></i>Scan CEIT QR
-                </button>
             </div>
         </div>
     </div>
