@@ -1,6 +1,9 @@
 <?php
 mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
+// The shortest password allowed for administrator accounts; every form and check reads this one value.
+const ADMIN_PASSWORD_MIN_LENGTH = 8;
+
 // Centralize the connection so admin pages and the mobile API share one UTF-8 database setup.
 $host = "localhost";
 $user = "root";

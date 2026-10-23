@@ -26,13 +26,13 @@ if (!$user) {
 }
 
 // Typed input is visible on screen, so run this only on a private console.
-fwrite(STDOUT, "New password for \"$username\" (at least 12 characters): ");
+fwrite(STDOUT, "New password for \"$username\" (at least " . ADMIN_PASSWORD_MIN_LENGTH . " characters): ");
 $password = rtrim((string)fgets(STDIN), "\r\n");
 fwrite(STDOUT, 'Repeat the password: ');
 $repeat = rtrim((string)fgets(STDIN), "\r\n");
 
-if (preg_match_all('/./us', $password) < 12) {
-    fwrite(STDERR, "The password must have at least 12 characters. Nothing was changed.\n");
+if (preg_match_all('/./us', $password) < ADMIN_PASSWORD_MIN_LENGTH) {
+    fwrite(STDERR, 'The password must have at least ' . ADMIN_PASSWORD_MIN_LENGTH . " characters. Nothing was changed.\n");
     exit(1);
 }
 if ($password !== $repeat) {

@@ -10596,3 +10596,441 @@ button.dashboard-sla-stat.dashboard-sla-link { width: 100%; text-align: left; fo
 .sms-log-table > tbody > tr.sms-row-pending.is-urgent > td {
     background-color: #fffaf0;
 }
+
+/* Administrator accounts page. */
+.admin-accounts-page .card-title,
+.admin-accounts-page .card-body > h2 {
+    text-align: left;
+}
+
+.admin-accounts-page #ownSecurity {
+    scroll-margin-top: 5rem;
+}
+
+.admin-accounts-page .accounts-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.admin-accounts-page .accounts-summary-item {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    min-width: 0;
+    padding: 0.85rem 1rem;
+    border: 1px solid #e3e9e0;
+    border-radius: 0.9rem;
+    background: #fff;
+}
+
+.admin-accounts-page .accounts-summary-icon {
+    display: grid;
+    flex: 0 0 2.5rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    place-items: center;
+    border-radius: 0.7rem;
+    background: #eef4ef;
+    color: #17613e;
+    font-size: 1.15rem;
+}
+
+.admin-accounts-page .accounts-summary-copy {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.2;
+}
+
+.admin-accounts-page .accounts-summary-copy strong {
+    color: #1d3a2a;
+    font-size: 1.4rem;
+}
+
+.admin-accounts-page .accounts-summary-copy small {
+    color: #6b7a70;
+    font-size: 0.78rem;
+}
+
+.admin-accounts-page .accounts-summary-item.is-good .accounts-summary-icon {
+    background: #e3f3e8;
+    color: #17613e;
+}
+
+.admin-accounts-page .accounts-summary-item.is-warn {
+    border-color: #f1d9a6;
+    background: #fffaf0;
+}
+
+.admin-accounts-page .accounts-summary-item.is-warn .accounts-summary-icon {
+    background: #fdf0cc;
+    color: #8a6500;
+}
+
+.admin-accounts-page .account-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.admin-accounts-page .account-avatar {
+    display: grid;
+    flex: 0 0 2.4rem;
+    width: 2.4rem;
+    height: 2.4rem;
+    place-items: center;
+    border-radius: 50%;
+    background: #e8eee9;
+    color: #405347;
+    font-weight: 700;
+}
+
+.admin-accounts-page .account-avatar.is-super {
+    background: #17613e;
+    color: #fff;
+}
+
+.admin-accounts-page .account-cell-copy {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.admin-accounts-page .account-cell-copy strong {
+    overflow-wrap: anywhere;
+}
+
+.admin-accounts-page .account-you {
+    margin-left: 0.3rem;
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    background: #e8eee9;
+    color: #405347;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.admin-accounts-page .account-recovery {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.admin-accounts-page .account-recovery.is-on {
+    background: #e3f3e8;
+    color: #17613e;
+}
+
+.admin-accounts-page .account-recovery.is-off {
+    background: #fdf0cc;
+    color: #7a5b00;
+}
+
+.admin-accounts-page .account-phone {
+    display: block;
+    margin-top: 0.25rem;
+    color: #6b7a70;
+    font-size: 0.78rem;
+    letter-spacing: 0.04em;
+}
+
+.admin-accounts-page .card-body p .account-phone {
+    display: inline;
+    margin-top: 0;
+}
+
+.admin-accounts-page .accounts-card-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+    margin-bottom: 1rem;
+}
+
+.admin-accounts-page .accounts-card-head > div {
+    flex: 1 1 22rem;
+    min-width: 0;
+}
+
+.admin-accounts-page .accounts-add-button {
+    flex: 0 0 auto;
+}
+
+.admin-accounts-page .card {
+    overflow: visible;
+}
+
+.admin-accounts-page .accounts-list {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    border: 1px solid #e3e9e0;
+    border-radius: 0.9rem;
+    list-style: none;
+}
+
+.admin-accounts-page .accounts-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 9.5rem;
+    align-items: center;
+    gap: 0.75rem 1.25rem;
+    padding: 0.85rem 1rem;
+    background: #fff;
+    transition: background-color 0.18s ease;
+    animation: accountsRowIn 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+    animation-delay: calc(var(--row-index, 0) * 45ms);
+}
+
+/* The row with an open menu must sit above the rows below it. */
+.admin-accounts-page .accounts-row:focus-within,
+.admin-accounts-page .accounts-row:has(.dropdown-menu.show) {
+    position: relative;
+    z-index: 5;
+}
+
+.admin-accounts-page .accounts-row:first-child {
+    border-radius: 0.9rem 0.9rem 0 0;
+}
+
+.admin-accounts-page .accounts-row:last-child {
+    border-radius: 0 0 0.9rem 0.9rem;
+}
+
+.admin-accounts-page .accounts-row:only-child {
+    border-radius: 0.9rem;
+}
+
+.admin-accounts-page .accounts-row + .accounts-row {
+    border-top: 1px solid #edf0eb;
+}
+
+.admin-accounts-page .accounts-row:hover {
+    background: #f7faf6;
+}
+
+.admin-accounts-page .account-recovery-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.admin-accounts-page .account-field-label {
+    color: #78847b;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.admin-accounts-page .account-recovery .account-phone {
+    display: inline;
+    margin: 0 0 0 0.35rem;
+    padding-left: 0.4rem;
+    border-left: 1px solid currentColor;
+    font-weight: 600;
+    opacity: 0.85;
+}
+
+.admin-accounts-page .account-manage {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.admin-accounts-page .accounts-manage-toggle {
+    display: inline-flex;
+    align-items: center;
+    min-width: 6.5rem;
+    justify-content: center;
+}
+
+.admin-accounts-page .accounts-manage-toggle .bi-chevron-down {
+    font-size: 0.7rem;
+    transition: transform 0.2s ease;
+}
+
+.admin-accounts-page .accounts-manage-toggle[aria-expanded="true"] .bi-chevron-down {
+    transform: rotate(180deg);
+}
+
+.accounts-menu {
+    min-width: 14rem;
+    padding: 0.4rem;
+    border: 1px solid #e3e9e0;
+    border-radius: 0.8rem;
+    box-shadow: 0 14px 34px rgba(17, 65, 41, 0.16);
+    transform-origin: top right;
+}
+
+.accounts-menu.show {
+    animation: accountsMenuIn 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.1) backwards;
+}
+
+.accounts-menu .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.55rem 0.7rem;
+    border-radius: 0.55rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    transition: background-color 0.15s ease, transform 0.15s ease;
+}
+
+.accounts-menu .dropdown-item:hover,
+.accounts-menu .dropdown-item:focus-visible {
+    background: #eef4ef;
+    transform: translateX(2px);
+}
+
+.accounts-menu .dropdown-item i {
+    width: 1.1rem;
+    color: #17613e;
+    text-align: center;
+}
+
+.accounts-menu .dropdown-item.is-danger,
+.accounts-menu .dropdown-item.is-danger i {
+    color: #b42318;
+}
+
+.accounts-menu .dropdown-item.is-danger:hover,
+.accounts-menu .dropdown-item.is-danger:focus-visible {
+    background: #fdecec;
+}
+
+.accounts-modal .modal-content {
+    border: 0;
+    border-radius: 1.1rem;
+    box-shadow: 0 24px 60px rgba(17, 65, 41, 0.22);
+}
+
+.accounts-modal .modal-header {
+    align-items: flex-start;
+    gap: 0.85rem;
+    padding: 1.25rem 1.25rem 0.75rem;
+    border-bottom: 0;
+    text-align: left;
+}
+
+.accounts-modal .modal-header > div {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.accounts-modal .modal-title {
+    margin: 0;
+    color: #17613e;
+    font-size: 1.15rem;
+    text-align: left;
+}
+
+.accounts-modal-sub {
+    margin: 0.2rem 0 0;
+    color: #6b7a70;
+    font-size: 0.85rem;
+}
+
+.accounts-modal-icon {
+    display: grid;
+    flex: 0 0 2.6rem;
+    width: 2.6rem;
+    height: 2.6rem;
+    place-items: center;
+    border-radius: 0.8rem;
+    background: #e3f3e8;
+    color: #17613e;
+    font-size: 1.2rem;
+}
+
+.accounts-modal-icon.is-danger {
+    background: #fdecec;
+    color: #b42318;
+}
+
+.accounts-modal .modal-body {
+    padding: 0.5rem 1.25rem 0.75rem;
+}
+
+.accounts-modal .modal-footer {
+    padding: 0.75rem 1.25rem 1.25rem;
+    border-top: 0;
+    gap: 0.5rem;
+}
+
+.modal.accounts-modal.fade .modal-dialog {
+    opacity: 0;
+    transform: translateY(18px) scale(0.96);
+    transition: transform 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.1), opacity 0.2s ease;
+}
+
+.modal.accounts-modal.show .modal-dialog {
+    opacity: 1;
+    transform: none;
+}
+
+@keyframes accountsRowIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes accountsMenuIn {
+    /* Individual properties leave `transform` alone, which the dropdown uses for its position. */
+    from { opacity: 0; translate: 0 -6px; scale: 0.95; }
+    to { opacity: 1; translate: 0 0; scale: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .admin-accounts-page .accounts-row,
+    .accounts-menu.show {
+        animation: none;
+    }
+
+    .modal.accounts-modal.fade .modal-dialog,
+    .accounts-menu .dropdown-item,
+    .admin-accounts-page .accounts-manage-toggle .bi-chevron-down {
+        transition: none;
+    }
+}
+
+@media (max-width: 767.98px) {
+    .admin-accounts-page .accounts-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .admin-accounts-page .account-recovery-cell {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        flex-direction: row;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .admin-accounts-page .account-manage {
+        grid-column: 2;
+        grid-row: 1;
+    }
+}
+
+@media (max-width: 991.98px) {
+    .admin-accounts-page .accounts-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 420px) {
+    .admin-accounts-page .accounts-summary {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

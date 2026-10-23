@@ -39,7 +39,7 @@ control for the mobile API or admin portal.
 - **Password storage:** new passwords use PHP's `password_hash()` and
   `password_verify()`. The legacy seeded plaintext password is upgraded to a
   hash when it is successfully used; it remains unsafe until changed. New
-  administrator and reset passwords must be at least 12 characters.
+  administrator and reset passwords must be at least 8 characters.
 - **Database access:** the shared query helper uses MySQLi prepared
   statements for bound values. Dynamic SQL identifiers still require
   allow-listing because placeholders only bind values.

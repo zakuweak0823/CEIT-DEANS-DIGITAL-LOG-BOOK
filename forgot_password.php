@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (strlen($code) !== 6) {
             $error = 'Enter the 6-digit code from your SMS.';
         } elseif (!admin_password_meets_minimum_length($password)) {
-            $error = 'Use a password with at least 12 characters.';
+            $error = 'Use a password with at least ' . ADMIN_PASSWORD_MIN_LENGTH . ' characters.';
         } elseif ($password !== $confirmation) {
             $error = 'The password fields do not match.';
         } else {
@@ -157,15 +157,15 @@ $step = is_array($pending) ? 'reset' : 'request';
                         <label for="recoveryPassword">New password</label>
                         <div class="login-input-wrap">
                             <i class="bi bi-lock" aria-hidden="true"></i>
-                            <input type="password" id="recoveryPassword" name="password" class="form-control" minlength="12" autocomplete="new-password" aria-describedby="recoveryPasswordHint" required>
+                            <input type="password" id="recoveryPassword"                             name="password" class="form-control" minlength="<?php echo ADMIN_PASSWORD_MIN_LENGTH; ?>" autocomplete="new-password" aria-describedby="recoveryPasswordHint" required>
                         </div>
-                        <span id="recoveryPasswordHint" class="form-text">At least 12 characters.</span>
+                                                    <span id="recoveryPasswordHint" class="form-text">At least <?php echo ADMIN_PASSWORD_MIN_LENGTH; ?> characters.</span>
                     </div>
                     <div class="login-field">
                         <label for="recoveryPasswordConfirmation">Confirm new password</label>
                         <div class="login-input-wrap">
                             <i class="bi bi-lock-fill" aria-hidden="true"></i>
-                            <input type="password" id="recoveryPasswordConfirmation" name="password_confirmation" class="form-control" minlength="12" autocomplete="new-password" required>
+                            <input type="password" id="recoveryPasswordConfirmation" name="password_confirmation" class="form-control" minlength="<?php echo ADMIN_PASSWORD_MIN_LENGTH; ?>" autocomplete="new-password" required>
                         </div>
                     </div>
                     <button type="submit" name="reset_password" value="1" class="btn login-submit">

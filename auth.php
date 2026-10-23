@@ -90,7 +90,7 @@ function admin_status_badge_class($status): string
 
 function admin_password_meets_minimum_length($password): bool
 {
-    return is_string($password) && preg_match_all('/./us', $password) >= 12;
+    return is_string($password) && preg_match_all('/./us', $password) >= ADMIN_PASSWORD_MIN_LENGTH;
 }
 
 function csrf_token()

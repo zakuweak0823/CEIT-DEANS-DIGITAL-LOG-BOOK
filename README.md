@@ -77,7 +77,7 @@ The shortest path to a working admin portal on a Windows computer:
 5. **Sign in** at `http://localhost/<your-folder-name>/login` with the seeded
    `admin` / `admin` account.
 6. **Change the password immediately:** open **Administrator accounts →
-   Change your password** and choose a unique password of at least 12
+   Change your password** and choose a unique password of at least 8
    characters.
 7. **Create staff accounts** (optional) under **Administrator accounts** so
    each person signs in with their own credentials.
@@ -330,7 +330,7 @@ stored or sent until you press **Sign In**.
 
 **Create a staff account:** sign in as Super Admin → **Administrator accounts**
 → enter a username (3–100 letters, numbers, `.`, `_`, or `-`) and a password
-of at least 12 characters, confirmed twice → **Create account**. Share the initial password through a
+of at least 8 characters, confirmed twice → **Create account**. Share the initial password through a
 secure channel, such as in person.
 
 **A standard admin forgot their password (self-service by SMS):**
@@ -339,7 +339,7 @@ secure channel, such as in person.
    username, and choose **Send recovery code**.
 2. A 6-digit code is texted to the account's **recovery phone**. It expires
    after 10 minutes, works once, and is locked after 5 wrong tries.
-3. They enter the code and a new password (12+ characters, typed twice). The
+3. They enter the code and a new password (8+ characters, typed twice). The
    account is signed out everywhere, including the mobile app, and a notice
    SMS confirms the change.
 
@@ -353,7 +353,7 @@ appear in the SMS logs.
 
 **No recovery phone, or SMS is unavailable:** ask a Super Admin to reset it.
 They open **Administrator accounts**, select **Reset password**, enter a new
-temporary password (12+ characters) twice, and choose **Save password**, then
+temporary password (8+ characters) twice, and choose **Save password**, then
 share it securely. Resetting a password signs that account out of any
 existing sessions.
 
@@ -679,7 +679,7 @@ A summary of the protections built into the system, grouped by type. See the
   new or reset accounts. The seeded plaintext `admin` password is upgraded to
   a hash on first successful use.
 - **Password strength:** new and reset administrator passwords must be at least
-  12 characters.
+  8 characters.
 - **Role-based access control:** Super Admin and Admin roles are re-verified
   against the database on every protected request. Account management is
   restricted to Super Admins.
