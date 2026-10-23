@@ -348,7 +348,7 @@ $modalPhoneField = static function (string $id, string $value = '') {
                 </div>
                 <div class="row g-3 mb-3">
                     <div class="col-12 col-sm-6">
-                        <label class="form-label" for="newAdminPassword">Initial password</label>
+                        <label class="form-label" for="newAdminPassword">Password</label>
                         <input class="form-control" type="password" id="newAdminPassword" name="password" minlength="<?php echo ADMIN_PASSWORD_MIN_LENGTH; ?>" autocomplete="new-password" required>
                     </div>
                     <div class="col-12 col-sm-6">
