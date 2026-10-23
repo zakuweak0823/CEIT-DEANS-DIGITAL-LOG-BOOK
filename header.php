@@ -77,8 +77,8 @@ if ($adminName && isset($conn) && function_exists('safe_query')) {
     <title>CEIT Dean's Office Digital Logbook</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-    <!-- Bump this asset version when shared styles change to refresh browser caches. -->
-    <link rel="stylesheet" href="assets/css/style.css?v=workspace-consistency-7">
+    <!-- The version follows the file's modified time so style changes always bypass stale browser caches. -->
+    <link rel="stylesheet" href="assets/css/style.css?v=<?php echo (int)@filemtime(__DIR__ . '/assets/css/style.css'); ?>">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body<?php echo $adminName ? ' class="admin-body' . ($showAdminLoginArrival ? ' admin-login-arrival' : '') . (($_GET['embed'] ?? '') === '1' ? ' admin-embedded-body' : '') . '" data-latest-document-id="' . (int)($latestDocumentId ?? 0) . '" data-document-activity-ready="' . ($latestDocumentId === null ? 'false' : 'true') . '"' : ($isLoginPage ? ' class="login-page"' : ''); ?>>
