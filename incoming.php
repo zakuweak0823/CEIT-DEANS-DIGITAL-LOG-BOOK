@@ -10,16 +10,20 @@ $mobileFormLabels = get_mobile_form_labels($conn);
 try {
     ensure_document_tracking_schema($conn);
     $documentTrackingSettings = get_document_tracking_settings($conn);
-    foreach ([
-        'ALTER TABLE documents ADD COLUMN IF NOT EXISTS client_phone VARCHAR(20) DEFAULT NULL',
-        "ALTER TABLE documents ADD COLUMN IF NOT EXISTS submitter_type VARCHAR(20) NOT NULL DEFAULT 'Other'",
-        'ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_priority TINYINT(1) NOT NULL DEFAULT 0',
-        "UPDATE documents SET submitter_type = sender WHERE submitter_type = 'Other' AND sender IN ('Student', 'Faculty')",
-        "UPDATE documents SET status = 'Pending' WHERE type = 'Incoming' AND status = 'Received'",
-    ] as $schemaSql) {
-        if ($conn->query($schemaSql) === false) {
-            throw new RuntimeException($conn->error);
+    // These schema and data fixes only need to run once per login session, not on every page view.
+    if (empty($_SESSION['incoming_schema_ready'])) {
+        foreach ([
+            'ALTER TABLE documents ADD COLUMN IF NOT EXISTS client_phone VARCHAR(20) DEFAULT NULL',
+            "ALTER TABLE documents ADD COLUMN IF NOT EXISTS submitter_type VARCHAR(20) NOT NULL DEFAULT 'Other'",
+            'ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_priority TINYINT(1) NOT NULL DEFAULT 0',
+            "UPDATE documents SET submitter_type = sender WHERE submitter_type = 'Other' AND sender IN ('Student', 'Faculty')",
+            "UPDATE documents SET status = 'Pending' WHERE type = 'Incoming' AND status = 'Received'",
+        ] as $schemaSql) {
+            if ($conn->query($schemaSql) === false) {
+                throw new RuntimeException($conn->error);
+            }
         }
+        $_SESSION['incoming_schema_ready'] = true;
     }
 } catch (Throwable $error) {
     error_log('Incoming document tracking setup failed: ' . $error->getMessage());
@@ -32,6 +36,43 @@ $releaseOutcome = null;
 $setReleaseOutcome = static function ($title, $detail, $type = 'info') use (&$releaseOutcome) {
     $releaseOutcome = ['title' => $title, 'detail' => $detail, 'type' => $type];
 };
+
+// After an action, the page redirects so refreshing the browser cannot submit the same form twice.
+// The result message travels in the session for exactly one page view.
+if (isset($_SESSION['incoming_flash']) && is_array($_SESSION['incoming_flash'])) {
+    $message = (string)($_SESSION['incoming_flash']['message'] ?? '');
+    $flashOutcome = $_SESSION['incoming_flash']['releaseOutcome'] ?? null;
+    $releaseOutcome = is_array($flashOutcome) ? $flashOutcome : null;
+}
+unset($_SESSION['incoming_flash']);
+$shouldRedirect = false;
+$reopenAddModal = false;
+
+// Read posted values safely: arrays or missing fields become an empty/default string instead of an error.
+$postText = static function (string $key, string $default = ''): string {
+    return isset($_POST[$key]) && is_string($_POST[$key]) ? trim($_POST[$key]) : $default;
+};
+$postId = static function (string $key): int {
+    $value = isset($_POST[$key]) && is_string($_POST[$key]) ? trim($_POST[$key]) : '';
+    return ctype_digit($value) ? (int)$value : 0;
+};
+$textLength = static function (string $value): int {
+    return function_exists('mb_strlen') ? mb_strlen($value, 'UTF-8') : strlen($value);
+};
+// One set of rules for adding and editing. Returns an error message, or null when the input is valid.
+$validateIncoming = static function (string $submitterName, string $submitterType, string $sender, string $subject, ?string $clientPhone) use ($textLength): ?string {
+    if ($submitterName === '' || $subject === '' || !in_array($submitterType, ['Student', 'Faculty', 'Other'], true)) {
+        return 'Submitter name, submitter type, and document type are required.';
+    }
+    if ($textLength($submitterName) > 255 || $textLength($sender) > 255 || $textLength($subject) > 255) {
+        return 'The name, department or office, and document type must each be 255 characters or fewer.';
+    }
+    if ($clientPhone === null || ($clientPhone !== '' && !is_valid_contact_number($clientPhone))) {
+        return 'Enter an 11-digit contact number using digits only, or leave it blank.';
+    }
+    return null;
+};
+
 $sender = '';
 $submitterName = '';
 $submitterType = 'Other';
@@ -39,20 +80,27 @@ $recipient = '';
 $subject = '';
 $remarks = '';
 $clientPhone = '';
-$search = trim($_GET['search'] ?? '');
+
+$search = isset($_GET['search']) && is_string($_GET['search']) ? trim($_GET['search']) : '';
 $documentIdParam = $_GET['document_id'] ?? '';
 $documentIdFilter = is_string($documentIdParam) && ctype_digit($documentIdParam) ? (int)$documentIdParam : 0;
-$statusFilter = trim($_GET['status'] ?? '');
+$statusFilter = isset($_GET['status']) && is_string($_GET['status']) ? trim($_GET['status']) : '';
 $overdueFilter = ($_GET['overdue'] ?? '') === '1';
 $orderFilter = ($_GET['order'] ?? '') === 'newest' ? 'newest' : 'oldest';
-$overdueDays = (int)get_sla_settings($conn)['incomingDays'];
+$slaSettings = get_sla_settings($conn);
+$overdueDays = (int)$slaSettings['incomingDays'];
 $validStatusFilters = ['Pending', 'For Release', 'Released'];
 if (!in_array($statusFilter, $validStatusFilters, true)) {
     $statusFilter = '';
 }
+$submitterFilter = isset($_GET['submitter']) && is_string($_GET['submitter']) ? $_GET['submitter'] : 'All';
+if (!in_array($submitterFilter, ['All', 'Faculty', 'Student', 'Other'], true)) {
+    $submitterFilter = 'All';
+}
 
 if (isset($_POST['issue_tracking_qr'])) {
-    $documentId = (int)($_POST['tracking_doc_id'] ?? 0);
+    $shouldRedirect = true;
+    $documentId = $postId('tracking_doc_id');
     if (!$documentTrackingSettings['enabled']) {
         $message = show_alert('Document tracking is turned off in Admin Settings.', 'warning');
     } elseif ($documentId <= 0) {
@@ -94,68 +142,71 @@ if (isset($_POST['issue_tracking_qr'])) {
         }
     }
 } elseif (isset($_POST['save'])) {
-    $sender = trim($_POST['sender'] ?? '');
-    $submitterName = trim($_POST['submitter_name'] ?? '');
-    $submitterType = trim($_POST['submitter_type'] ?? 'Other');
+    $sender = $postText('sender');
+    $submitterName = $postText('submitter_name');
+    $submitterType = $postText('submitter_type', 'Other');
     $recipient = '';
-    $subject = trim($_POST['subject'] ?? '');
-    $remarks = trim($_POST['remarks'] ?? '');
-    $clientPhone = contact_number_input($_POST['client_phone'] ?? '');
+    $subject = $postText('subject');
+    $remarks = $postText('remarks');
+    $clientPhone = contact_number_input($postText('client_phone'));
 
-    if ($subject === '' || $submitterName === '' || strlen($submitterName) > 255 || !in_array($submitterType, ['Student', 'Faculty', 'Other'], true)) {
-        $message = show_alert('Submitter name, submitter type, and document type are required. The name must be 255 characters or fewer.', 'danger');
-    } elseif ($clientPhone === null || ($clientPhone !== '' && !is_valid_contact_number($clientPhone))) {
-        $message = show_alert('Enter an 11-digit contact number using digits only, or leave it blank.', 'danger');
+    $validationError = $validateIncoming($submitterName, $submitterType, $sender, $subject, $clientPhone);
+    if ($validationError !== null) {
+        $message = show_alert($validationError, 'danger');
+        $reopenAddModal = true;
     } else {
         $phoneValue = $clientPhone === '' ? null : $clientPhone;
         $stmt = safe_query($conn, "INSERT INTO documents(type, sender, submitter_name, recipient, client_phone, subject, remarks, status, submitter_type) VALUES('Incoming', ?, ?, ?, ?, ?, ?, 'Pending', ?)", 'sssssss', [$sender, $submitterName, $recipient, $phoneValue, $subject, $remarks, $submitterType]);
         if ($stmt !== false) {
             mysqli_stmt_close($stmt);
             $message = show_alert('Incoming document saved successfully.');
-            $sender = $submitterName = $recipient = $subject = $remarks = $clientPhone = '';
-            $submitterType = 'Other';
+            $shouldRedirect = true;
         } else {
             $message = show_alert('Failed to save incoming document.', 'danger');
+            $reopenAddModal = true;
         }
     }
 }
 
 if (isset($_POST['update'])) {
-    $id = (int)($_POST['id'] ?? 0);
-    $sender = trim($_POST['sender'] ?? '');
-    $submitterName = trim($_POST['submitter_name'] ?? '');
-    $subject = trim($_POST['subject'] ?? '');
-    $remarks = trim($_POST['remarks'] ?? '');
-    $clientPhone = contact_number_input($_POST['client_phone'] ?? '');
-    $submitterType = trim($_POST['submitter_type'] ?? 'Other');
+    $id = $postId('id');
+    $editSender = $postText('sender');
+    $editSubmitterName = $postText('submitter_name');
+    $editSubject = $postText('subject');
+    $editRemarks = $postText('remarks');
+    $editClientPhone = contact_number_input($postText('client_phone'));
+    $editSubmitterType = $postText('submitter_type', 'Other');
 
-    if ($id > 0 && $submitterName !== '' && strlen($submitterName) <= 255 && $subject !== '' && in_array($submitterType, ['Student', 'Faculty', 'Other'], true) && $clientPhone !== null && ($clientPhone === '' || is_valid_contact_number($clientPhone))) {
-        $phoneValue = $clientPhone === '' ? null : $clientPhone;
-        $stmt = safe_query($conn, "UPDATE documents SET sender = ?, submitter_name = ?, client_phone = ?, subject = ?, remarks = ?, submitter_type = ? WHERE doc_id = ? AND type = 'Incoming'", 'ssssssi', [$sender, $submitterName, $phoneValue, $subject, $remarks, $submitterType, $id]);
+    $validationError = $id <= 0
+        ? 'The selected document is invalid. Refresh the page and try again.'
+        : $validateIncoming($editSubmitterName, $editSubmitterType, $editSender, $editSubject, $editClientPhone);
+    if ($validationError !== null) {
+        $message = show_alert($validationError, 'danger');
+    } else {
+        $phoneValue = $editClientPhone === '' ? null : $editClientPhone;
+        $stmt = safe_query($conn, "UPDATE documents SET sender = ?, submitter_name = ?, client_phone = ?, subject = ?, remarks = ?, submitter_type = ? WHERE doc_id = ? AND type = 'Incoming'", 'ssssssi', [$editSender, $editSubmitterName, $phoneValue, $editSubject, $editRemarks, $editSubmitterType, $id]);
         if ($stmt !== false) {
             mysqli_stmt_close($stmt);
             $message = show_alert('Incoming document updated successfully.');
+            $shouldRedirect = true;
         } else {
             $message = show_alert('Failed to update incoming document.', 'danger');
         }
-    } else {
-        $message = show_alert($clientPhone === null || ($clientPhone !== '' && !is_valid_contact_number($clientPhone))
-            ? 'Enter an 11-digit contact number using digits only, or leave it blank.'
-            : 'Check the submitter name, submitter type, document type, and record details.', 'danger');
     }
 }
 
 if (isset($_POST['prepare_release'])) {
-    $id = (int)($_POST['prepare_release_id'] ?? 0);
+    $shouldRedirect = true;
+    $id = $postId('prepare_release_id');
     if ($id <= 0) {
         $message = show_alert('Invalid document selected.', 'danger');
         $setReleaseOutcome('Could not prepare document', 'The selected document ID is invalid. Refresh the page and try again.', 'danger');
     } else {
-        $stmt = safe_query($conn, "SELECT sender, recipient, status FROM documents WHERE doc_id = ? AND type = 'Incoming'", 'i', [$id]);
+        $stmt = safe_query($conn, "SELECT sender, submitter_name, recipient, status FROM documents WHERE doc_id = ? AND type = 'Incoming'", 'i', [$id]);
         $releaseDocument = null;
         if ($stmt !== false) {
             $result = mysqli_stmt_get_result($stmt);
-            $releaseDocument = mysqli_fetch_assoc($result) ?: null;
+            $releaseDocument = $result ? (mysqli_fetch_assoc($result) ?: null) : null;
             mysqli_stmt_close($stmt);
         }
         if (!$releaseDocument) {
@@ -170,7 +221,12 @@ if (isset($_POST['prepare_release'])) {
             $outgoingSender = trim((string)$releaseDocument['recipient']) !== ''
                 ? $releaseDocument['recipient']
                 : "Dean's Office";
-            $stmt = safe_query($conn, "UPDATE documents SET type = 'Outgoing', status = 'For Release', sender = ?, recipient = ? WHERE doc_id = ? AND type = 'Incoming' AND status = 'Pending'", 'ssi', [$outgoingSender, $releaseDocument['sender'], $id]);
+            // When no department or office was saved, the submitter's name becomes the outgoing recipient
+            // so the outgoing record never loses track of who the document goes back to.
+            $outgoingRecipient = trim((string)$releaseDocument['sender']) !== ''
+                ? $releaseDocument['sender']
+                : trim((string)($releaseDocument['submitter_name'] ?? ''));
+            $stmt = safe_query($conn, "UPDATE documents SET type = 'Outgoing', status = 'For Release', sender = ?, recipient = ? WHERE doc_id = ? AND type = 'Incoming' AND status = 'Pending'", 'ssi', [$outgoingSender, $outgoingRecipient, $id]);
             if ($stmt === false || mysqli_stmt_affected_rows($stmt) !== 1) {
                 if ($stmt !== false) mysqli_stmt_close($stmt);
                 $message = show_alert('The document could not be prepared. Refresh the page and try again.', 'danger');
@@ -178,14 +234,15 @@ if (isset($_POST['prepare_release'])) {
             } else {
                 mysqli_stmt_close($stmt);
                 $message = show_alert('Document moved to Outgoing as For Release.');
-                $setReleaseOutcome('Document prepared for release', 'The document is now in Outgoing with status “For Release”. Its previous recipient is used as the outgoing sender, or Dean’s Office if no recipient was saved; the original sender remains the recipient.', 'success');
+                $setReleaseOutcome('Document prepared for release', 'The document is now in Outgoing with status “For Release”. Its previous recipient is used as the outgoing sender, or Dean’s Office if no recipient was saved. The original sender becomes the recipient, or the submitter’s name if no department or office was saved.', 'success');
             }
         }
     }
 }
 
 if (isset($_POST['toggle_priority'])) {
-    $id = (int)($_POST['priority_doc_id'] ?? 0);
+    $shouldRedirect = true;
+    $id = $postId('priority_doc_id');
     $stmt = safe_query($conn, "UPDATE documents SET is_priority = IF(is_priority = 1, 0, 1) WHERE doc_id = ? AND type = 'Incoming' AND submitter_type = 'Faculty'", 'i', [$id]);
     if ($stmt !== false) {
         $updated = mysqli_stmt_affected_rows($stmt);
@@ -198,39 +255,67 @@ if (isset($_POST['toggle_priority'])) {
     }
 }
 
-$submitterFilter = $_GET['submitter'] ?? 'All';
-if (!in_array($submitterFilter, ['All', 'Faculty', 'Student', 'Other'], true)) {
-    $submitterFilter = 'All';
-}
-$documents = [];
-if ($overdueFilter && $documentIdFilter === 0) {
-    // The dashboard's overdue tile must list only documents past their processing time.
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND status = 'Pending' AND date_created < (NOW() - INTERVAL ? DAY) ORDER BY date_created ASC", 'i', [$overdueDays]);
-} elseif ($documentIdFilter > 0) {
-    // Quick Submit's Manage action must show only the selected incoming record.
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND doc_id = ?", 'i', [$documentIdFilter]);
-} elseif ($search !== '' && $statusFilter !== '' && $submitterFilter !== 'All') {
-    $searchTerm = "%{$search}%";
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND status = ? AND submitter_type = ? AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ?) ORDER BY is_priority DESC, date_created ASC, doc_id ASC", 'sssssss', [$statusFilter, $submitterFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
-} elseif ($search !== '' && $statusFilter !== '') {
-    $searchTerm = "%{$search}%";
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND status = ? AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ?) ORDER BY is_priority DESC, date_created ASC, doc_id ASC", 'ssssss', [$statusFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
-} elseif ($search !== '' && $submitterFilter !== 'All') {
-    $searchTerm = "%{$search}%";
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND submitter_type = ? AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ? OR status LIKE ?) ORDER BY is_priority DESC, date_created ASC, doc_id ASC", 'sssssss', [$submitterFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
-} elseif ($search !== '') {
-    $searchTerm = "%{$search}%";
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ? OR status LIKE ?) ORDER BY is_priority DESC, date_created ASC, doc_id ASC", 'ssssss', [$searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
-} elseif ($statusFilter !== '' && $submitterFilter !== 'All') {
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND status = ? AND submitter_type = ? ORDER BY is_priority DESC, date_created ASC, doc_id ASC", 'ss', [$statusFilter, $submitterFilter]);
-} elseif ($statusFilter !== '') {
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND status = ? ORDER BY is_priority DESC, date_created ASC, doc_id ASC", 's', [$statusFilter]);
-} elseif ($submitterFilter !== 'All') {
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' AND submitter_type = ? ORDER BY is_priority DESC, date_created ASC, doc_id ASC", 's', [$submitterFilter]);
-} else {
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Incoming' ORDER BY is_priority DESC, date_created ASC, doc_id ASC");
+if ($shouldRedirect) {
+    $_SESSION['incoming_flash'] = ['message' => $message, 'releaseOutcome' => $releaseOutcome];
+    $redirectTarget = (string)($_SERVER['REQUEST_URI'] ?? '');
+    if ($redirectTarget === '' || $redirectTarget[0] !== '/' || strpos($redirectTarget, '//') === 0) {
+        $redirectTarget = 'incoming';
+    }
+    header('Location: ' . $redirectTarget);
+    exit;
 }
 
+// Build the list query from the active filters instead of one hand-written query per combination.
+$whereClauses = ["type = 'Incoming'"];
+$whereTypes = '';
+$whereParams = [];
+if ($overdueFilter && $documentIdFilter === 0) {
+    // The dashboard's overdue tile must list only documents past their processing time.
+    $whereClauses[] = "status = 'Pending'";
+    $whereClauses[] = 'date_created < (NOW() - INTERVAL ? DAY)';
+    $whereTypes .= 'i';
+    $whereParams[] = $overdueDays;
+    $orderSql = 'date_created ASC';
+} elseif ($documentIdFilter > 0) {
+    // Quick Submit's Manage action must show only the selected incoming record.
+    $whereClauses[] = 'doc_id = ?';
+    $whereTypes .= 'i';
+    $whereParams[] = $documentIdFilter;
+    $orderSql = 'doc_id ASC';
+} else {
+    if ($submitterFilter !== 'All') {
+        $whereClauses[] = 'submitter_type = ?';
+        $whereTypes .= 's';
+        $whereParams[] = $submitterFilter;
+    }
+    if ($statusFilter !== '') {
+        $whereClauses[] = 'status = ?';
+        $whereTypes .= 's';
+        $whereParams[] = $statusFilter;
+    }
+    if ($search !== '') {
+        $searchColumns = ['submitter_name', 'sender', 'recipient', 'subject', 'remarks'];
+        if ($statusFilter === '') {
+            $searchColumns[] = 'status';
+        }
+        $searchTerm = '%' . addcslashes($search, '%_\\') . '%';
+        $whereClauses[] = '(' . implode(' OR ', array_map(static function ($column) {
+            return $column . ' LIKE ?';
+        }, $searchColumns)) . ')';
+        foreach ($searchColumns as $searchColumn) {
+            $whereTypes .= 's';
+            $whereParams[] = $searchTerm;
+        }
+    }
+    $orderSql = $orderFilter === 'newest'
+        ? 'is_priority DESC, date_created DESC, doc_id DESC'
+        : 'is_priority DESC, date_created ASC, doc_id ASC';
+}
+$listSql = "SELECT *, (status = 'Pending' AND date_created < (NOW() - INTERVAL ? DAY)) AS is_overdue FROM documents WHERE "
+    . implode(' AND ', $whereClauses) . ' ORDER BY ' . $orderSql;
+$stmt = safe_query($conn, $listSql, 'i' . $whereTypes, array_merge([$overdueDays], $whereParams));
+
+$documents = [];
 if ($stmt !== false) {
     $result = mysqli_stmt_get_result($stmt);
     if ($result) {
@@ -240,11 +325,7 @@ if ($stmt !== false) {
     }
     mysqli_stmt_close($stmt);
 }
-if ($orderFilter === 'newest') {
-    usort($documents, static function ($a, $b) {
-        return [(int)$b['is_priority'], $b['date_created'], (int)$b['doc_id']] <=> [(int)$a['is_priority'], $a['date_created'], (int)$a['doc_id']];
-    });
-}
+$clearFilterQuery = $submitterFilter !== 'All' ? ['submitter' => $submitterFilter] : [];
 ?>
 <?php include 'header.php'; ?>
 <div class="row g-4">
@@ -305,7 +386,8 @@ if ($orderFilter === 'newest') {
                 <form method="GET" class="row g-2 mb-3">
                     <?php if ($submitterFilter !== 'All'): ?><input type="hidden" name="submitter" value="<?php echo sanitize($submitterFilter); ?>"><?php endif; ?>
                     <div class="col-12 col-md-5">
-                        <input type="search" name="search" class="form-control" placeholder="Search by subject, name, or reference" value="<?php echo sanitize($search); ?>">
+                        <label class="visually-hidden" for="incomingSearch">Search incoming documents</label>
+                        <input type="search" id="incomingSearch" name="search" class="form-control" placeholder="Search by name, subject, office, or remarks" value="<?php echo sanitize($search); ?>">
                     </div>
                     <div class="col-12 col-md-3">
                         <label class="visually-hidden" for="incomingStatusFilter">Filter by status</label>
@@ -327,6 +409,9 @@ if ($orderFilter === 'newest') {
                         <button class="btn btn-primary">Search</button>
                     </div>
                 </form>
+                <p class="small text-muted mb-2" role="status" aria-live="polite">
+                    Showing <?php echo number_format(count($documents)); ?> document(s)<?php if ($search !== '' || $statusFilter !== ''): ?> · <a href="incoming<?php echo $clearFilterQuery ? '?' . sanitize(http_build_query($clearFilterQuery)) : ''; ?>">Clear search and status</a><?php endif; ?>
+                </p>
                 <!-- Use the shared row-separated table skin consistently across admin lists. -->
                 <div class="table-responsive">
                     <table class="table align-middle mb-0 incoming-documents-table">
@@ -349,21 +434,35 @@ if ($orderFilter === 'newest') {
                                 <tr><td colspan="10" class="text-center text-muted">No incoming documents found.</td></tr>
                             <?php else: ?>
                                 <?php foreach ($documents as $document): ?>
+                                    <?php
+                                    $documentReference = document_tracking_reference($document['doc_id']);
+                                    $documentSubmitterName = trim((string)($document['submitter_name'] ?? ''));
+                                    $documentPhone = trim((string)($document['client_phone'] ?? ''));
+                                    $editPayload = json_encode([
+                                        'id' => (int)$document['doc_id'],
+                                        'sender' => (string)$document['sender'],
+                                        'submitterName' => (string)($document['submitter_name'] ?? ''),
+                                        'clientPhone' => (string)($document['client_phone'] ?? ''),
+                                        'subject' => (string)$document['subject'],
+                                        'remarks' => (string)($document['remarks'] ?? ''),
+                                        'submitterType' => (string)$document['submitter_type'],
+                                    ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE);
+                                    ?>
                                     <tr>
                                         <td data-label="Date"><?php echo sanitize(date('M j, Y', strtotime($document['date_created']))); ?><div class="small text-muted"><?php echo sanitize(date('g:i A', strtotime($document['date_created']))); ?></div></td>
                                         <td data-label="Submitted by">
                                             <div class="table-cell-badges">
                                                 <span class="badge text-bg-light border"><?php echo sanitize($document['submitter_type']); ?></span>
                                             </div>
-                                            <div class="mt-1 fw-semibold"><?php echo sanitize(trim((string)($document['submitter_name'] ?? '')) !== '' ? $document['submitter_name'] : 'Name not recorded'); ?></div>
+                                            <div class="mt-1 fw-semibold"><?php echo sanitize($documentSubmitterName !== '' ? $document['submitter_name'] : 'Name not recorded'); ?></div>
                                         </td>
-                                        <td data-label="Reference"><code><?php echo sanitize(document_tracking_reference($document['doc_id'])); ?></code></td>
+                                        <td data-label="Reference"><code><?php echo sanitize($documentReference); ?></code></td>
                                         <td data-label="Tracking QR">
                                             <?php if (!$documentTrackingSettings['enabled']): ?>
                                                 <span class="small text-muted">QR tracking is disabled</span>
                                             <?php elseif (!empty($document['tracking_token'])): ?>
                                                 <?php $documentTrackerUrl = $documentTrackingSettings['baseUrl'] . '?token=' . rawurlencode($document['tracking_token']); ?>
-                                                <button type="button" class="btn btn-sm btn-outline-success" aria-label="View tracking QR code for <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?>" onclick="showDocumentTrackingQr(<?php echo htmlspecialchars(json_encode($documentTrackerUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode(document_tracking_reference($document['doc_id']), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                                <button type="button" class="btn btn-sm btn-outline-success js-show-tracking-qr" aria-label="View tracking QR code for <?php echo sanitize($documentReference); ?>" data-tracker-url="<?php echo sanitize($documentTrackerUrl); ?>" data-reference="<?php echo sanitize($documentReference); ?>">
                                                     <i class="bi bi-qr-code me-1" aria-hidden="true"></i>View QR code
                                                 </button>
                                             <?php else: ?>
@@ -378,18 +477,21 @@ if ($orderFilter === 'newest') {
                                         </td>
                                         <td data-label="Subject"><?php echo sanitize($document['subject']); ?></td>
                                         <td data-label="Recipient"><?php echo sanitize(trim((string)($document['recipient'] ?? '')) !== '' ? $document['recipient'] : 'Not provided'); ?></td>
-                                        <td data-label="Contact number"><?php echo sanitize($document['client_phone'] ?? 'Not provided'); ?></td>
+                                        <td data-label="Contact number"><?php echo sanitize($documentPhone !== '' ? $documentPhone : 'Not provided'); ?></td>
                                         <td data-label="Status">
                                             <span class="badge <?php echo admin_status_badge_class($document['status']); ?>">
                                                 <?php echo sanitize($document['status']); ?>
                                             </span>
+                                            <?php if (!empty($slaSettings['enabled']) && !empty($document['is_overdue'])): ?>
+                                                <span class="badge text-bg-danger ms-1" title="Waiting longer than <?php echo (int)$overdueDays; ?> day(s)">Overdue</span>
+                                            <?php endif; ?>
                                         </td>
                                         <td data-label="Priority">
                                             <?php if ($document['submitter_type'] === 'Faculty'): ?>
                                                 <form method="POST" class="document-priority-control">
                                                     <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                                                     <input type="hidden" name="priority_doc_id" value="<?php echo (int)$document['doc_id']; ?>">
-                                                    <button class="btn btn-sm <?php echo (int)$document['is_priority'] === 1 ? 'btn-warning' : 'btn-outline-secondary'; ?>" type="submit" name="toggle_priority" aria-label="<?php echo (int)$document['is_priority'] === 1 ? 'Remove priority from' : 'Mark as priority'; ?> <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?>">
+                                                    <button class="btn btn-sm <?php echo (int)$document['is_priority'] === 1 ? 'btn-warning' : 'btn-outline-secondary'; ?>" type="submit" name="toggle_priority" aria-label="<?php echo (int)$document['is_priority'] === 1 ? 'Remove priority from' : 'Mark as priority'; ?> <?php echo sanitize($documentReference); ?>">
                                                         <i class="bi bi-star<?php echo (int)$document['is_priority'] === 1 ? '-fill' : ''; ?> me-1" aria-hidden="true"></i><?php echo (int)$document['is_priority'] === 1 ? 'Priority' : 'Standard'; ?>
                                                     </button>
                                                 </form>
@@ -399,19 +501,23 @@ if ($orderFilter === 'newest') {
                                         </td>
                                         <td data-label="Actions">
                                             <div class="table-actions document-row-actions">
-                                            <button type="button" class="btn btn-sm btn-outline-primary document-action-button" title="Edit document" aria-label="Edit <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?>" onclick="editDocument(<?php echo (int)$document['doc_id']; ?>, <?php echo htmlspecialchars(json_encode($document['sender'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['submitter_name'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['client_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['subject'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['remarks'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['submitter_type'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                            <button type="button" class="btn btn-sm btn-outline-primary document-action-button js-edit-document" title="Edit document" aria-label="Edit <?php echo sanitize($documentReference); ?>" data-document="<?php echo htmlspecialchars($editPayload !== false ? $editPayload : '{}', ENT_QUOTES, 'UTF-8'); ?>">
                                                 <i class="bi bi-pencil" aria-hidden="true"></i><span class="action-label">Edit</span>
                                             </button>
                                             <?php if ($document['status'] === 'Pending'): ?>
+                                                <?php
+                                                $releaseSenderLabel = trim((string)$document['sender']) !== '' ? $document['sender'] : ($documentSubmitterName !== '' ? $documentSubmitterName : 'Not provided');
+                                                $releaseRecipientLabel = trim((string)$document['recipient']) !== '' ? $document['recipient'] : "Dean's Office";
+                                                ?>
                                                 <button
                                                     class="btn btn-sm btn-outline-success js-prepare-release document-action-button"
                                                     type="button"
                                                     title="Prepare for release"
-                                                    aria-label="Prepare <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?> for release"
+                                                    aria-label="Prepare <?php echo sanitize($documentReference); ?> for release"
                                                     data-document-id="<?php echo (int)$document['doc_id']; ?>"
                                                     data-document-subject="<?php echo sanitize($document['subject']); ?>"
-                                                    data-document-sender="<?php echo sanitize($document['sender']); ?>"
-                                                    data-document-recipient="<?php echo sanitize($document['recipient']); ?>"
+                                                    data-document-sender="<?php echo sanitize($releaseSenderLabel); ?>"
+                                                    data-document-recipient="<?php echo sanitize($releaseRecipientLabel); ?>"
                                                 >
                                                     <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span class="action-label">Prepare for release</span>
                                                 </button>
@@ -427,7 +533,7 @@ if ($orderFilter === 'newest') {
             </div>
         </div>
     </div>
-<div class="modal fade" id="incomingForm" tabindex="-1" aria-labelledby="incomingFormTitle" aria-hidden="true">
+<div class="modal fade" id="incomingForm" tabindex="-1" aria-labelledby="incomingFormTitle" aria-hidden="true"<?php echo $reopenAddModal ? ' data-reopen="1"' : ''; ?>>
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
@@ -459,7 +565,7 @@ if ($orderFilter === 'newest') {
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="subject"><?php echo sanitize($mobileFormLabels['documentType']); ?></label>
-                        <input type="text" id="subject" name="subject" class="form-control" value="<?php echo sanitize($subject); ?>" required>
+                        <input type="text" id="subject" name="subject" class="form-control" maxlength="255" value="<?php echo sanitize($subject); ?>" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="client_phone"><?php echo sanitize($mobileFormLabels['contactNumber']); ?> <span class="text-muted">(optional)</span></label>
@@ -481,12 +587,12 @@ if ($orderFilter === 'newest') {
 </div>
 
 <!-- Edit Modal -->
-<div class="modal fade" id="editModal" tabindex="-1">
+<div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalTitle" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Edit Incoming Document</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="editModalTitle">Edit Incoming Document</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <form method="POST" novalidate>
@@ -516,7 +622,7 @@ if ($orderFilter === 'newest') {
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="editSubject"><?php echo sanitize($mobileFormLabels['documentType']); ?></label>
-                        <input type="text" id="editSubject" name="subject" class="form-control" required>
+                        <input type="text" id="editSubject" name="subject" class="form-control" maxlength="255" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="editRemarks"><?php echo sanitize($mobileFormLabels['remarks']); ?></label>
@@ -596,7 +702,7 @@ if ($orderFilter === 'newest') {
 
 <?php if ($releaseOutcome !== null): ?>
     <?php
-    $releaseTone = in_array($releaseOutcome['type'], ['success', 'warning', 'danger'], true)
+    $releaseTone = in_array($releaseOutcome['type'] ?? '', ['success', 'warning', 'danger'], true)
         ? $releaseOutcome['type']
         : 'info';
     $releaseIcon = [
@@ -612,11 +718,11 @@ if ($orderFilter === 'newest') {
                 <div class="modal-header">
                     <h5 class="modal-title d-flex align-items-center gap-2 text-<?php echo sanitize($releaseTone); ?>" id="prepareReleaseOutcomeTitle">
                         <i class="bi <?php echo sanitize($releaseIcon); ?>" aria-hidden="true"></i>
-                        <?php echo sanitize($releaseOutcome['title']); ?>
+                        <?php echo sanitize((string)($releaseOutcome['title'] ?? '')); ?>
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body" role="alert" aria-live="assertive"><?php echo sanitize($releaseOutcome['detail']); ?></div>
+                <div class="modal-body" role="alert" aria-live="assertive"><?php echo sanitize((string)($releaseOutcome['detail'] ?? '')); ?></div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Got it</button>
                 </div>
@@ -627,15 +733,15 @@ if ($orderFilter === 'newest') {
 
 <script src="assets/js/qr-tools.bundle.js"></script>
 <script>
-function editDocument(id, sender, submitterName, clientPhone, subject, remarks, submitterType) {
-    document.getElementById('editId').value = id;
-    document.getElementById('editSender').value = sender;
-    document.getElementById('editSubmitterName').value = submitterName;
-    document.getElementById('editClientPhone').value = clientPhone;
-    document.getElementById('editSubject').value = subject;
-    document.getElementById('editRemarks').value = remarks;
-    document.getElementById('editSubmitterType').value = submitterType;
-    new bootstrap.Modal(document.getElementById('editModal')).show();
+function editDocument(data) {
+    document.getElementById('editId').value = data.id;
+    document.getElementById('editSender').value = data.sender || '';
+    document.getElementById('editSubmitterName').value = data.submitterName || '';
+    document.getElementById('editClientPhone').value = data.clientPhone || '';
+    document.getElementById('editSubject').value = data.subject || '';
+    document.getElementById('editRemarks').value = data.remarks || '';
+    document.getElementById('editSubmitterType').value = data.submitterType || 'Other';
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('editModal')).show();
 }
 
 function showDocumentTrackingQr(trackerUrl, reference) {
@@ -670,9 +776,28 @@ function showDocumentTrackingQr(trackerUrl, reference) {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('documentTrackingQrModal')).show();
 }
 
+// Row buttons carry their data in attributes, so one handler covers every row.
+document.addEventListener('click', function (event) {
+    const editButton = event.target.closest('.js-edit-document');
+    if (editButton) {
+        let data = null;
+        try {
+            data = JSON.parse(editButton.dataset.document || '{}');
+        } catch (error) {
+            return;
+        }
+        editDocument(data);
+        return;
+    }
+    const qrButton = event.target.closest('.js-show-tracking-qr');
+    if (qrButton) {
+        showDocumentTrackingQr(qrButton.dataset.trackerUrl, qrButton.dataset.reference);
+    }
+});
+
 document.addEventListener('DOMContentLoaded', function () {
     const prepareModalElement = document.getElementById('prepareReleaseModal');
-    const prepareModal = new bootstrap.Modal(prepareModalElement);
+    const prepareModal = bootstrap.Modal.getOrCreateInstance(prepareModalElement);
     document.querySelectorAll('.js-prepare-release').forEach(function (button) {
         button.addEventListener('click', function () {
             document.getElementById('prepareReleaseId').value = button.dataset.documentId;
@@ -685,14 +810,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const outcomeModal = document.getElementById('prepareReleaseOutcome');
     if (outcomeModal) {
-        new bootstrap.Modal(outcomeModal).show();
+        bootstrap.Modal.getOrCreateInstance(outcomeModal).show();
     }
 
-    if (new URLSearchParams(window.location.search).get('open') === 'add') {
-        const incomingForm = document.getElementById('incomingForm');
-        if (incomingForm) {
-            bootstrap.Modal.getOrCreateInstance(incomingForm).show();
-        }
+    // Reopen the Add Document form when saving failed, so the typed values and the error are both visible.
+    const incomingForm = document.getElementById('incomingForm');
+    if (incomingForm && (incomingForm.dataset.reopen === '1' || new URLSearchParams(window.location.search).get('open') === 'add')) {
+        bootstrap.Modal.getOrCreateInstance(incomingForm).show();
     }
 });
 

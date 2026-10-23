@@ -59,6 +59,12 @@ if (!$storageError && preg_match('/^[a-f0-9]{64}$/', $trackingToken)) {
     <style>
         body { min-height: 100vh; background: #f0fdf4; color: #064e3b; }
         .tracker-card { width: min(100%, 44rem); border-color: #bbf7d0; border-radius: 1.25rem; }
+        [hidden] { display: none !important; }
+        /* Self-contained so the status stays readable even if the admin stylesheet or Bootstrap theme is unavailable. */
+        .tracker-status { display: inline-block; padding: .3rem .75rem; border-radius: 999px; background: #fef9c3; color: #713f12; font-size: .85rem; font-weight: 700; line-height: 1.2; }
+        .tracker-status.status-for-release { background: #dbeafe; color: #1e3a8a; }
+        .tracker-status.status-released { background: #dcfce7; color: #166534; }
+        .tracker-status.status-priority { background: #ffedd5; color: #9a3412; }
         @media print {
             body { min-height: 0; background: #fff; color: #111; }
             .container { padding: 0 !important; }
@@ -87,7 +93,14 @@ if (!$storageError && preg_match('/^[a-f0-9]{64}$/', $trackingToken)) {
                     <dt class="col-5 col-sm-4">Type</dt>
                     <dd class="col-7 col-sm-8"><?php echo sanitize($batch['type']); ?></dd>
                     <dt class="col-5 col-sm-4">Status</dt>
-                    <dd class="col-7 col-sm-8"><span class="badge <?php echo admin_status_badge_class($batch['status']); ?>"><?php echo sanitize($batch['status']); ?></span><?php echo $batch['isPriority'] ? ' <span class="badge text-bg-warning">Priority</span>' : ''; ?></dd>
+                    <?php
+                    $statusText = trim((string)$batch['status']);
+                    $statusSlug = trim(preg_replace('/[^a-z0-9]+/', '-', strtolower($statusText)), '-');
+                    ?>
+                    <dd class="col-7 col-sm-8">
+                        <span class="tracker-status status-<?php echo sanitize($statusSlug !== '' ? $statusSlug : 'unknown'); ?>"><?php echo sanitize($statusText !== '' ? $statusText : 'Not recorded'); ?></span>
+                        <?php if ($batch['isPriority']): ?><span class="tracker-status status-priority ms-1">Priority</span><?php endif; ?>
+                    </dd>
                     <dt class="col-5 col-sm-4">Date recorded</dt>
                     <dd class="col-7 col-sm-8"><?php echo sanitize(date('M j, Y', strtotime($batch['date']))); ?></dd>
                 </dl>
@@ -118,7 +131,8 @@ if (!$storageError && preg_match('/^[a-f0-9]{64}$/', $trackingToken)) {
                 <?php endif; ?>
                 <p class="small text-secondary mt-4 mb-0 no-print">Contact the CEIT Dean's Office for assistance with this bulk submission.</p>
             <?php endif; ?>
-            <a class="btn btn-outline-success mt-3 no-print" id="returnLink" href="./">Return</a>
+            <!-- Hidden until the script finds a safe place to return to; a bare "./" can point at a folder with no page (403 Forbidden). -->
+            <a class="btn btn-outline-success mt-3 no-print" id="returnLink" href="#" hidden>Return</a>
         </div>
     </div>
 </main>
@@ -140,8 +154,20 @@ if (!$storageError && preg_match('/^[a-f0-9]{64}$/', $trackingToken)) {
     const requested = sameHost(new URLSearchParams(window.location.search).get('return') || '');
     const referrer = document.referrer ? sameHost(document.referrer) : null;
     const target = requested || (referrer && !/tracker/i.test(referrer.pathname) ? referrer : null);
-    if (target) link.href = target.href;
-    else if (window.location.port === '5173') link.href = '/';
+    if (target) {
+        link.href = target.href;
+        link.hidden = false;
+    } else if (window.location.port === '5173') {
+        link.href = '/';
+        link.hidden = false;
+    } else if (window.history.length > 1) {
+        // No known page to go back to (for example, opened from a QR scanner): use the browser's own Back.
+        link.addEventListener('click', function (event) {
+            event.preventDefault();
+            window.history.back();
+        });
+        link.hidden = false;
+    }
 })();
 </script>
 </body>

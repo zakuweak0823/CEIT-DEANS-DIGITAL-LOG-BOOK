@@ -8,58 +8,86 @@ require_once 'sla_support.php';
 ensure_admin();
 
 $mobileFormLabels = get_mobile_form_labels($conn);
-
 try {
     ensure_document_tracking_schema($conn);
     $documentTrackingSettings = get_document_tracking_settings($conn);
+    // These schema fixes only need to run once per login session, not on every page view.
+    if (empty($_SESSION['outgoing_schema_ready'])) {
+        foreach ([
+            'ALTER TABLE documents ADD COLUMN IF NOT EXISTS client_phone VARCHAR(20) DEFAULT NULL',
+            "ALTER TABLE documents ADD COLUMN IF NOT EXISTS submitter_type VARCHAR(20) NOT NULL DEFAULT 'Other'",
+            'ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_priority TINYINT(1) NOT NULL DEFAULT 0',
+        ] as $schemaSql) {
+            if ($conn->query($schemaSql) === false) {
+                throw new RuntimeException($conn->error);
+            }
+        }
+        $_SESSION['outgoing_schema_ready'] = true;
+    }
 } catch (Throwable $error) {
     error_log('Outgoing document tracking setup failed: ' . $error->getMessage());
     http_response_code(500);
     exit('Outgoing document storage is unavailable. Check the server log and try again.');
 }
-$conn->query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS client_phone VARCHAR(20) DEFAULT NULL');
-$conn->query("ALTER TABLE documents ADD COLUMN IF NOT EXISTS submitter_type VARCHAR(20) NOT NULL DEFAULT 'Other'");
-$conn->query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_priority TINYINT(1) NOT NULL DEFAULT 0');
 
 $message = '';
 $smsOutcome = null;
 $setSmsOutcome = static function ($title, $detail, $type = 'info') use (&$smsOutcome) {
     $smsOutcome = ['title' => $title, 'detail' => $detail, 'type' => $type];
 };
-$search = trim($_GET['search'] ?? '');
+
+// After an action, the page redirects so refreshing the browser cannot submit the same form twice
+// (which would resend SMS messages or repeat status changes).
+// The result message travels in the session for exactly one page view.
+if (isset($_SESSION['outgoing_flash']) && is_array($_SESSION['outgoing_flash'])) {
+    $message = (string)($_SESSION['outgoing_flash']['message'] ?? '');
+    $flashOutcome = $_SESSION['outgoing_flash']['smsOutcome'] ?? null;
+    $smsOutcome = is_array($flashOutcome) ? $flashOutcome : null;
+}
+unset($_SESSION['outgoing_flash']);
+$shouldRedirect = false;
+
+// Read posted values safely: arrays or missing fields become an empty/default string instead of an error.
+$postText = static function (string $key, string $default = ''): string {
+    return isset($_POST[$key]) && is_string($_POST[$key]) ? trim($_POST[$key]) : $default;
+};
+$postId = static function (string $key): int {
+    $value = isset($_POST[$key]) && is_string($_POST[$key]) ? trim($_POST[$key]) : '';
+    return ctype_digit($value) ? (int)$value : 0;
+};
+$textLength = static function (string $value): int {
+    return function_exists('mb_strlen') ? mb_strlen($value, 'UTF-8') : strlen($value);
+};
+// Returns an error message, or null when the edited values are valid.
+$validateOutgoing = static function (string $subject, ?string $clientPhone) use ($textLength): ?string {
+    if ($subject === '') {
+        return 'Document type is required.';
+    }
+    if ($textLength($subject) > 255) {
+        return 'The document type must be 255 characters or fewer.';
+    }
+    if ($clientPhone === null || ($clientPhone !== '' && !is_valid_contact_number($clientPhone))) {
+        return 'Enter an 11-digit contact number using digits only, or leave it blank.';
+    }
+    return null;
+};
+
+$search = isset($_GET['search']) && is_string($_GET['search']) ? trim($_GET['search']) : '';
 $documentIdParam = $_GET['document_id'] ?? '';
 $documentIdFilter = is_string($documentIdParam) && ctype_digit($documentIdParam) ? (int)$documentIdParam : 0;
-$statusFilter = trim($_GET['status'] ?? '');
+$statusFilter = isset($_GET['status']) && is_string($_GET['status']) ? trim($_GET['status']) : '';
 $overdueFilter = ($_GET['overdue'] ?? '') === '1';
 $orderFilter = ($_GET['order'] ?? '') === 'newest' ? 'newest' : 'oldest';
-$overdueDays = (int)get_sla_settings($conn)['outgoingDays'];
-if (!in_array($statusFilter, ['', 'For Release', 'Released'], true)) {
+$slaSettings = get_sla_settings($conn);
+$overdueDays = (int)$slaSettings['outgoingDays'];
+$validStatusFilters = ['For Release', 'Released'];
+if (!in_array($statusFilter, $validStatusFilters, true)) {
     $statusFilter = '';
-}
-if (isset($_POST['update'])) {
-    $id = (int)($_POST['id'] ?? 0);
-    $subject = trim($_POST['subject'] ?? '');
-    $remarks = trim($_POST['remarks'] ?? '');
-    $clientPhone = contact_number_input($_POST['client_phone'] ?? '');
-
-    if ($id > 0 && $subject !== '' && $clientPhone !== null && ($clientPhone === '' || is_valid_contact_number($clientPhone))) {
-        $phoneValue = $clientPhone === '' ? null : $clientPhone;
-        $stmt = safe_query($conn, "UPDATE documents SET client_phone = ?, subject = ?, remarks = ? WHERE doc_id = ? AND type = 'Outgoing'", 'sssi', [$phoneValue, $subject, $remarks, $id]);
-        if ($stmt !== false) {
-            mysqli_stmt_close($stmt);
-            $message = show_alert('Outgoing document updated successfully.');
-        } else {
-            $message = show_alert('Failed to update outgoing document.', 'danger');
-        }
-    } else {
-        $message = show_alert($clientPhone === null || ($clientPhone !== '' && !is_valid_contact_number($clientPhone))
-            ? 'Enter an 11-digit contact number using digits only, or leave it blank.'
-            : 'Check the document type and record details.', 'danger');
-    }
 }
 
 if (isset($_POST['issue_tracking_qr'])) {
-    $documentId = (int)($_POST['tracking_doc_id'] ?? 0);
+    $shouldRedirect = true;
+    $documentId = $postId('tracking_doc_id');
     if (!$documentTrackingSettings['enabled']) {
         $message = show_alert('Document tracking is turned off in Admin Settings.', 'warning');
     } elseif ($documentId <= 0) {
@@ -100,10 +128,33 @@ if (isset($_POST['issue_tracking_qr'])) {
             $message = show_alert('The tracking QR could not be issued. Check the server log and try again.', 'danger');
         }
     }
+} elseif (isset($_POST['update'])) {
+    $id = $postId('id');
+    $editSubject = $postText('subject');
+    $editRemarks = $postText('remarks');
+    $editClientPhone = contact_number_input($postText('client_phone'));
+
+    $validationError = $id <= 0
+        ? 'The selected document is invalid. Refresh the page and try again.'
+        : $validateOutgoing($editSubject, $editClientPhone);
+    if ($validationError !== null) {
+        $message = show_alert($validationError, 'danger');
+    } else {
+        $phoneValue = $editClientPhone === '' ? null : $editClientPhone;
+        $stmt = safe_query($conn, "UPDATE documents SET client_phone = ?, subject = ?, remarks = ? WHERE doc_id = ? AND type = 'Outgoing'", 'sssi', [$phoneValue, $editSubject, $editRemarks, $id]);
+        if ($stmt !== false) {
+            mysqli_stmt_close($stmt);
+            $message = show_alert('Outgoing document updated successfully.');
+            $shouldRedirect = true;
+        } else {
+            $message = show_alert('Failed to update outgoing document.', 'danger');
+        }
+    }
 } elseif (isset($_POST['set_outgoing_status'])) {
-    $id = (int)($_POST['status_doc_id'] ?? 0);
-    $status = trim($_POST['new_status'] ?? '');
-    if ($id <= 0 || !in_array($status, ['For Release', 'Released'], true)) {
+    $shouldRedirect = true;
+    $id = $postId('status_doc_id');
+    $status = $postText('new_status');
+    if ($id <= 0 || !in_array($status, $validStatusFilters, true)) {
         $message = show_alert('Invalid release status change.', 'danger');
     } else {
         // Restrict transitions to the two supported release states and report no-op retries.
@@ -118,28 +169,35 @@ if (isset($_POST['issue_tracking_qr'])) {
                 : show_alert('Document was not found or already has that status.', 'warning');
         }
     }
-}
-
-if (isset($_POST['send_client_sms'])) {
+} elseif (isset($_POST['send_client_sms'])) {
+    $shouldRedirect = true;
     // Recheck status and contact at send time; the page form may have gone stale.
-    $id = (int)($_POST['sms_doc_id'] ?? 0);
-    $stmt = safe_query($conn, "SELECT subject, client_phone, status FROM documents WHERE doc_id = ? AND type = 'Outgoing' AND status = 'For Release'", 'i', [$id]);
+    $id = $postId('sms_doc_id');
     $smsDocument = null;
+    $stmt = safe_query($conn, "SELECT subject, client_phone, status FROM documents WHERE doc_id = ? AND type = 'Outgoing' AND status = 'For Release'", 'i', [$id]);
     if ($stmt !== false) {
         $result = mysqli_stmt_get_result($stmt);
-        $smsDocument = mysqli_fetch_assoc($result) ?: null;
+        $smsDocument = $result ? (mysqli_fetch_assoc($result) ?: null) : null;
         mysqli_stmt_close($stmt);
     }
+
+    // Server-side guard against double sends (double click, second tab, replayed request).
+    $lastSentAt = (int)($_SESSION['outgoing_sms_sent_at'][$id] ?? 0);
+
     if (!$smsDocument) {
         $message = show_alert('The outgoing document was not found or is no longer For Release.', 'danger');
         $setSmsOutcome('Document unavailable', 'Only documents with status “For Release” can receive this notification. Refresh the list and try again.', 'danger');
     } elseif (!is_valid_contact_number(trim((string)($smsDocument['client_phone'] ?? '')))) {
         $message = show_alert('No valid client contact is saved for this document. Edit it to add the number.', 'danger');
         $setSmsOutcome('SMS was not sent', 'No valid client contact is saved for this document. Close this message, edit the document to add a phone number, then try again.', 'danger');
+    } elseif ($lastSentAt > 0 && (time() - $lastSentAt) < 120) {
+        $message = show_alert('A notification for this document was just sent. Wait a couple of minutes before sending another.', 'warning');
+        $setSmsOutcome('Notification already sent', 'A notification for this document was sent less than two minutes ago. Check the SMS Logs page before sending it again.', 'warning');
     } else {
         $smsText = "CvSU Dean's Office: Your document '{$smsDocument['subject']}' is ready for release. Please visit the office to claim it.";
         $smsResult = send_logged_sms($conn, $smsDocument['client_phone'], $smsText);
         if ($smsResult['success']) {
+            $_SESSION['outgoing_sms_sent_at'][$id] = time();
             $message = show_alert($smsResult['message']);
             $smsStatus = strtolower($smsResult['status'] ?? '');
             if (empty($smsResult['logged'])) {
@@ -159,25 +217,63 @@ if (isset($_POST['send_client_sms'])) {
     }
 }
 
-$documents = [];
-if ($overdueFilter && $documentIdFilter === 0) {
-    // The dashboard's overdue tile must list only documents past their processing time.
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND status = 'For Release' AND date_created < (NOW() - INTERVAL ? DAY) ORDER BY date_created ASC", 'i', [$overdueDays]);
-} elseif ($documentIdFilter > 0) {
-    // Quick Submit's Manage action must resolve to one exact outgoing document.
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND doc_id = ?", 'i', [$documentIdFilter]);
-} elseif ($search !== '' && $statusFilter !== '') {
-    $searchTerm = "%{$search}%";
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND status = ? AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ?) ORDER BY (status = 'For Release') DESC, CASE WHEN status = 'For Release' THEN date_created END ASC, date_created DESC", 'ssssss', [$statusFilter, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
-} elseif ($search !== '') {
-    $searchTerm = "%{$search}%";
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND (submitter_name LIKE ? OR sender LIKE ? OR recipient LIKE ? OR subject LIKE ? OR remarks LIKE ? OR status LIKE ?) ORDER BY (status = 'For Release') DESC, CASE WHEN status = 'For Release' THEN date_created END ASC, date_created DESC", 'ssssss', [$searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm, $searchTerm]);
-} elseif ($statusFilter !== '') {
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' AND status = ? ORDER BY (status = 'For Release') DESC, CASE WHEN status = 'For Release' THEN date_created END ASC, date_created DESC", 's', [$statusFilter]);
-} else {
-    $stmt = safe_query($conn, "SELECT * FROM documents WHERE type = 'Outgoing' ORDER BY (status = 'For Release') DESC, CASE WHEN status = 'For Release' THEN date_created END ASC, date_created DESC");
+if ($shouldRedirect) {
+    $_SESSION['outgoing_flash'] = ['message' => $message, 'smsOutcome' => $smsOutcome];
+    $redirectTarget = (string)($_SERVER['REQUEST_URI'] ?? '');
+    if ($redirectTarget === '' || $redirectTarget[0] !== '/' || strpos($redirectTarget, '//') === 0) {
+        $redirectTarget = 'outgoing';
+    }
+    header('Location: ' . $redirectTarget);
+    exit;
 }
 
+// Build the list query from the active filters instead of one hand-written query per combination.
+$whereClauses = ["type = 'Outgoing'"];
+$whereTypes = '';
+$whereParams = [];
+if ($overdueFilter && $documentIdFilter === 0) {
+    // The dashboard's overdue tile must list only documents past their processing time.
+    $whereClauses[] = "status = 'For Release'";
+    $whereClauses[] = 'date_created < (NOW() - INTERVAL ? DAY)';
+    $whereTypes .= 'i';
+    $whereParams[] = $overdueDays;
+    $orderSql = 'date_created ASC';
+} elseif ($documentIdFilter > 0) {
+    // Quick Submit's Manage action must resolve to one exact outgoing document.
+    $whereClauses[] = 'doc_id = ?';
+    $whereTypes .= 'i';
+    $whereParams[] = $documentIdFilter;
+    $orderSql = 'doc_id ASC';
+} else {
+    if ($statusFilter !== '') {
+        $whereClauses[] = 'status = ?';
+        $whereTypes .= 's';
+        $whereParams[] = $statusFilter;
+    }
+    if ($search !== '') {
+        $searchColumns = ['submitter_name', 'sender', 'recipient', 'subject', 'remarks'];
+        if ($statusFilter === '') {
+            $searchColumns[] = 'status';
+        }
+        $searchTerm = '%' . addcslashes($search, '%_\\') . '%';
+        $whereClauses[] = '(' . implode(' OR ', array_map(static function ($column) {
+            return $column . ' LIKE ?';
+        }, $searchColumns)) . ')';
+        foreach ($searchColumns as $searchColumn) {
+            $whereTypes .= 's';
+            $whereParams[] = $searchTerm;
+        }
+    }
+    // Documents waiting for release always come first; the order filter applies within each group.
+    $orderSql = $orderFilter === 'newest'
+        ? "(status = 'For Release') DESC, is_priority DESC, date_created DESC, doc_id DESC"
+        : "(status = 'For Release') DESC, is_priority DESC, CASE WHEN status = 'For Release' THEN date_created END ASC, date_created DESC, doc_id DESC";
+}
+$listSql = "SELECT *, (status = 'For Release' AND date_created < (NOW() - INTERVAL ? DAY)) AS is_overdue FROM documents WHERE "
+    . implode(' AND ', $whereClauses) . ' ORDER BY ' . $orderSql;
+$stmt = safe_query($conn, $listSql, 'i' . $whereTypes, array_merge([$overdueDays], $whereParams));
+
+$documents = [];
 if ($stmt !== false) {
     $result = mysqli_stmt_get_result($stmt);
     if ($result) {
@@ -186,11 +282,6 @@ if ($stmt !== false) {
         }
     }
     mysqli_stmt_close($stmt);
-}
-if ($orderFilter === 'newest') {
-    usort($documents, static function ($a, $b) {
-        return [$b['date_created'], (int)$b['doc_id']] <=> [$a['date_created'], (int)$a['doc_id']];
-    });
 }
 ?>
 <?php include 'header.php'; ?>
@@ -235,13 +326,14 @@ if ($orderFilter === 'newest') {
             <div class="card-body">
                 <form method="GET" class="row g-2 mb-3">
                     <div class="col-12 col-md-5">
-                        <input type="search" name="search" class="form-control" placeholder="Search by subject, name, or recipient" value="<?php echo sanitize($search); ?>">
+                        <label class="visually-hidden" for="outgoingSearch">Search outgoing documents</label>
+                        <input type="search" id="outgoingSearch" name="search" class="form-control" placeholder="Search by subject, name, or recipient" value="<?php echo sanitize($search); ?>">
                     </div>
                     <div class="col-12 col-md-3">
                         <label class="visually-hidden" for="outgoingStatusFilter">Filter by status</label>
                         <select class="form-select" id="outgoingStatusFilter" name="status">
                             <option value="">All statuses</option>
-                            <?php foreach (['For Release', 'Released'] as $filterOption): ?>
+                            <?php foreach ($validStatusFilters as $filterOption): ?>
                                 <option value="<?php echo sanitize($filterOption); ?>" <?php echo $statusFilter === $filterOption ? 'selected' : ''; ?>><?php echo sanitize($filterOption); ?></option>
                             <?php endforeach; ?>
                         </select>
@@ -257,6 +349,9 @@ if ($orderFilter === 'newest') {
                         <button class="btn btn-primary" type="submit">Search</button>
                     </div>
                 </form>
+                <p class="small text-muted mb-2" role="status" aria-live="polite">
+                    Showing <?php echo number_format(count($documents)); ?> document(s)<?php if ($search !== '' || $statusFilter !== ''): ?> · <a href="outgoing">Clear search and status</a><?php endif; ?>
+                </p>
                 <!-- Use the shared row-separated table skin consistently across admin lists. -->
                 <div class="table-responsive outgoing-documents-table-responsive">
                     <table class="table align-middle mb-0 outgoing-documents-table">
@@ -279,15 +374,28 @@ if ($orderFilter === 'newest') {
                                 <tr><td colspan="10" class="text-center text-muted">No outgoing documents found.</td></tr>
                             <?php else: ?>
                                 <?php foreach ($documents as $document): ?>
+                                    <?php
+                                    $documentReference = document_tracking_reference($document['doc_id']);
+                                    $documentSubmitterName = trim((string)($document['submitter_name'] ?? ''));
+                                    $documentRecipient = trim((string)($document['recipient'] ?? ''));
+                                    $documentPhone = trim((string)($document['client_phone'] ?? ''));
+                                    $isReleased = $document['status'] === 'Released';
+                                    $editPayload = json_encode([
+                                        'id' => (int)$document['doc_id'],
+                                        'clientPhone' => (string)($document['client_phone'] ?? ''),
+                                        'subject' => (string)$document['subject'],
+                                        'remarks' => (string)($document['remarks'] ?? ''),
+                                    ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE);
+                                    ?>
                                     <tr>
                                         <td data-label="Date"><?php echo sanitize(date('M j, Y', strtotime($document['date_created']))); ?><div class="small text-muted"><?php echo sanitize(date('g:i A', strtotime($document['date_created']))); ?></div></td>
-                                        <td data-label="Reference"><code><?php echo sanitize(document_tracking_reference($document['doc_id'])); ?></code></td>
+                                        <td data-label="Reference"><code><?php echo sanitize($documentReference); ?></code></td>
                                         <td data-label="Tracking QR">
                                             <?php if (!$documentTrackingSettings['enabled']): ?>
                                                 <span class="small text-muted">QR tracking is disabled</span>
                                             <?php elseif (!empty($document['tracking_token'])): ?>
                                                 <?php $documentTrackerUrl = $documentTrackingSettings['baseUrl'] . '?token=' . rawurlencode($document['tracking_token']); ?>
-                                                <button type="button" class="btn btn-sm btn-outline-success" aria-label="View tracking QR code for <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?>" onclick="showDocumentTrackingQr(<?php echo htmlspecialchars(json_encode($documentTrackerUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode(document_tracking_reference($document['doc_id']), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                                <button type="button" class="btn btn-sm btn-outline-success js-show-tracking-qr" aria-label="View tracking QR code for <?php echo sanitize($documentReference); ?>" data-tracker-url="<?php echo sanitize($documentTrackerUrl); ?>" data-reference="<?php echo sanitize($documentReference); ?>">
                                                     <i class="bi bi-qr-code me-1" aria-hidden="true"></i>View QR code
                                                 </button>
                                             <?php else: ?>
@@ -300,12 +408,17 @@ if ($orderFilter === 'newest') {
                                                 </form>
                                             <?php endif; ?>
                                         </td>
-                                        <td data-label="Submitted by"><?php echo sanitize(trim((string)($document['submitter_name'] ?? '')) !== '' ? $document['submitter_name'] : 'Name not recorded'); ?></td>
-                                        <td data-label="Recipient"><?php echo sanitize(trim((string)($document['recipient'] ?? '')) !== '' ? $document['recipient'] : 'Not provided'); ?></td>
+                                        <td data-label="Submitted by"><?php echo sanitize($documentSubmitterName !== '' ? $document['submitter_name'] : 'Name not recorded'); ?></td>
+                                        <td data-label="Recipient"><?php echo sanitize($documentRecipient !== '' ? $document['recipient'] : 'Not provided'); ?></td>
                                         <td data-label="Subject"><?php echo sanitize($document['subject']); ?></td>
-                                        <td data-label="Contact number"><?php echo sanitize($document['client_phone'] ?? 'Not provided'); ?></td>
+                                        <td data-label="Contact number"><?php echo sanitize($documentPhone !== '' ? $documentPhone : 'Not provided'); ?></td>
                                         <td data-label="Status">
-                                            <span class="badge <?php echo admin_status_badge_class($document['status']); ?>"><?php echo sanitize($document['status']); ?></span>
+                                            <div class="d-inline-flex flex-column align-items-stretch gap-1 text-center">
+                                                <span class="badge <?php echo admin_status_badge_class($document['status']); ?>"><?php echo sanitize($document['status']); ?></span>
+                                                <?php if (!empty($slaSettings['enabled']) && !empty($document['is_overdue'])): ?>
+                                                    <span class="badge text-bg-danger" title="Waiting longer than <?php echo (int)$overdueDays; ?> day(s)">Overdue</span>
+                                                <?php endif; ?>
+                                            </div>
                                         </td>
                                         <td data-label="Priority">
                                             <?php if ((int)($document['is_priority'] ?? 0) === 1): ?>
@@ -316,27 +429,28 @@ if ($orderFilter === 'newest') {
                                         </td>
                                         <td data-label="Actions">
                                             <div class="table-actions document-row-actions">
-                                            <button type="button" class="btn btn-sm btn-outline-primary document-action-button" title="Edit document" aria-label="Edit <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?>" onclick="editDocument(<?php echo (int)$document['doc_id']; ?>, <?php echo htmlspecialchars(json_encode($document['client_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['subject'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['remarks'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                            <button type="button" class="btn btn-sm btn-outline-primary document-action-button js-edit-document" title="Edit document" aria-label="Edit <?php echo sanitize($documentReference); ?>" data-document="<?php echo htmlspecialchars($editPayload !== false ? $editPayload : '{}', ENT_QUOTES, 'UTF-8'); ?>">
                                                 <i class="bi bi-pencil" aria-hidden="true"></i><span class="action-label">Edit</span>
                                             </button>
                                             <form method="POST" class="d-inline">
                                                 <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                                                 <input type="hidden" name="status_doc_id" value="<?php echo (int)$document['doc_id']; ?>">
-                                                <input type="hidden" name="new_status" value="<?php echo $document['status'] === 'Released' ? 'For Release' : 'Released'; ?>">
-                                                <button type="submit" name="set_outgoing_status" class="btn btn-sm document-action-button <?php echo $document['status'] === 'Released' ? 'btn-outline-secondary' : 'btn-success'; ?>" title="<?php echo $document['status'] === 'Released' ? 'Set for release' : 'Mark released'; ?>">
-                                                    <i class="bi <?php echo $document['status'] === 'Released' ? 'bi-arrow-counterclockwise' : 'bi-check2-circle'; ?>" aria-hidden="true"></i>
-                                                    <span class="action-label"><?php echo $document['status'] === 'Released' ? 'Set For Release' : 'Mark Released'; ?></span>
+                                                <input type="hidden" name="new_status" value="<?php echo $isReleased ? 'For Release' : 'Released'; ?>">
+                                                <button type="submit" name="set_outgoing_status" class="btn btn-sm document-action-button <?php echo $isReleased ? 'btn-outline-secondary' : 'btn-success'; ?>" title="<?php echo $isReleased ? 'Set for release' : 'Mark released'; ?>" aria-label="<?php echo ($isReleased ? 'Set for release: ' : 'Mark released: ') . sanitize($documentReference); ?>">
+                                                    <i class="bi <?php echo $isReleased ? 'bi-arrow-counterclockwise' : 'bi-check2-circle'; ?>" aria-hidden="true"></i>
+                                                    <span class="action-label"><?php echo $isReleased ? 'Set For Release' : 'Mark Released'; ?></span>
                                                 </button>
                                             </form>
-                                            <?php if ($document['status'] === 'For Release' && is_valid_contact_number(trim((string)($document['client_phone'] ?? '')))): ?>
+                                            <?php if ($document['status'] === 'For Release' && is_valid_contact_number($documentPhone)): ?>
                                                 <button
                                                     type="button"
                                                     class="btn btn-sm btn-outline-success js-send-release-sms document-action-button"
                                                     title="Send release notification"
+                                                    aria-label="Send release notification for <?php echo sanitize($documentReference); ?>"
                                                     data-document-id="<?php echo (int)$document['doc_id']; ?>"
                                                     data-document-subject="<?php echo sanitize($document['subject']); ?>"
-                                                    data-document-recipient="<?php echo sanitize($document['recipient']); ?>"
-                                                    data-document-phone="<?php echo sanitize($document['client_phone'] ?? ''); ?>"
+                                                    data-document-recipient="<?php echo sanitize($documentRecipient !== '' ? $document['recipient'] : 'Not provided'); ?>"
+                                                    data-document-phone="<?php echo sanitize($documentPhone); ?>"
                                                     data-document-status="<?php echo sanitize($document['status']); ?>"
                                                 >
                                                     <i class="bi bi-chat-dots" aria-hidden="true"></i><span class="action-label">Send SMS</span>
@@ -357,25 +471,24 @@ if ($orderFilter === 'newest') {
 
 <div class="modal fade" id="documentTrackingQrModal" tabindex="-1" aria-labelledby="documentTrackingQrTitle" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered qr-code-modal">
-        <div class="modal-content">
+        <div class="modal-content border-0 shadow">
             <div class="modal-header">
                 <div>
                     <h5 class="modal-title text-primary" id="documentTrackingQrTitle">Document tracking QR</h5>
-                    <p class="mb-0 mt-1 small text-muted" id="documentTrackingQrReference"></p>
+                    <p class="small text-muted mb-0" id="documentTrackingQrReference"></p>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body text-center">
+                <p class="small text-secondary">This office-issued QR opens the dedicated document status tracker.</p>
                 <div class="qr-code-frame">
-                    <canvas id="documentTrackingQrCanvas" aria-label="QR code for tracking this document"></canvas>
+                    <canvas id="documentTrackingQrCanvas" aria-label="Document status tracking QR code"></canvas>
                 </div>
-                <a id="documentTrackingQrLink" href="#" class="btn btn-outline-primary btn-sm tracking-link-button mt-3" target="_blank" rel="noopener noreferrer"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>Open tracking page</a>
-                <p id="documentTrackingQrError" class="small text-danger mt-3 mb-0" role="alert" hidden></p>
+                <div id="documentTrackingQrError" class="alert alert-danger mt-3" role="alert" hidden></div>
+                <a id="documentTrackingQrLink" class="btn btn-outline-primary btn-sm tracking-link-button mt-3" target="_blank" rel="noopener noreferrer"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>Open tracking page</a>
             </div>
             <div class="modal-footer">
-                <a id="downloadDocumentTrackingQr" class="btn btn-primary disabled" href="#" download aria-disabled="true">
-                    <i class="bi bi-download me-1" aria-hidden="true"></i>Download QR
-                </a>
+                <a id="downloadDocumentTrackingQr" class="btn btn-primary disabled" aria-disabled="true" download="document-tracking.png"><i class="bi bi-download me-1" aria-hidden="true"></i>Download QR</a>
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
@@ -421,7 +534,7 @@ if ($orderFilter === 'newest') {
 
 <?php if ($smsOutcome !== null): ?>
     <?php
-    $smsTone = in_array($smsOutcome['type'], ['success', 'warning', 'danger'], true)
+    $smsTone = in_array($smsOutcome['type'] ?? '', ['success', 'warning', 'danger'], true)
         ? $smsOutcome['type']
         : 'info';
     $smsIcon = [
@@ -437,11 +550,11 @@ if ($orderFilter === 'newest') {
                 <div class="modal-header">
                     <h5 class="modal-title d-flex align-items-center gap-2 text-<?php echo sanitize($smsTone); ?>" id="releaseSmsOutcomeTitle">
                         <i class="bi <?php echo sanitize($smsIcon); ?>" aria-hidden="true"></i>
-                        <?php echo sanitize($smsOutcome['title']); ?>
+                        <?php echo sanitize((string)($smsOutcome['title'] ?? '')); ?>
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body" role="alert" aria-live="assertive"><?php echo sanitize($smsOutcome['detail']); ?></div>
+                <div class="modal-body" role="alert" aria-live="assertive"><?php echo sanitize((string)($smsOutcome['detail'] ?? '')); ?></div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Got it</button>
                 </div>
@@ -451,32 +564,30 @@ if ($orderFilter === 'newest') {
 <?php endif; ?>
 
 <!-- Edit Modal -->
-<div class="modal fade" id="editModal" tabindex="-1">
+<div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalTitle" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Edit Outgoing Document</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="editModalTitle">Edit Outgoing Document</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <form method="POST" novalidate>
                     <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
-                    <input type="hidden" name="action" value="update">
                     <input type="hidden" name="id" id="editId">
                     <div class="mb-3">
-                        <label class="form-label" for="editClientPhone"><?php echo sanitize($mobileFormLabels['contactNumber']); ?> (optional)</label>
+                        <label class="form-label" for="editClientPhone"><?php echo sanitize($mobileFormLabels['contactNumber']); ?> <span class="text-muted">(optional)</span></label>
                         <input type="tel" id="editClientPhone" name="client_phone" class="form-control" inputmode="numeric" pattern="[0-9]{11}" maxlength="11" placeholder="09123456789" title="Enter exactly 11 digits.">
                         <div class="form-text">Enter exactly 11 digits, or leave blank.</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="editSubject"><?php echo sanitize($mobileFormLabels['documentType']); ?></label>
-                        <input type="text" id="editSubject" name="subject" class="form-control" required>
+                        <input type="text" id="editSubject" name="subject" class="form-control" maxlength="255" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label" for="editRemarks"><?php echo sanitize($mobileFormLabels['remarks']); ?></label>
                         <textarea id="editRemarks" name="remarks" class="form-control" rows="4"></textarea>
                     </div>
-                    <div class="mb-3">
                     <div class="d-grid">
                         <button type="submit" name="update" class="btn btn-primary">Update</button>
                     </div>
@@ -488,12 +599,12 @@ if ($orderFilter === 'newest') {
 
 <script src="assets/js/qr-tools.bundle.js"></script>
 <script>
-function editDocument(id, clientPhone, subject, remarks) {
-    document.getElementById('editId').value = id;
-    document.getElementById('editClientPhone').value = clientPhone;
-    document.getElementById('editSubject').value = subject;
-    document.getElementById('editRemarks').value = remarks;
-    new bootstrap.Modal(document.getElementById('editModal')).show();
+function editDocument(data) {
+    document.getElementById('editId').value = data.id;
+    document.getElementById('editClientPhone').value = data.clientPhone || '';
+    document.getElementById('editSubject').value = data.subject || '';
+    document.getElementById('editRemarks').value = data.remarks || '';
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('editModal')).show();
 }
 
 function showDocumentTrackingQr(trackerUrl, reference) {
@@ -505,16 +616,27 @@ function showDocumentTrackingQr(trackerUrl, reference) {
     link.href = trackerUrl;
     link.title = 'Open the tracking page in a new tab';
     error.hidden = true;
+
+    // Clear any QR left over from a previously opened document.
+    const context = canvas.getContext('2d');
+    if (context) {
+        context.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
     download.classList.add('disabled');
     download.setAttribute('aria-disabled', 'true');
     download.removeAttribute('href');
     download.download = reference.toLowerCase() + '-tracking-qr.png';
+
     if (!window.QRCode || typeof window.QRCode.toCanvas !== 'function') {
         error.textContent = 'The QR generator could not be loaded. Refresh the page and try again.';
         error.hidden = false;
     } else {
         window.QRCode.toCanvas(canvas, trackerUrl, { width: 480, margin: 2, errorCorrectionLevel: 'H', color: { dark: '#064e3b', light: '#ffffff' } }, function (generationError) {
             if (generationError) {
+                if (context) {
+                    context.clearRect(0, 0, canvas.width, canvas.height);
+                }
                 error.textContent = 'Could not generate the document tracking QR code.';
                 error.hidden = false;
                 return;
@@ -527,9 +649,29 @@ function showDocumentTrackingQr(trackerUrl, reference) {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('documentTrackingQrModal')).show();
 }
 
+// Row buttons carry their data in attributes, so one handler covers every row.
+document.addEventListener('click', function (event) {
+    const editButton = event.target.closest('.js-edit-document');
+    if (editButton) {
+        let data = null;
+        try {
+            data = JSON.parse(editButton.dataset.document || '{}');
+        } catch (error) {
+            return;
+        }
+        editDocument(data);
+        return;
+    }
+    const qrButton = event.target.closest('.js-show-tracking-qr');
+    if (qrButton) {
+        showDocumentTrackingQr(qrButton.dataset.trackerUrl, qrButton.dataset.reference);
+    }
+});
+
 document.addEventListener('DOMContentLoaded', function () {
-    const confirmModalElement = document.getElementById('releaseSmsConfirmModal');
-    const confirmModal = new bootstrap.Modal(confirmModalElement);
+    const confirmModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('releaseSmsConfirmModal'));
+    const smsForm = document.getElementById('releaseSmsForm');
+    const smsSubmit = document.getElementById('releaseSmsSubmit');
     const validPhonePattern = /^[0-9]{11}$/;
 
     document.querySelectorAll('.js-send-release-sms').forEach(function (button) {
@@ -546,17 +688,25 @@ document.addEventListener('DOMContentLoaded', function () {
                 ? 'This will notify the recipient that their document is ready to claim.'
                 : 'This will notify the recipient that their document has been released.';
             document.getElementById('releaseSmsMissingPhone').hidden = hasValidPhone;
-            document.getElementById('releaseSmsSubmit').disabled = !hasValidPhone;
+            smsSubmit.disabled = !hasValidPhone;
             confirmModal.show();
         });
     });
 
+    // Prevent a double click from sending the same SMS twice. The disabled button
+    // is not included in the POST, so submit via the form's own name/value pair.
+    smsForm.addEventListener('submit', function () {
+        window.setTimeout(function () {
+            smsSubmit.disabled = true;
+            smsSubmit.textContent = 'Sending…';
+        }, 0);
+    });
+
     const outcomeModal = document.getElementById('releaseSmsOutcomeModal');
     if (outcomeModal) {
-        new bootstrap.Modal(outcomeModal).show();
+        bootstrap.Modal.getOrCreateInstance(outcomeModal).show();
     }
 });
-
 </script>
 
 <?php include 'footer.php'; ?>

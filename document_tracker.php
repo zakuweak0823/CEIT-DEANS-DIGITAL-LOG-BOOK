@@ -45,6 +45,7 @@ $apiUrl = ($apiPath === '' ? '' : '/' . $apiPath) . '/mobile-api.php';
         dd { margin: 0; color: #183b30; font-weight: 650; overflow-wrap: anywhere; }
         .status { display: inline-flex; align-items: center; border-radius: 999px; padding: .4rem .75rem; background: #fef9c3; color: #1f2937; font-size: .88rem; }
         .status.is-done { background: #dcfce7; color: #166534; }
+        .status.is-release { background: #dbeafe; color: #1e3a8a; }
         .footer { margin: 1.25rem 0 0; color: #687d75; font-size: .85rem; line-height: 1.5; }
         button { min-height: 2.8rem; margin-top: 1.25rem; padding: .7rem 1rem; border: 0; border-radius: .85rem; background: #065f46; color: white; font: inherit; font-weight: 700; cursor: pointer; }
         button:focus-visible, .return-link:focus-visible { outline: 3px solid #6ee7b7; outline-offset: 3px; }
@@ -83,7 +84,8 @@ $apiUrl = ($apiPath === '' ? '' : '/' . $apiPath) . '/mobile-api.php';
                     <button type="button" id="refreshTracker">Refresh status</button>
                 </section>
             <?php endif; ?>
-            <a class="return-link" id="returnLink" href="./">Return</a>
+            <!-- Hidden until the script finds a safe place to return to; a bare "./" can point at a folder with no page (403 Forbidden). -->
+            <a class="return-link" id="returnLink" href="#" hidden>Return</a>
         </div>
     </article>
 </main>
@@ -101,13 +103,18 @@ async function refreshDocumentStatus() {
         const response = await fetch(`${trackerApi}?action=document_tracker_status&token=${encodeURIComponent(trackerToken)}`, { cache: 'no-store' });
         const result = await response.json();
         if (!response.ok || !result.success) throw new Error(result.message || 'This tracking code could not be verified.');
-        document.getElementById('recordSubject').textContent = result.record.subject;
-        document.getElementById('recordReference').textContent = result.record.reference;
-        document.getElementById('recordType').textContent = result.record.type;
-        document.getElementById('recordDate').textContent = result.record.date;
+        const record = result.record || {};
+        const textOrDash = (value) => (value === null || value === undefined || String(value).trim() === '') ? 'Not recorded' : String(value);
+        document.getElementById('recordSubject').textContent = textOrDash(record.subject);
+        document.getElementById('recordReference').textContent = textOrDash(record.reference);
+        document.getElementById('recordType').textContent = textOrDash(record.type);
+        document.getElementById('recordDate').textContent = textOrDash(record.date);
         const status = document.getElementById('recordStatus');
-        status.textContent = result.record.status;
-        status.classList.toggle('is-done', ['Released', 'Completed', 'Returned'].includes(result.record.status));
+        const statusText = textOrDash(record.status);
+        status.textContent = statusText;
+        status.className = 'status' +
+            (['Released', 'Completed', 'Returned'].includes(statusText) ? ' is-done' : '') +
+            (statusText === 'For Release' ? ' is-release' : '');
         notice.hidden = true;
         recordPanel.hidden = false;
     } catch (error) {
@@ -139,8 +146,20 @@ window.setInterval(refreshDocumentStatus, 60000);
     const requested = sameHost(new URLSearchParams(window.location.search).get('return') || '');
     const referrer = document.referrer ? sameHost(document.referrer) : null;
     const target = requested || (referrer && !/tracker/i.test(referrer.pathname) ? referrer : null);
-    if (target) link.href = target.href;
-    else if (window.location.port === '5173') link.href = '/';
+    if (target) {
+        link.href = target.href;
+        link.hidden = false;
+    } else if (window.location.port === '5173') {
+        link.href = '/';
+        link.hidden = false;
+    } else if (window.history.length > 1) {
+        // No known page to go back to (for example, opened from a QR scanner): use the browser's own Back.
+        link.addEventListener('click', function (event) {
+            event.preventDefault();
+            window.history.back();
+        });
+        link.hidden = false;
+    }
 })();
 </script>
 </body>
