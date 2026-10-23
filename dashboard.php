@@ -492,7 +492,7 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
                 <div class="dashboard-empty-state"><i class="bi bi-check2-circle" aria-hidden="true"></i><span>No overdue records. All items are within their processing time.</span></div>
             <?php else: ?>
                 <div class="table-responsive">
-                    <table class="table align-middle mb-0 dashboard-activity-table admin-mobile-card-table">
+                    <table class="table align-middle mb-0 dashboard-activity-table dashboard-overdue-table admin-mobile-card-table">
                         <thead><tr><th scope="col">Record</th><th scope="col">Type</th><th scope="col">Person</th><th scope="col">Status</th><th scope="col">Overdue by</th><th scope="col">Actions</th></tr></thead>
                         <tbody>
                             <?php foreach ($overdueRows as $row): ?>
@@ -501,7 +501,7 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
                                     <td data-label="Type"><span class="badge <?php echo $row['type'] === 'Incoming' ? 'dashboard-direction-incoming' : ($row['type'] === 'Outgoing' ? 'dashboard-direction-outgoing' : 'admin-status-neutral'); ?>"><?php echo sanitize($row['type']); ?></span></td>
                                     <td data-label="Person"><?php echo sanitize($row['person'] !== '' ? $row['person'] : '-'); ?></td>
                                     <td data-label="Status">
-                                        <div class="d-inline-flex flex-column align-items-center gap-1">
+                                        <div class="dashboard-status-stack">
                                             <span class="badge <?php echo admin_status_badge_class($row['status']); ?>"><?php echo sanitize($row['status']); ?></span>
                                             <span class="badge text-bg-danger">Overdue</span>
                                         </div>
@@ -590,7 +590,10 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
             </article>
             <article class="dashboard-panel dashboard-chart-panel">
                 <div class="dashboard-panel-heading"><h3>SMS overview<button type="button" class="chart-info-button" data-chart-info="<strong>Delivered:</strong> confirmed received on the recipient's phone.<br><strong>Pending:</strong> awaiting confirmation.<br><strong>Failed:</strong> not delivered. Follow up with the recipient." aria-label="What the SMS statuses mean"><i class="bi bi-info-circle" aria-hidden="true"></i></button></h3><span>Delivery status of all messages</span></div>
-                <div class="dashboard-chart-container"><canvas id="redesignSmsChart" role="img" aria-label="Chart showing SMS messages by delivery status"></canvas></div>
+                <div class="dashboard-chart-with-legend">
+                    <div class="dashboard-chart-container"><canvas id="redesignSmsChart" role="img" aria-label="Chart showing SMS messages by delivery status"></canvas></div>
+                    <ul class="dashboard-chart-legend" id="smsLegend" aria-label="SMS status legend"></ul>
+                </div>
             </article>
             <article class="dashboard-panel dashboard-chart-panel<?php echo $hasHourData ? '' : ' dashboard-chart-wide'; ?>">
                 <div class="dashboard-panel-heading"><h3>Busiest weekdays<button type="button" class="chart-info-button" data-chart-info="<strong>Documents recorded per weekday over the last 90 days.</strong> Helps decide when more staff are needed at the desk." aria-label="About this chart"><i class="bi bi-info-circle" aria-hidden="true"></i></button></h3><span><?php echo $busiestWeekday !== null ? 'Busiest: ' . sanitize($busiestWeekday) . ' &middot; last 90 days' : 'Last 90 days'; ?></span></div>
@@ -1006,6 +1009,42 @@ document.addEventListener('DOMContentLoaded', function() {
     const smsData = <?php echo json_encode($smsStatusData); ?>;
     const smsColors = { 'Delivered': '#79c28f', 'Sent': '#7cc9bd', 'Pending': '#f6d776', 'Queued': '#f6d776', 'Failed': '#e8a0a8' };
     const smsLabels = Object.keys(smsData);
+    const smsMeanings = {
+        'Delivered': 'Received on the phone',
+        'Sent': 'Handed to the network',
+        'Pending': 'Waiting for confirmation',
+        'Queued': 'Waiting to be sent',
+        'Failed': 'Not delivered, follow up'
+    };
+    const smsLegend = document.getElementById('smsLegend');
+    const smsTotal = Object.values(smsData).reduce((sum, value) => sum + Number(value), 0);
+    if (smsLegend) {
+        if (smsLabels.length === 0) {
+            const empty = document.createElement('li');
+            empty.className = 'is-empty';
+            empty.textContent = 'No messages yet';
+            smsLegend.appendChild(empty);
+        }
+        smsLabels.forEach((label) => {
+            const count = Number(smsData[label]);
+            const item = document.createElement('li');
+            const swatch = document.createElement('span');
+            swatch.className = 'dashboard-legend-swatch';
+            swatch.style.backgroundColor = smsColors[label] || '#cbd5e1';
+            const text = document.createElement('span');
+            text.className = 'dashboard-legend-text';
+            const name = document.createElement('strong');
+            name.textContent = label;
+            const meaning = document.createElement('small');
+            meaning.textContent = smsMeanings[label] || 'Other status';
+            text.append(name, meaning);
+            const value = document.createElement('span');
+            value.className = 'dashboard-legend-value';
+            value.textContent = count.toLocaleString() + ' · ' + (smsTotal > 0 ? Math.round((count / smsTotal) * 100) : 0) + '%';
+            item.append(swatch, text, value);
+            smsLegend.appendChild(item);
+        });
+    }
     new Chart(document.getElementById('redesignSmsChart'), {
         type: 'doughnut',
         data: {
@@ -1019,7 +1058,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 spacing: 2
             }]
         },
-        options: { responsive: true, maintainAspectRatio: false, cutout: '66%', plugins: { legend, tooltip: percentTooltip } },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '66%', plugins: { legend: { display: false }, tooltip: percentTooltip } },
         plugins: [centerTotal]
     });
 });
