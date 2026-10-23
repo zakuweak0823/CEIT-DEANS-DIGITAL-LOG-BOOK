@@ -1045,7 +1045,7 @@ $showPrintHeader = $reportGenerated && ($printSettings['letterhead'] || $printSe
                         <span class="report-print-footer-meta">
                             <span>Generated <?php echo sanitize(date('F j, Y · g:i A')); ?></span>
                             <?php if ($printSettings['preparedBy']): ?>
-                            <span>Prepared by: <?php echo sanitize((string)($_SESSION['admin'] ?? 'Administrator')); ?></span>
+                            <span>Prepared by: Administrator</span>
                             <?php endif; ?>
                         </span>
                     </footer>
