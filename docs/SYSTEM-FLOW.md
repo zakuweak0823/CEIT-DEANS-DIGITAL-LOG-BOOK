@@ -267,6 +267,23 @@ type=Outgoing, status=For Release  → Outgoing page (top, oldest first)
 type=Outgoing, status=Released     → Outgoing page (below, newest first)
 ```
 
+#### Tracking history and requirements
+
+- `document_events` stores one row per change. Database triggers on
+  `documents` and batches write it, with the staff name taken from
+  `@doc_actor` (set in `db.php`). Public pages show the timeline without staff
+  names (`fetch_status_history` in `status_support.php`). A batch receipt
+  confirmation is stored as `kind='scan'` and shown as "Received by the
+  office".
+- `document_requirements` holds the checklist for an `Incomplete` document
+  (`requirements_support.php`). When every item is received the status returns
+  to `Received`.
+- `message_composer.php` generates SMS text for Incomplete, For Release and
+  Released; `compose_message.php` is the read-only admin preview endpoint.
+- Tables and triggers are created once by `ensure_document_events` and are
+  gated by settings keys (`document_events_v1`, `batch_events_v1`,
+  `batch_receipt_backfill_v1`).
+
 ### 5.2 Recording an incoming document
 
 `incoming.php` → `isset($_POST['save'])`

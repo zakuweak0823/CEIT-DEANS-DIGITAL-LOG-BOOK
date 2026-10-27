@@ -238,6 +238,29 @@ commit.
   documents remain. Admin accounts, settings, categories, and API tokens are
   not removed by `/clear all`.
 
+## V1.19 — Shopee-style tracking, Incomplete flow, and generated SMS
+
+- Unified document and bulk statuses: Received, In Review, Forwarded,
+  Incomplete, On Hold, Approved, Returned, Cancelled (Incoming) and For
+  Release, Released, Returned, Cancelled (Outgoing). Status is changed from a
+  clickable badge menu; the separate "Mark Released" button was removed.
+- Added an automatic tracking history (`document_events`, written by database
+  triggers) shown as a timeline on the document tracker and the bulk receipt,
+  with plain-language notes. Bulk receipts confirmed earlier are backfilled as
+  "Received by the office".
+- Added the **Incomplete** flow: a requirements checklist
+  (`document_requirements`), an Incomplete modal with SMS preview, a
+  Requirements modal, and an "Action needed" banner on the tracker. There are
+  no deadlines or reminders.
+- Added a flexible SMS generator (`message_composer.php`) that builds varied
+  messages that fit one SMS where possible. Staff can preview via
+  `compose_message.php`. "For Release" and "Released" messages use it too.
+- Mobile app: document statuses are shown only as Pending, For Release and
+  Released (Returned and Cancelled show as Released; Borrowed items keep
+  Borrowed/Returned). Buttons were restyled and the home **Open logbook**
+  button redesigned.
+- Bulk tracker page restyled to match the document tracker.
+
 ## Earlier chat requests included in the project snapshot
 
 These requests were part of the same project conversation. They do not all

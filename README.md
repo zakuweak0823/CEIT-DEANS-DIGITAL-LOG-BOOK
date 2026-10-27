@@ -93,6 +93,11 @@ the sections below and in the [Windows setup guide](docs/WINDOWS-SETUP.md).
   borrowed items, SMS records, and reports share one PHP/MySQL database.
 - **Traceable handoffs:** office-issued QR tokens let submitters check limited
   document or bulk submission status without exposing the admin workspace.
+- **Shopee-style tracking:** one shared status set, an automatic tracking
+  history timeline on the public tracker and bulk receipt, and an Incomplete
+  flow with a requirements checklist and an "Action needed" banner.
+- **Generated SMS:** messages are composed from the document's situation
+  instead of fixed templates, with a staff preview before sending.
 - **Purpose-built admin workspace:** separate priority indicators, direct
   record actions, responsive tables, top-of-screen submission alerts, and
   configurable themes and Compact Mode.
@@ -115,6 +120,7 @@ the sections below and in the [Windows setup guide](docs/WINDOWS-SETUP.md).
 | **SMS and notifications** | Configure SMS and email, send client updates, review delivery logs, and choose browser alerts and sounds. New-submission alerts appear in a neat top-of-screen notification. |
 | **Admin Assistant** | Get privacy-friendly workflow guidance from a clickable side-peeking launcher and links to admin tools. Optional form assistance previews changes and requires approval before filling fields; it never submits forms. Toggle it in Settings. |
 | **Mobile app** | Submit documents with a required submitter name and a clearly labeled Student/Faculty submitter type, receive a reference and status-tracking QR, scan office-issued codes, and access office logbook features. Admin settings control optional form fields and public kiosk access. |
+| **Statuses and history** | Change status from the clickable badge on Incoming, Outgoing, and Bulk pages. Every change is recorded automatically and shown as a timeline on the tracker. Marking a document **Incomplete** opens a requirements checklist and an optional generated SMS preview; the mobile app simplifies document statuses to Pending, For Release, and Released. |
 | **Document tracker** | A separate, mobile-friendly public page shows only the status tied to an office-issued, unguessable QR token. Its API URL respects the project's folder path, including when installed under XAMPP `htdocs`. |
 
 ### Incoming submission fields
