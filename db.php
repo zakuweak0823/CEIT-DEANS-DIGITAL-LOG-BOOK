@@ -135,6 +135,20 @@ try {
     render_database_unavailable_response();
 }
 
+require_once __DIR__ . '/status_support.php';
+// The status-history triggers read this to record who made each change.
+$statusActor = isset($_SESSION['admin']) && is_string($_SESSION['admin']) && $_SESSION['admin'] !== ''
+    ? $_SESSION['admin']
+    : (basename((string)($_SERVER['SCRIPT_NAME'] ?? '')) === 'mobile-api.php' ? 'Mobile app' : null);
+$conn->query('SET @doc_actor = ' . ($statusActor === null ? 'NULL' : "'" . $conn->real_escape_string(mb_substr($statusActor, 0, 100)) . "'"));
+try {
+    ensure_doc_status_migration($conn);
+    ensure_document_events($conn);
+} catch (Throwable $error) {
+    // A missing table during first-time setup must not block the page; the migration retries on the next request.
+    error_log('Document status migration skipped: ' . $error->getMessage());
+}
+
 function safe_query($conn, $query, $types = '', $params = []) {
     $stmt = mysqli_prepare($conn, $query);
     if ($stmt === false) {

@@ -101,7 +101,7 @@ function ensure_batch_storage($conn)
         batch_code VARCHAR(32) NOT NULL UNIQUE,
         document_type VARCHAR(20) NOT NULL,
         batch_type VARCHAR(255) NOT NULL DEFAULT '',
-        status VARCHAR(20) NOT NULL DEFAULT 'Pending',
+        status VARCHAR(20) NOT NULL DEFAULT 'Received',
         batch_date DATE NOT NULL,
         sender VARCHAR(255) NOT NULL,
         submitter_name VARCHAR(255) NOT NULL DEFAULT '',
@@ -126,7 +126,7 @@ function ensure_batch_storage($conn)
         $conn->query("ALTER TABLE document_batches ADD COLUMN batch_type VARCHAR(255) NOT NULL DEFAULT ''");
     }
     if ($migrateStatus) {
-        $conn->query("ALTER TABLE document_batches ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'Pending'");
+        $conn->query("ALTER TABLE document_batches ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'Received'");
     }
     if (!isset($columns['submitter_name']) && $conn->query("ALTER TABLE document_batches ADD COLUMN submitter_name VARCHAR(255) NOT NULL DEFAULT ''") === false) {
         throw new RuntimeException('Could not add the batch submitter name field: ' . $conn->error);
@@ -185,9 +185,10 @@ function ensure_batch_storage($conn)
                     WHERE p.batch_id = b.batch_id AND d.status = 'For Release'
                 ) THEN 'For Release'
                 WHEN b.document_type = 'Outgoing' THEN 'For Release'
-                ELSE 'Pending'
+                ELSE 'Received'
             END");
     }
     $conn->query('UPDATE document_batches b SET b.paper_count = (SELECT COUNT(*) FROM batch_papers p WHERE p.batch_id = b.batch_id) WHERE b.paper_count = 0');
+    ensure_batch_events($conn);
 }
 ?>

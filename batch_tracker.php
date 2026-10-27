@@ -19,7 +19,7 @@ $batch = null;
 if (!$storageError && preg_match('/^[a-f0-9]{64}$/', $trackingToken)) {
     $stmt = safe_query(
         $conn,
-        "SELECT batch_code, batch_type, status, is_priority, batch_date, paper_count, intake_notes,
+        "SELECT batch_id, batch_code, batch_type, status, is_priority, batch_date, paper_count, intake_notes,
                 received_paper_count, intake_expected_count, received_at, received_by
          FROM document_batches
          WHERE tracking_token = ?",
@@ -41,6 +41,7 @@ if (!$storageError && preg_match('/^[a-f0-9]{64}$/', $trackingToken)) {
                 'receivedAt' => $row['received_at'],
                 'receivedBy' => $row['received_by'],
                 'intakeNotes' => $row['intake_notes'] ?? '',
+                'history' => fetch_status_history($conn, 'batch_id', (int)$row['batch_id']),
             ];
         }
         mysqli_stmt_close($stmt);
@@ -62,9 +63,24 @@ if (!$storageError && preg_match('/^[a-f0-9]{64}$/', $trackingToken)) {
         [hidden] { display: none !important; }
         /* Self-contained so the status stays readable even if the admin stylesheet or Bootstrap theme is unavailable. */
         .tracker-status { display: inline-block; padding: .3rem .75rem; border-radius: 999px; background: #fef9c3; color: #713f12; font-size: .85rem; font-weight: 700; line-height: 1.2; }
-        .tracker-status.status-for-release { background: #dbeafe; color: #1e3a8a; }
+        .tracker-status.status-for-release, .tracker-status.status-approved { background: #dbeafe; color: #1e3a8a; }
         .tracker-status.status-released { background: #dcfce7; color: #166534; }
+        .tracker-status.status-incomplete, .tracker-status.status-returned { background: #ffedd5; color: #9a3412; }
+        .tracker-status.status-on-hold, .tracker-status.status-cancelled { background: #e5e7eb; color: #374151; }
         .tracker-status.status-priority { background: #ffedd5; color: #9a3412; }
+        .history { margin: 1.25rem 0 1.25rem; }
+        .history h2 { margin: 0 0 .75rem; font-size: 1rem; font-weight: 700; color: #102e24; }
+        .timeline { position: relative; margin: 0; padding: 0; list-style: none; }
+        .timeline li { position: relative; padding: 0 0 1.1rem 1.6rem; }
+        .timeline li::before { content: ""; position: absolute; left: .42rem; top: .4rem; bottom: -.1rem; width: 2px; background: #cfe3d6; }
+        .timeline li:last-child { padding-bottom: 0; }
+        .timeline li:last-child::before { display: none; }
+        .timeline li::after { content: ""; position: absolute; left: 0; top: .25rem; width: .9rem; height: .9rem; border-radius: 50%; border: 2px solid #9fc4ad; background: #fff; }
+        .timeline li.is-latest::after { border-color: #16834a; background: #16834a; box-shadow: 0 0 0 4px #d7f0df; }
+        .timeline .tl-title { margin: 0; color: #173d2c; font-weight: 700; font-size: .95rem; }
+        .timeline li:not(.is-latest) .tl-title { color: #526d63; font-weight: 600; }
+        .timeline .tl-note { margin: .1rem 0 0; color: #526d63; font-size: .85rem; }
+        .timeline .tl-time { margin: .1rem 0 0; color: #60766b; font-size: .78rem; }
         .receipt-letterhead { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) auto; align-items: center; gap: 1rem; padding-bottom: 1.25rem; border-bottom: 2px solid #0f5132; }
         .receipt-letterhead img { width: 4.25rem; height: 4.25rem; object-fit: contain; }
         .receipt-letterhead p { margin: 0; color: #466356; font-size: .78rem; line-height: 1.45; }
@@ -159,7 +175,7 @@ if (!$storageError && preg_match('/^[a-f0-9]{64}$/', $trackingToken)) {
                         <div class="receipt-detail"><dt>Batch reference</dt><dd class="receipt-reference"><?php echo sanitize($batch['code']); ?></dd></div>
                         <div class="receipt-detail"><dt>Document type</dt><dd><?php echo sanitize($batch['type']); ?></dd></div>
                         <div class="receipt-detail"><dt>Date submitted</dt><dd><?php echo sanitize(date('F j, Y', strtotime($batch['date']))); ?></dd></div>
-                        <div class="receipt-detail"><dt>Current status</dt><dd><?php echo sanitize($statusText !== '' ? $statusText : 'Not recorded'); ?><?php if ($batch['isPriority']): ?> · Priority<?php endif; ?></dd></div>
+                        <div class="receipt-detail"><dt>Current status</dt><dd><span class="tracker-status status-<?php echo sanitize($statusSlug !== '' ? $statusSlug : 'unknown'); ?>"><?php echo sanitize($statusText !== '' ? $statusText : 'Not recorded'); ?></span><?php if ($batch['isPriority']): ?> <span class="tracker-status status-priority ms-1">Priority</span><?php endif; ?></dd></div>
                     <?php else: ?>
                         <dt class="col-5 col-sm-4">Bulk submission</dt>
                         <dd class="col-7 col-sm-8"><?php echo sanitize($batch['code']); ?></dd>
@@ -185,17 +201,27 @@ if (!$storageError && preg_match('/^[a-f0-9]{64}$/', $trackingToken)) {
                         <strong class="ms-2"><?php echo number_format($expectedCount); ?></strong>
                     </div>
                 <?php endif; ?>
+                <section class="history" aria-labelledby="historyTitle">
+                    <h2 id="historyTitle">Tracking history</h2>
+                    <ol class="timeline">
+                        <?php foreach ($batch['history'] as $historyIndex => $event): ?>
+                            <li<?php echo $historyIndex === 0 ? ' class="is-latest"' : ''; ?>>
+                                <p class="tl-title"><?php echo sanitize($event['kind'] === 'scan' ? 'Received by the office' : $event['status']); ?></p>
+                                <?php if (trim((string)($event['note'] ?? '')) !== ''): ?><p class="tl-note"><?php echo sanitize($event['note']); ?></p><?php endif; ?>
+                                <p class="tl-time"><?php echo sanitize(date('M j, Y, g:i A', strtotime($event['at']))); ?></p>
+                            </li>
+                        <?php endforeach; ?>
+                        <?php if (!$batch['history']): ?><li class="is-latest"><p class="tl-title">No history recorded yet.</p></li><?php endif; ?>
+                    </ol>
+                </section>
                 <?php if ($batch['receivedAt'] !== null): ?>
                     <div class="receipt-confirmation">
-                        <p class="fw-semibold text-success mb-2">Intake confirmed by the CEIT Dean's Office</p>
+                        <p class="fw-semibold text-success mb-2">Status recorded by the CEIT Dean's Office</p>
                         <?php if ($batch['receivedPaperCount'] !== $expectedCount): ?>
                             <?php $countDifference = (int)$batch['receivedPaperCount'] - (int)$expectedCount; ?>
                             <p class="mb-1 text-danger">Count discrepancy: <strong><?php echo number_format(abs($countDifference)); ?> <?php echo $countDifference < 0 ? 'fewer' : 'more'; ?> than expected</strong></p>
-                        <?php else: ?>
-                            <p class="mb-1">Count verification: <strong>Received count matches the expected count.</strong></p>
                         <?php endif; ?>
-                        <p class="mb-1">Received on: <strong><?php echo sanitize(date('F j, Y \a\t g:i A', strtotime($batch['receivedAt']))); ?></strong></p>
-                        <?php if ($batch['receivedBy'] !== ''): ?><p class="mb-0">Recorded by: <strong><?php echo sanitize($batch['receivedBy']); ?></strong></p><?php endif; ?>
+                        <p class="mb-0">Status updates are recorded by the office. Tap Refresh status to see the latest.</p>
                         <?php if (trim((string)$batch['intakeNotes']) !== ''): ?><div class="receipt-notes"><strong>Condition / count note</strong><br><?php echo nl2br(sanitize($batch['intakeNotes'])); ?></div><?php endif; ?>
                     </div>
                     <div class="receipt-signoff">
@@ -203,7 +229,8 @@ if (!$storageError && preg_match('/^[a-f0-9]{64}$/', $trackingToken)) {
                         <div>Submitter's copy</div>
                     </div>
                     <p class="receipt-print-meta">Generated <?php echo sanitize(date('F j, Y \a\t g:i A')); ?> · Receipt reference <?php echo sanitize($batch['code']); ?> · Verify using the official bulk tracking link.</p>
-                    <button type="button" class="btn btn-success mt-3 no-print" onclick="window.print()">Print / save receipt</button>
+                    <button type="button" class="btn btn-success mt-3 no-print" onclick="window.location.reload()">Refresh status</button>
+                    <button type="button" class="btn btn-outline-success mt-3 ms-1 no-print" onclick="window.print()">Print / save receipt</button>
                 <?php else: ?>
                     <div class="rounded-3 border border-warning bg-warning-subtle p-3">
                         <strong>Waiting for office count confirmation</strong>

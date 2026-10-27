@@ -61,7 +61,6 @@ ALTER TABLE documents ADD COLUMN IF NOT EXISTS tracking_token CHAR(64) DEFAULT N
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS entry_source VARCHAR(32) NOT NULL DEFAULT 'standard';
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS submitter_type VARCHAR(20) NOT NULL DEFAULT 'Other';
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_priority TINYINT(1) NOT NULL DEFAULT 0;
-UPDATE documents SET status = 'Pending' WHERE type = 'Incoming' AND status = 'Received';
 
 CREATE TABLE IF NOT EXISTS mobile_submission_logs (
     log_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -98,7 +97,7 @@ CREATE TABLE IF NOT EXISTS document_batches (
     batch_code VARCHAR(32) NOT NULL UNIQUE,
     document_type VARCHAR(20) NOT NULL,
     batch_type VARCHAR(255) NOT NULL DEFAULT '',
-    status VARCHAR(20) NOT NULL DEFAULT 'Pending',
+    status VARCHAR(20) NOT NULL DEFAULT 'Received',
     batch_date DATE NOT NULL,
     sender VARCHAR(255) NOT NULL,
     sender_type VARCHAR(20) NOT NULL DEFAULT 'Student',
@@ -154,10 +153,10 @@ SET b.status = CASE
         WHERE p.batch_id = b.batch_id AND d.status = 'For Release'
     ) THEN 'For Release'
     WHEN b.document_type = 'Outgoing' THEN 'For Release'
-    ELSE 'Pending'
+    ELSE 'Received'
 END
 WHERE b.status = '';
-ALTER TABLE document_batches ALTER COLUMN status SET DEFAULT 'Pending';
+ALTER TABLE document_batches ALTER COLUMN status SET DEFAULT 'Received';
 
 CREATE TABLE IF NOT EXISTS sms_logs (
     sms_id INT AUTO_INCREMENT PRIMARY KEY,

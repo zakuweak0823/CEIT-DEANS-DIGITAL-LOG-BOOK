@@ -471,7 +471,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                         <div class="col-12 col-md-4">
                             <label class="form-label fw-semibold" for="slaIncomingDays">Incoming documents pending (days)</label>
                             <input class="form-control" type="number" id="slaIncomingDays" name="sla_incoming_days" min="1" max="365" step="1" value="<?php echo (int)$slaSettings['incomingDays']; ?>" required>
-                            <div class="form-text">Overdue when still Pending after this many days, including Incoming bulk submissions.</div>
+                            <div class="form-text">Overdue when still open (Received, In Review, Forwarded, Approved or On Hold) after this many days, including Incoming bulk submissions.</div>
                         </div>
                         <div class="col-12 col-md-4">
                             <label class="form-label fw-semibold" for="slaOutgoingDays">Outgoing documents awaiting release (days)</label>
@@ -592,8 +592,8 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                         <div class="col-12 col-lg-6">
                             <label class="form-label fw-semibold" for="intakeConfirmationMode">When should receipt be confirmed?</label>
                             <select class="form-select" id="intakeConfirmationMode" name="intake_confirmation_mode" required>
-                                <option value="confirm_with_release" <?php echo $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_with_release' ? 'selected' : ''; ?>>Confirm count and move Pending to For Release in one step (recommended)</option>
-                                <option value="confirm_before_release" <?php echo $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_before_release' ? 'selected' : ''; ?>>Confirm receipt first; move Pending to For Release afterwards</option>
+                                <option value="confirm_with_release" <?php echo $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_with_release' ? 'selected' : ''; ?>>Confirm count and move Received to For Release in one step (recommended)</option>
+                                <option value="confirm_before_release" <?php echo $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_before_release' ? 'selected' : ''; ?>>Confirm receipt first; move Received to For Release afterwards</option>
                             </select>
                             <div class="form-text">The count form is Admin-only. In either mode, an unexpected count requires a note.</div>
                         </div>
@@ -647,7 +647,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                             <input class="form-check-input" type="checkbox" role="switch" id="adminSubmissionToast">
                             <label class="form-check-label" for="adminSubmissionToast">Show a top alert for new submissions</label>
                         </div>
-                        <div class="form-text">A brief alert appears at the top when a new document record is submitted. Pending documents remain available from the navigation menu.</div>
+                        <div class="form-text">A brief alert appears at the top when a new document record is submitted. Open documents remain available from the navigation menu.</div>
                         <div class="form-check form-switch mt-3">
                             <input class="form-check-input" type="checkbox" role="switch" id="adminAssistantEnabled">
                             <label class="form-check-label" for="adminAssistantEnabled">Show the side-peeking Admin Assistant</label>

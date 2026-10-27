@@ -53,6 +53,23 @@ $apiUrl = ($apiPath === '' ? '' : '/' . $apiPath) . '/mobile-api.php';
         .status { display: inline-block; padding: .3rem .75rem; border-radius: 999px; background: #fef9c3; color: #713f12; font-size: .85rem; font-weight: 700; line-height: 1.2; }
         .status.is-done { background: #dcfce7; color: #166534; }
         .status.is-release { background: #dbeafe; color: #1e3a8a; }
+        .status.is-attention { background: #ffedd5; color: #9a3412; }
+        .status.is-muted { background: #e5e7eb; color: #374151; }
+        .history { margin: 1.25rem 0 1.25rem; }
+        .banner { margin: 1.25rem 0 0; padding: .85rem 1rem; border-left: 4px solid #d97706; border-radius: 8px; background: #fffbeb; color: #78350f; }
+        .banner ul { margin: .4rem 0 0; padding-left: 1.2rem; }
+        .history h3 { margin: 0 0 .75rem; color: #102e24; font-size: 1rem; }
+        .timeline { position: relative; margin: 0; padding: 0; list-style: none; }
+        .timeline li { position: relative; padding: 0 0 1.1rem 1.6rem; }
+        .timeline li::before { content: ""; position: absolute; left: .42rem; top: .4rem; bottom: -.1rem; width: 2px; background: #cfe3d6; }
+        .timeline li:last-child { padding-bottom: 0; }
+        .timeline li:last-child::before { display: none; }
+        .timeline li::after { content: ""; position: absolute; left: 0; top: .25rem; width: .9rem; height: .9rem; border-radius: 50%; border: 2px solid #9fc4ad; background: #fff; }
+        .timeline li.is-latest::after { border-color: #16834a; background: #16834a; box-shadow: 0 0 0 4px #d7f0df; }
+        .timeline .tl-title { margin: 0; color: #173d2c; font-weight: 700; font-size: .95rem; }
+        .timeline li:not(.is-latest) .tl-title { color: #526d63; font-weight: 600; }
+        .timeline .tl-note { margin: .1rem 0 0; color: #526d63; font-size: .85rem; }
+        .timeline .tl-time { margin: .1rem 0 0; color: #60766b; font-size: .78rem; }
         .receipt-confirmation { padding: 1rem 1.1rem; border: 1px solid #b7ddc3; border-left: 4px solid #16834a; border-radius: .75rem; background: #f1faf3; }
         .receipt-confirmation p { margin: 0 0 .25rem; }
         .receipt-confirmation p:last-child { margin-bottom: 0; }
@@ -126,6 +143,14 @@ $apiUrl = ($apiPath === '' ? '' : '/' . $apiPath) . '/mobile-api.php';
                         <div class="receipt-detail"><dt>Current status</dt><dd><span class="status" id="recordStatus"></span></dd></div>
                         <div class="receipt-detail"><dt>Date submitted</dt><dd id="recordDate"></dd></div>
                     </dl>
+                    <div class="banner" id="trackerMissing" hidden>
+            <strong>Action needed: please submit the following to the Dean's Office</strong>
+            <ul id="trackerMissingList"></ul>
+        </div>
+        <section class="history" aria-labelledby="historyTitle">
+                        <h3 id="historyTitle">Tracking history</h3>
+                        <ol class="timeline" id="recordHistory"></ol>
+                    </section>
                     <div class="receipt-confirmation">
                         <p><strong>Status recorded by the CEIT Dean's Office</strong></p>
                         <p class="no-print">Status updates are recorded by the office. This page refreshes automatically every minute.</p>
@@ -153,6 +178,38 @@ const trackerToken = <?php echo json_encode($trackingToken, JSON_HEX_TAG | JSON_
 const notice = document.getElementById('trackerNotice');
 const recordPanel = document.getElementById('trackerRecord');
 
+function renderHistory(events) {
+    const list = document.getElementById('recordHistory');
+    list.replaceChildren();
+    if (events.length === 0) {
+        const empty = document.createElement('li');
+        empty.className = 'is-latest';
+        empty.textContent = 'No history recorded yet.';
+        list.append(empty);
+        return;
+    }
+    events.forEach((event, index) => {
+        const item = document.createElement('li');
+        if (index === 0) item.className = 'is-latest';
+        const title = document.createElement('p');
+        title.className = 'tl-title';
+        title.textContent = event.kind === 'scan' ? 'Received by the office' : String(event.status || '');
+        item.append(title);
+        if (event.note) {
+            const note = document.createElement('p');
+            note.className = 'tl-note';
+            note.textContent = event.note;
+            item.append(note);
+        }
+        const time = document.createElement('p');
+        time.className = 'tl-time';
+        const when = new Date(String(event.at || '').replace(' ', 'T'));
+        time.textContent = Number.isNaN(when.getTime()) ? String(event.at || '') : when.toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
+        item.append(time);
+        list.append(item);
+    });
+}
+
 async function refreshDocumentStatus() {
     notice.hidden = false;
     notice.textContent = 'Checking your tracking code…';
@@ -174,10 +231,21 @@ async function refreshDocumentStatus() {
         const statusText = textOrDash(record.status);
         status.textContent = statusText;
         status.className = 'status' +
-            (['Released', 'Completed', 'Returned'].includes(statusText) ? ' is-done' : '') +
-            (statusText === 'For Release' ? ' is-release' : '');
+            (['Released', 'Completed'].includes(statusText) ? ' is-done' : '') +
+            (['For Release', 'Approved'].includes(statusText) ? ' is-release' : '') +
+            (['Incomplete', 'Returned'].includes(statusText) ? ' is-attention' : '') +
+            (['On Hold', 'Cancelled'].includes(statusText) ? ' is-muted' : '');
         notice.hidden = true;
         recordPanel.hidden = false;
+        renderHistory(Array.isArray(result.history) ? result.history : []);
+        const missing = Array.isArray(result.missing) ? result.missing : [];
+        const missingList = document.getElementById('trackerMissingList');
+        missingList.replaceChildren(...missing.map((label) => {
+            const item = document.createElement('li');
+            item.textContent = String(label);
+            return item;
+        }));
+        document.getElementById('trackerMissing').hidden = missing.length === 0;
     } catch (error) {
         recordPanel.hidden = true;
         notice.textContent = error instanceof Error ? error.message : 'Document status could not be loaded. Check your connection and try again.';

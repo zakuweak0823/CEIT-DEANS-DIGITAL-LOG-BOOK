@@ -57,7 +57,7 @@ $incomingMonth = safe_scalar($conn, "SELECT COUNT(*) FROM documents WHERE type =
 $outgoingToday = safe_scalar($conn, "SELECT COUNT(*) FROM documents WHERE type = 'Outgoing' AND DATE(date_created) = ?", 's', [$today]);
 $outgoingMonth = safe_scalar($conn, "SELECT COUNT(*) FROM documents WHERE type = 'Outgoing' AND DATE(date_created) >= ?", 's', [$monthStart]);
 $loansActive = safe_scalar($conn, "SELECT COUNT(*) FROM borrowed_items WHERE status != 'Returned'");
-$pendingIncoming = safe_scalar($conn, "SELECT COUNT(*) FROM documents WHERE type = 'Incoming' AND status = 'Pending'");
+$pendingIncoming = safe_scalar($conn, "SELECT COUNT(*) FROM documents WHERE type = 'Incoming' AND status IN (" . doc_status_open_sql() . ")");
 $forReleaseCount = safe_scalar($conn, "SELECT COUNT(*) FROM documents WHERE type = 'Outgoing' AND status = 'For Release'");
 $smsPending = safe_scalar($conn, "SELECT COUNT(*) FROM sms_logs WHERE LOWER(status) IN ('pending', 'queued')");
 $smsFailed = safe_scalar($conn, "SELECT COUNT(*) FROM sms_logs WHERE LOWER(status) = 'failed'");
@@ -66,10 +66,10 @@ $totalDocuments = safe_scalar($conn, "SELECT COUNT(*) FROM documents");
 $slaSettings = get_sla_settings($conn);
 $slaOverdue = get_sla_overdue($conn, $slaSettings, 300);
 $overdueTotal = (int)$slaOverdue['documentCount'];
-$overdueIncoming = (int)safe_scalar($conn, "SELECT COUNT(*) FROM documents WHERE type = 'Incoming' AND status = 'Pending' AND date_created < (NOW() - INTERVAL ? DAY)", 'i', [$slaSettings['incomingDays']]);
+$overdueIncoming = (int)safe_scalar($conn, "SELECT COUNT(*) FROM documents WHERE type = 'Incoming' AND status IN (" . doc_status_open_sql() . ") AND date_created < (NOW() - INTERVAL ? DAY)", 'i', [$slaSettings['incomingDays']]);
 $overdueOutgoing = (int)safe_scalar($conn, "SELECT COUNT(*) FROM documents WHERE type = 'Outgoing' AND status = 'For Release' AND date_created < (NOW() - INTERVAL ? DAY)", 'i', [$slaSettings['outgoingDays']]);
 $overdueBulkDocuments = (int)$slaOverdue['bulkDocumentCount'];
-$openBulkDocuments = (int)safe_scalar($conn, "SELECT COUNT(*) FROM document_batches WHERE (document_type = 'Incoming' AND status = 'Pending') OR (document_type = 'Outgoing' AND status = 'For Release')");
+$openBulkDocuments = (int)safe_scalar($conn, "SELECT COUNT(*) FROM document_batches WHERE (document_type = 'Incoming' AND status IN (" . doc_status_open_sql() . ")) OR (document_type = 'Outgoing' AND status = 'For Release')");
 $overdueRows = [];
 foreach ($slaOverdue['documents'] as $doc) {
     $isIncoming = $doc['type'] === 'Incoming';
@@ -129,7 +129,7 @@ $agingByType = [
 $openAgeSum = 0;
 $openAgeCount = 0;
 $oldestOpenAge = 0;
-$stmt = safe_query($conn, "SELECT type, DATEDIFF(NOW(), date_created) AS age FROM documents WHERE (type = 'Incoming' AND status = 'Pending') OR (type = 'Outgoing' AND status = 'For Release')");
+$stmt = safe_query($conn, "SELECT type, DATEDIFF(NOW(), date_created) AS age FROM documents WHERE (type = 'Incoming' AND status IN (" . doc_status_open_sql() . ")) OR (type = 'Outgoing' AND status = 'For Release')");
 if ($stmt !== false) {
     $result = mysqli_stmt_get_result($stmt);
     while ($row = mysqli_fetch_assoc($result)) {
@@ -205,7 +205,7 @@ if ($stmt !== false) {
     }
     mysqli_stmt_close($stmt);
 }
-$statusOrder = ['Pending', 'For Release', 'Released', 'Received'];
+$statusOrder = doc_status_all();
 uksort($statusData, static function ($left, $right) use ($statusOrder) {
     $leftIndex = array_search($left, $statusOrder, true);
     $rightIndex = array_search($right, $statusOrder, true);
@@ -260,7 +260,7 @@ $dueSoon = 0;
 if ($slaSettings['enabled']) {
     $inLimit = max(1, (int)$slaSettings['incomingDays']);
     $outLimit = max(1, (int)$slaSettings['outgoingDays']);
-    $dueSoon = (int)safe_scalar($conn, "SELECT COUNT(*) FROM documents WHERE (type = 'Incoming' AND status = 'Pending' AND date_created < (NOW() - INTERVAL " . ($inLimit - 1) . " DAY) AND date_created >= (NOW() - INTERVAL " . $inLimit . " DAY)) OR (type = 'Outgoing' AND status = 'For Release' AND date_created < (NOW() - INTERVAL " . ($outLimit - 1) . " DAY) AND date_created >= (NOW() - INTERVAL " . $outLimit . " DAY))");
+    $dueSoon = (int)safe_scalar($conn, "SELECT COUNT(*) FROM documents WHERE (type = 'Incoming' AND status IN (" . doc_status_open_sql() . ") AND date_created < (NOW() - INTERVAL " . ($inLimit - 1) . " DAY) AND date_created >= (NOW() - INTERVAL " . $inLimit . " DAY)) OR (type = 'Outgoing' AND status = 'For Release' AND date_created < (NOW() - INTERVAL " . ($outLimit - 1) . " DAY) AND date_created >= (NOW() - INTERVAL " . $outLimit . " DAY))");
 }
 
 // SMS reliability over the last 30 days.
@@ -322,7 +322,7 @@ $dueSoonRows = [];
 if ($slaSettings['enabled']) {
     $inLimitSql = max(1, (int)$slaSettings['incomingDays']);
     $outLimitSql = max(1, (int)$slaSettings['outgoingDays']);
-    foreach ($fetchRows($conn, "SELECT doc_id, type, subject, sender, submitter_name, recipient, DATEDIFF(NOW(), date_created) AS days_open, TIMESTAMPDIFF(HOUR, NOW(), DATE_ADD(date_created, INTERVAL CASE WHEN type = 'Incoming' THEN " . $inLimitSql . " ELSE " . $outLimitSql . " END DAY)) AS hours_left FROM documents WHERE (type = 'Incoming' AND status = 'Pending' AND date_created < (NOW() - INTERVAL " . ($inLimitSql - 1) . " DAY) AND date_created >= (NOW() - INTERVAL " . $inLimitSql . " DAY)) OR (type = 'Outgoing' AND status = 'For Release' AND date_created < (NOW() - INTERVAL " . ($outLimitSql - 1) . " DAY) AND date_created >= (NOW() - INTERVAL " . $outLimitSql . " DAY)) ORDER BY hours_left ASC LIMIT 6") as $row) {
+    foreach ($fetchRows($conn, "SELECT doc_id, type, subject, sender, submitter_name, recipient, DATEDIFF(NOW(), date_created) AS days_open, TIMESTAMPDIFF(HOUR, NOW(), DATE_ADD(date_created, INTERVAL CASE WHEN type = 'Incoming' THEN " . $inLimitSql . " ELSE " . $outLimitSql . " END DAY)) AS hours_left FROM documents WHERE (type = 'Incoming' AND status IN (" . doc_status_open_sql() . ") AND date_created < (NOW() - INTERVAL " . ($inLimitSql - 1) . " DAY) AND date_created >= (NOW() - INTERVAL " . $inLimitSql . " DAY)) OR (type = 'Outgoing' AND status = 'For Release' AND date_created < (NOW() - INTERVAL " . ($outLimitSql - 1) . " DAY) AND date_created >= (NOW() - INTERVAL " . $outLimitSql . " DAY)) ORDER BY hours_left ASC LIMIT 6") as $row) {
         $isIncomingRow = $row['type'] === 'Incoming';
         $personRow = $isIncomingRow ? (trim((string)$row['submitter_name']) !== '' ? $row['submitter_name'] : $row['sender']) : $row['recipient'];
         $dueSoonRows[] = [
@@ -413,9 +413,9 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
             <span class="dashboard-metric-icon dashboard-metric-icon-teal"><i class="bi bi-send" aria-hidden="true"></i></span>
             <span class="dashboard-metric-copy"><span>Outgoing today</span><strong><?php echo number_format((int)$outgoingToday); ?></strong><small>Yesterday: <?php echo number_format((int)$outgoingYesterday); ?><br><?php echo number_format((int)$outgoingMonth); ?> this month</small></span>
         </a>
-        <a class="dashboard-metric dashboard-metric-link" href="incoming?status=Pending">
+        <a class="dashboard-metric dashboard-metric-link"         href="incoming?status=Open">
             <span class="dashboard-metric-icon dashboard-metric-icon-sand"><i class="bi bi-hourglass-split" aria-hidden="true"></i></span>
-            <span class="dashboard-metric-copy"><span>Pending incoming</span><strong><?php echo number_format((int)$pendingIncoming); ?></strong><small>Awaiting review</small></span>
+            <span class="dashboard-metric-copy"><span>Open incoming</span><strong><?php echo number_format((int)$pendingIncoming); ?></strong><small>Being handled</small></span>
         </a>
         <a class="dashboard-metric dashboard-metric-link" href="outgoing?status=For%20Release">
             <span class="dashboard-metric-icon dashboard-metric-icon-neutral"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i></span>
@@ -803,12 +803,7 @@ document.addEventListener('DOMContentLoaded', function() {
         quickActionModalDialog.classList.remove('quick-action-modal-scanner');
     });
 
-    const statusColors = {
-        'Pending': '#f6d776',
-        'For Release': '#7cc9bd',
-        'Released': '#79c28f',
-        'Received': '#c4de7a'
-    };
+    const statusColors = <?php echo json_encode(doc_status_chart_colors()); ?>;
     const gridColor = 'rgba(100, 116, 139, 0.14)';
     const fontFamily = getComputedStyle(document.body).fontFamily;
     Chart.defaults.font.family = fontFamily;
@@ -905,7 +900,7 @@ document.addEventListener('DOMContentLoaded', function() {
         data: {
             labels: agingLabels,
             datasets: [{
-                label: 'Incoming (Pending)',
+                label: 'Incoming (Open)',
                 data: agingLabels.map((label) => agingByType.Incoming[label]),
                 backgroundColor: '#17613e',
                 maxBarThickness: 44

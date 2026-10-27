@@ -9197,9 +9197,60 @@ body.admin-theme-glass.admin-compact .admin-quick-access-count {
     color: #9f1239;
 }
 
+.admin-content .badge.admin-status-attention {
+    background-color: #ffedd5;
+    color: #9a3412;
+    border: 1px solid #fdba74;
+    font-weight: 650;
+}
+
 .admin-content .badge.admin-status-neutral {
     background-color: #f1f5f9;
     color: #475569;
+}
+
+/* Clickable status badge with a one-click status menu */
+.admin-content .badge.status-menu-toggle {
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-size: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+}
+
+.admin-content .badge.status-menu-toggle:hover,
+.admin-content .badge.status-menu-toggle:focus-visible {
+    box-shadow: 0 0 0 2px rgba(21, 128, 61, .3);
+}
+
+.status-menu-list {
+    min-width: 11rem;
+    border-radius: 12px;
+    padding: .35rem;
+    box-shadow: 0 12px 30px rgba(17, 65, 41, .16);
+}
+
+.status-menu-item {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    border-radius: 8px;
+    font-size: .9rem;
+}
+
+.status-menu-item.active,
+.status-menu-item:disabled {
+    background: #e7f5ec;
+    color: #14532d;
+    font-weight: 650;
+}
+
+.status-menu-dot {
+    width: .65rem;
+    height: .65rem;
+    border-radius: 50%;
+    flex: 0 0 auto;
 }
 
 .dashboard-page .dashboard-stat-icon-incoming {
@@ -9652,6 +9703,12 @@ body.admin-theme-civic .dashboard-page .dashboard-stat-icon-borrowed .bi {
     border-color: #ebd4ce;
     background: #f7eae6;
     color: #965848;
+}
+
+.dashboard-redesign .badge.admin-status-attention {
+    border-color: #fdba74;
+    background: #ffedd5;
+    color: #9a3412;
 }
 
 .dashboard-redesign .badge.admin-status-neutral {

@@ -245,15 +245,24 @@ This is the single most important structural decision in the system.
 
 | Domain | Status | Meaning | Where it appears |
 | --- | --- | --- | --- |
-| Incoming | `Pending` | Received by the office, not yet processed | Incoming page |
+| Incoming | `Received` | Logged by the office (initial status, replaces the old `Pending`) | Incoming page |
+| Incoming | `In Review`, `Forwarded`, `Approved` | Being handled; the SLA clock keeps running | Incoming page |
+| Incoming | `On Hold` | Paused by staff; the SLA clock keeps running | Incoming page |
+| Incoming | `Incomplete` | Client must submit more documents; the SLA clock is paused | Incoming page |
+| Incoming | `Returned`, `Cancelled` | Closed without release | Incoming page |
 | Outgoing | `For Release` | Ready to be claimed | Outgoing page |
 | Outgoing | `Released` | Handed to the client | Outgoing page (history) |
 
-Incoming page shows **only** `Pending`. Outgoing shows `For Release` and
+Bulk submissions (batches) use the same status set; changing a batch status
+updates its linked documents. Status definitions live in `status_support.php`,
+which also migrates old `Pending` rows to `Received` once.
+
+Incoming page shows every Incoming status (the **Open** filter shows the ones
+still being worked). Outgoing shows `For Release` and
 `Released`. A document is never in two lists at once:
 
 ```text
-type=Incoming, status=Pending      → Incoming page
+type=Incoming, status=Received…   → Incoming page
 type=Outgoing, status=For Release  → Outgoing page (top, oldest first)
 type=Outgoing, status=Released     → Outgoing page (below, newest first)
 ```

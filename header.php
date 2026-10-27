@@ -53,7 +53,7 @@ if ($adminName && isset($conn) && function_exists('safe_query')) {
     $pendingCountStatement = safe_query(
         $conn,
         "SELECT
-            (SELECT COUNT(*) FROM documents WHERE type = 'Incoming' AND status = 'Pending') AS pending_count,
+            (SELECT COUNT(*) FROM documents WHERE type = 'Incoming' AND status IN (" . doc_status_open_sql() . ")) AS pending_count,
             COALESCE((SELECT MAX(doc_id) FROM documents), 0) AS latest_document_id"
     );
     if ($pendingCountStatement === false) {
@@ -135,7 +135,7 @@ try {
                 </div>
             </div>
             <div class="admin-assistant-suggestions" aria-label="Suggested questions">
-                <button type="button" data-assistant-question="Where can I review pending documents?">Pending documents</button>
+                <button type="button" data-assistant-question="Where can I review open documents?">Open documents</button>
                 <button type="button" data-assistant-question="How do I register a document?">Register a document</button>
                 <button type="button" data-assistant-question="Where are reports?">Find reports</button>
                 <button type="button" data-assistant-question="Help me fill this form">Help with this form</button>
@@ -249,10 +249,10 @@ try {
             <div class="admin-quick-access-inner">
                 <div class="admin-quick-access-links">
                     <a href="dashboard"<?php echo $currentPage === 'dashboard.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-speedometer2" aria-hidden="true"></i>Dashboard</a>
-                    <a href="incoming?status=Pending"<?php echo $currentPage === 'incoming.php' && ($_GET['status'] ?? '') === 'Pending' ? ' aria-current="page"' : ''; ?>><i class="bi bi-inbox" aria-hidden="true"></i>Pending inbox<?php if ($pendingDocumentCount !== null && $pendingDocumentCount > 0): ?><span class="admin-quick-access-count"><?php echo sanitize($pendingBadge); ?></span><?php endif; ?></a>
+                    <a href="incoming?status=Open"<?php echo $currentPage === 'incoming.php' && in_array(($_GET['status'] ?? ''), ['Open', 'Pending'], true) ? ' aria-current="page"' : ''; ?>><i class="bi bi-inbox" aria-hidden="true"></i>Open inbox<?php if ($pendingDocumentCount !== null && $pendingDocumentCount > 0): ?><span class="admin-quick-access-count"><?php echo sanitize($pendingBadge); ?></span><?php endif; ?></a>
                     <a href="quick_document"<?php echo $currentPage === 'quick_document.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-plus-circle" aria-hidden="true"></i>New record</a>
                     <a href="records"<?php echo $currentPage === 'records.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-search" aria-hidden="true"></i>Records</a>
-                    <button class="admin-quick-access-more<?php echo (in_array($currentPage, ['outgoing.php', 'batch_papers.php', 'batch_tracker.php', 'borrowed.php', 'item_categories.php', 'sms.php', 'notification_settings.php', 'reports.php', 'settings.php'], true) || ($currentPage === 'incoming.php' && ($_GET['status'] ?? '') !== 'Pending')) ? ' is-current' : ''; ?>" type="button" data-bs-toggle="offcanvas" data-bs-target="#quickAccessMore" aria-controls="quickAccessMore" aria-label="Open more admin sections">
+                    <button class="admin-quick-access-more<?php echo (in_array($currentPage, ['outgoing.php', 'batch_papers.php', 'batch_tracker.php', 'borrowed.php', 'item_categories.php', 'sms.php', 'notification_settings.php', 'reports.php', 'settings.php'], true) || ($currentPage === 'incoming.php' && ($_GET['status'] ?? '') !== 'Open')) ? ' is-current' : ''; ?>" type="button" data-bs-toggle="offcanvas" data-bs-target="#quickAccessMore" aria-controls="quickAccessMore" aria-label="Open more admin sections">
                         <i class="bi bi-grid" aria-hidden="true"></i><span>More</span>
                     </button>
                 </div>
@@ -268,7 +268,7 @@ try {
             </div>
             <div class="offcanvas-body">
                 <div class="admin-quick-access-grid">
-                    <a href="incoming"<?php echo $currentPage === 'incoming.php' && ($_GET['status'] ?? '') !== 'Pending' ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-arrow-in-down" aria-hidden="true"></i><span>Incoming</span></a>
+                    <a href="incoming"<?php echo $currentPage === 'incoming.php' && ($_GET['status'] ?? '') !== 'Open' ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-arrow-in-down" aria-hidden="true"></i><span>Incoming</span></a>
                     <a href="outgoing"<?php echo $currentPage === 'outgoing.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-arrow-up" aria-hidden="true"></i><span>Outgoing</span></a>
                     <a href="batch_papers"<?php echo $currentPage === 'batch_papers.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-files" aria-hidden="true"></i>                    <span>Bulk Documents</span></a>
                                         <a href="batch_tracker"<?php echo $currentPage === 'batch_tracker.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-diagram-3" aria-hidden="true"></i><span>Bulk Documents Tracker</span></a>

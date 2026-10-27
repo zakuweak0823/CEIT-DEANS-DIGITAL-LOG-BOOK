@@ -5,6 +5,7 @@ require_once 'sms_service.php';
 require_once 'mobile_form_settings.php';
 require_once 'document_tracking.php';
 require_once 'sla_support.php';
+require_once 'message_composer.php';
 ensure_admin();
 
 $mobileFormLabels = get_mobile_form_labels($conn);
@@ -80,7 +81,7 @@ $overdueFilter = ($_GET['overdue'] ?? '') === '1';
 $orderFilter = ($_GET['order'] ?? '') === 'newest' ? 'newest' : 'oldest';
 $slaSettings = get_sla_settings($conn);
 $overdueDays = (int)$slaSettings['outgoingDays'];
-$validStatusFilters = ['For Release', 'Released'];
+$validStatusFilters = doc_status_outgoing();
 if (!in_array($statusFilter, $validStatusFilters, true)) {
     $statusFilter = '';
 }
@@ -157,8 +158,8 @@ if (isset($_POST['issue_tracking_qr'])) {
     if ($id <= 0 || !in_array($status, $validStatusFilters, true)) {
         $message = show_alert('Invalid release status change.', 'danger');
     } else {
-        // Restrict transitions to the two supported release states and report no-op retries.
-        $stmt = safe_query($conn, "UPDATE documents SET status = ? WHERE doc_id = ? AND type = 'Outgoing' AND status IN ('For Release', 'Released') AND status <> ?", 'sis', [$status, $id, $status]);
+        // Restrict changes to outgoing documents and report no-op retries.
+        $stmt = safe_query($conn, "UPDATE documents SET status = ? WHERE doc_id = ? AND type = 'Outgoing' AND status <> ?", 'sis', [$status, $id, $status]);
         if ($stmt === false) {
             $message = show_alert('Could not update the document release status.', 'danger');
         } else {
@@ -194,7 +195,15 @@ if (isset($_POST['issue_tracking_qr'])) {
         $message = show_alert('A notification for this document was just sent. Wait a couple of minutes before sending another.', 'warning');
         $setSmsOutcome('Notification already sent', 'A notification for this document was sent less than two minutes ago. Check the SMS Logs page before sending it again.', 'warning');
     } else {
-        $smsText = "CvSU Dean's Office: Your document '{$smsDocument['subject']}' is ready for release. Please visit the office to claim it.";
+        $smsContext = null;
+        try {
+            $smsContext = composer_document_context($conn, $id, get_document_tracking_settings($conn));
+        } catch (Throwable $error) {
+            error_log('Outgoing SMS context failed: ' . $error->getMessage());
+        }
+        $smsContext = $smsContext ?? ['reference' => document_tracking_reference($id), 'subject' => (string)$smsDocument['subject']];
+        $smsContext['status'] = 'For Release';
+        $smsText = compose_sms_message($smsContext);
         $smsResult = send_logged_sms($conn, $smsDocument['client_phone'], $smsText);
         if ($smsResult['success']) {
             $_SESSION['outgoing_sms_sent_at'][$id] = time();
@@ -379,7 +388,6 @@ if ($stmt !== false) {
                                     $documentSubmitterName = trim((string)($document['submitter_name'] ?? ''));
                                     $documentRecipient = trim((string)($document['recipient'] ?? ''));
                                     $documentPhone = trim((string)($document['client_phone'] ?? ''));
-                                    $isReleased = $document['status'] === 'Released';
                                     $editPayload = json_encode([
                                         'id' => (int)$document['doc_id'],
                                         'clientPhone' => (string)($document['client_phone'] ?? ''),
@@ -413,8 +421,8 @@ if ($stmt !== false) {
                                         <td data-label="Subject"><?php echo sanitize($document['subject']); ?></td>
                                         <td data-label="Contact number"><?php echo sanitize($documentPhone !== '' ? $documentPhone : 'Not provided'); ?></td>
                                         <td data-label="Status">
-                                            <div class="d-inline-flex flex-column align-items-stretch gap-1 text-center">
-                                                <span class="badge <?php echo admin_status_badge_class($document['status']); ?>"><?php echo sanitize($document['status']); ?></span>
+                                            <div class="d-inline-flex flex-column align-items-start gap-1">
+                                                <?php render_status_menu($document['status'], doc_status_outgoing(), ['status_doc_id' => (int)$document['doc_id']], 'set_outgoing_status', $documentReference); ?>
                                                 <?php if (!empty($slaSettings['enabled']) && !empty($document['is_overdue'])): ?>
                                                     <span class="badge text-bg-danger" title="Waiting longer than <?php echo (int)$overdueDays; ?> day(s)">Overdue</span>
                                                 <?php endif; ?>
@@ -432,15 +440,6 @@ if ($stmt !== false) {
                                             <button type="button" class="btn btn-sm btn-outline-primary document-action-button js-edit-document" title="Edit document" aria-label="Edit <?php echo sanitize($documentReference); ?>" data-document="<?php echo htmlspecialchars($editPayload !== false ? $editPayload : '{}', ENT_QUOTES, 'UTF-8'); ?>">
                                                 <i class="bi bi-pencil" aria-hidden="true"></i><span class="action-label">Edit</span>
                                             </button>
-                                            <form method="POST" class="d-inline">
-                                                <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
-                                                <input type="hidden" name="status_doc_id" value="<?php echo (int)$document['doc_id']; ?>">
-                                                <input type="hidden" name="new_status" value="<?php echo $isReleased ? 'For Release' : 'Released'; ?>">
-                                                <button type="submit" name="set_outgoing_status" class="btn btn-sm document-action-button <?php echo $isReleased ? 'btn-outline-secondary' : 'btn-success'; ?>" title="<?php echo $isReleased ? 'Set for release' : 'Mark released'; ?>" aria-label="<?php echo ($isReleased ? 'Set for release: ' : 'Mark released: ') . sanitize($documentReference); ?>">
-                                                    <i class="bi <?php echo $isReleased ? 'bi-arrow-counterclockwise' : 'bi-check2-circle'; ?>" aria-hidden="true"></i>
-                                                    <span class="action-label"><?php echo $isReleased ? 'Set For Release' : 'Mark Released'; ?></span>
-                                                </button>
-                                            </form>
                                             <?php if ($document['status'] === 'For Release' && is_valid_contact_number($documentPhone)): ?>
                                                 <button
                                                     type="button"

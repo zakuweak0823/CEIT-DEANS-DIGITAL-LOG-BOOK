@@ -70,11 +70,14 @@ function ensure_super_admin()
 function admin_status_badge_class($status): string
 {
     $status = strtolower(trim((string)$status));
-    if (in_array($status, ['pending', 'queued', 'borrowed'], true)) {
+    if (in_array($status, ['pending', 'queued', 'borrowed', 'in review', 'forwarded'], true)) {
         return 'admin-status-pending';
     }
-    if ($status === 'for release') {
+    if (in_array($status, ['for release', 'approved'], true)) {
         return 'admin-status-in-progress';
+    }
+    if ($status === 'incomplete') {
+        return 'admin-status-attention';
     }
     if ($status === 'received') {
         return 'admin-status-received';
@@ -82,7 +85,7 @@ function admin_status_badge_class($status): string
     if (in_array($status, ['released', 'returned', 'delivered', 'sent', 'success'], true)) {
         return 'admin-status-complete';
     }
-    if (in_array($status, ['failed', 'not returned', 'overdue'], true)) {
+    if (in_array($status, ['failed', 'not returned', 'overdue', 'cancelled'], true)) {
         return 'admin-status-error';
     }
     return 'admin-status-neutral';

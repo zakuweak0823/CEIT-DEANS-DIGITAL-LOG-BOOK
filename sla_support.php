@@ -73,7 +73,7 @@ function get_sla_overdue($conn, array $sla, int $limit = 8): array
         return $overdue;
     }
 
-    $documentFilter = "((type = 'Incoming' AND status = 'Pending' AND date_created < (NOW() - INTERVAL ? DAY))
+    $documentFilter = "((type = 'Incoming' AND status IN (" . doc_status_open_sql() . ") AND date_created < (NOW() - INTERVAL ? DAY))
         OR (type = 'Outgoing' AND status = 'For Release' AND date_created < (NOW() - INTERVAL ? DAY)))";
     $overdue['documentCount'] = (int)safe_scalar($conn, "SELECT COUNT(*) FROM documents WHERE $documentFilter", 'ii', [$sla['incomingDays'], $sla['outgoingDays']]);
     $stmt = safe_query(
@@ -91,7 +91,7 @@ function get_sla_overdue($conn, array $sla, int $limit = 8): array
         mysqli_stmt_close($stmt);
     }
 
-    $bulkFilter = "((b.document_type = 'Incoming' AND b.status = 'Pending' AND b.batch_date < (CURDATE() - INTERVAL ? DAY))
+    $bulkFilter = "((b.document_type = 'Incoming' AND b.status IN (" . doc_status_open_sql() . ") AND b.batch_date < (CURDATE() - INTERVAL ? DAY))
         OR (b.document_type = 'Outgoing' AND b.status = 'For Release' AND b.batch_date < (CURDATE() - INTERVAL ? DAY)))";
     $bulkCount = safe_scalar($conn, "SELECT COUNT(*) FROM document_batches b WHERE $bulkFilter", 'ii', [$sla['incomingDays'], $sla['outgoingDays']]);
     $overdue['bulkDocumentCount'] = (int)$bulkCount;

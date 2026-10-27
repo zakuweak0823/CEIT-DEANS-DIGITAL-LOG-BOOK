@@ -30,25 +30,42 @@ function batch_text($value): string
     return sanitize((string)($value ?? ''));
 }
 
-/** Pending batch that must be confirmed together with the move to For Release (modal flow). */
+/** Batch that is still in the office's hands and must be confirmed together with the move to For Release (modal flow). */
 function batch_needs_release_modal(array $batch, array $settings): bool
 {
-    return $batch['status'] === 'Pending'
+    return doc_status_next($batch['status']) === DOC_STATUS_FOR_RELEASE
         && $settings['intake_confirmation_mode'] === 'confirm_with_release'
         && $batch['received_at'] === null;
 }
 
-/** Pending batch that cannot move on until receipt is confirmed with the scanner. */
+/** Batch that cannot move on until receipt is confirmed with the scanner. */
 function batch_release_blocked(array $batch, array $settings): bool
 {
-    return $batch['status'] === 'Pending'
+    return doc_status_next($batch['status']) === DOC_STATUS_FOR_RELEASE
         && $settings['intake_confirmation_mode'] === 'confirm_before_release'
         && $batch['received_at'] === null;
 }
 
+/** Status badge; staff can click it to pick Received, In Review, Forwarded, Incomplete, On Hold, Approved, Returned or Cancelled. */
+function render_batch_status_badge(array $batch, string $extraClass = ''): void
+{
+    if (!in_array($batch['status'], doc_status_incoming(), true)) {
+        ?><span class="badge <?php echo admin_status_badge_class($batch['status']); ?> <?php echo sanitize($extraClass); ?>"><?php echo batch_text($batch['status']); ?></span><?php
+        return;
+    }
+    render_status_menu(
+        $batch['status'],
+        doc_status_incoming(),
+        ['status_batch_id' => (int)$batch['batch_id'], 'token' => (string)$_SESSION['batch_papers_token']],
+        'change_batch_status',
+        (string)$batch['batch_code']
+    );
+}
+
 function render_batch_status_form(array $batch, array $settings, bool $fullWidth = false): void
 {
-    if ($batch['status'] === 'Released') {
+    if (in_array($batch['status'], [DOC_STATUS_RELEASED, DOC_STATUS_RETURNED, DOC_STATUS_CANCELLED], true)
+        || doc_status_next($batch['status']) === null) {
         return;
     }
     $isForRelease = $batch['status'] === 'For Release';
@@ -65,6 +82,7 @@ function render_batch_status_form(array $batch, array $settings, bool $fullWidth
             <?php if ($needsModal): ?>
                 data-bs-toggle="modal" data-bs-target="#confirmBatchReleaseModal"
                 data-batch-id="<?php echo (int)$batch['batch_id']; ?>"
+                data-batch-status="<?php echo batch_text($batch['status']); ?>"
                 data-batch-code="<?php echo batch_text($batch['batch_code']); ?>"
                 data-paper-count="<?php echo (int)$batch['paper_count']; ?>"
             <?php else: ?>
@@ -357,8 +375,8 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     'receivedBy' => $row['received_by'],
                 ]]);
             }
-            if ($row['status'] !== 'Pending') {
-                throw new DomainException('Receipt confirmation is available only while the bulk submission is Pending.');
+            if (!in_array($row['status'], doc_status_incoming(), true)) {
+                throw new DomainException('Receipt confirmation is available only before the bulk submission is released.');
             }
             if ((int)$row['paper_count'] < 1 || (int)$row['paper_count'] > 9999) {
                 throw new DomainException('This bulk submission has an invalid expected document count. Update it before confirming receipt.');
@@ -415,7 +433,7 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (isset($_POST['set_batch_status'])) {
         $batchId = (int)($_POST['status_batch_id'] ?? 0);
         $expectedStatus = trim($_POST['expected_status'] ?? '');
-        if ($batchId <= 0 || !in_array($expectedStatus, ['Pending', 'For Release'], true)) {
+        if ($batchId <= 0 || doc_status_next($expectedStatus) === null) {
             $_SESSION['batch_flash'] = show_alert('Select a valid batch.', 'danger');
         } else {
             try {
@@ -433,15 +451,16 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($currentBatch['status'] !== $expectedStatus) {
                     throw new DomainException('This bulk submission changed since the page loaded. Refresh the page and check its status.');
                 }
-                $nextStatus = $currentBatch['status'] === 'Pending' ? 'For Release' : 'Released';
+                $nextStatus = doc_status_next($currentBatch['status']);
                 $isConfirmBeforeRelease = $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_before_release';
                 $isConfirmWithRelease = $batchWorkflowSettings['intake_confirmation_mode'] === 'confirm_with_release';
+                $movesToRelease = $nextStatus === DOC_STATUS_FOR_RELEASE;
 
-                if ($currentBatch['status'] === 'Pending' && $isConfirmBeforeRelease && $currentBatch['received_at'] === null) {
+                if ($movesToRelease && $isConfirmBeforeRelease && $currentBatch['received_at'] === null) {
                     throw new DomainException('Confirm the received document count using Scan CEIT QR before moving this bulk submission to For Release.');
                 }
 
-                $confirmsReceipt = $currentBatch['status'] === 'Pending' && $currentBatch['received_at'] === null && $isConfirmWithRelease;
+                $confirmsReceipt = $movesToRelease && $currentBatch['received_at'] === null && $isConfirmWithRelease;
                 if ($confirmsReceipt) {
                     $receivedCount = filter_var($_POST['status_received_count'] ?? null, FILTER_VALIDATE_INT);
                     $notesInput = $_POST['status_intake_notes'] ?? '';
@@ -494,6 +513,52 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $conn->rollback();
                 if (!($error instanceof DomainException)) {
                     error_log('Batch status update failed: ' . $error->getMessage());
+                }
+                $_SESSION['batch_flash'] = show_alert($error instanceof DomainException ? $error->getMessage() : 'Batch status could not be updated.', 'danger');
+            }
+        }
+        $redirectToList();
+    } elseif (isset($_POST['change_batch_status'])) {
+        $batchId = (int)($_POST['status_batch_id'] ?? 0);
+        $newStatus = trim($_POST['new_status'] ?? '');
+        if ($batchId <= 0 || !in_array($newStatus, doc_status_incoming(), true)) {
+            $_SESSION['batch_flash'] = show_alert('Select a valid status.', 'danger');
+        } else {
+            try {
+                $conn->begin_transaction();
+                $stmt = safe_query($conn, 'SELECT status, received_at FROM document_batches WHERE batch_id = ? FOR UPDATE', 'i', [$batchId]);
+                if ($stmt === false) {
+                    throw new RuntimeException('Could not verify the bulk submission status.');
+                }
+                $currentBatch = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+                mysqli_stmt_close($stmt);
+                if (!$currentBatch) {
+                    throw new DomainException('The batch was not found.');
+                }
+                if (!in_array($currentBatch['status'], doc_status_incoming(), true)) {
+                    throw new DomainException('This bulk submission is already released and its status can no longer be changed here.');
+                }
+                $stmt = safe_query($conn, 'UPDATE document_batches SET status = ? WHERE batch_id = ?', 'si', [$newStatus, $batchId]);
+                if ($stmt === false) {
+                    throw new RuntimeException('Could not update the bulk submission status.');
+                }
+                mysqli_stmt_close($stmt);
+                $stmt = safe_query(
+                    $conn,
+                    'UPDATE documents d INNER JOIN batch_papers p ON p.doc_id = d.doc_id SET d.status = ? WHERE p.batch_id = ?',
+                    'si',
+                    [$newStatus, $batchId]
+                );
+                if ($stmt === false) {
+                    throw new RuntimeException('Could not update the linked document statuses.');
+                }
+                mysqli_stmt_close($stmt);
+                $conn->commit();
+                $_SESSION['batch_flash'] = show_alert('Status updated to ' . $newStatus . '.');
+            } catch (Throwable $error) {
+                $conn->rollback();
+                if (!($error instanceof DomainException)) {
+                    error_log('Batch status change failed: ' . $error->getMessage());
                 }
                 $_SESSION['batch_flash'] = show_alert($error instanceof DomainException ? $error->getMessage() : 'Batch status could not be updated.', 'danger');
             }
@@ -666,7 +731,7 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     $conn,
                     'INSERT INTO document_batches (batch_code, document_type, batch_type, status, batch_date, sender, sender_type, submitter_name, recipient, recipient_contact_type, remarks, tracking_token, paper_count, document_pages, is_priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                     'ssssssssssssisi',
-                    [$batchCode, $documentType, $batchType, 'Pending', $batchDate, $senderType, $senderType, $batchSubmitterName, $recipientValue, $recipientContactType, $batchRemarks, $trackingToken, $paperCount, $documentPagesJson, $batchPriority]
+                    [$batchCode, $documentType, $batchType, 'Received', $batchDate, $senderType, $senderType, $batchSubmitterName, $recipientValue, $recipientContactType, $batchRemarks, $trackingToken, $paperCount, $documentPagesJson, $batchPriority]
                 );
                 if ($stmt === false) {
                     throw new RuntimeException('Could not create the bulk submission.');
@@ -799,11 +864,11 @@ if (!$setupError) {
     // Released batches go last; within each group priority comes first, then oldest open batches first.
     $orderSql = "ORDER BY (b.status = 'Released') ASC, b.is_priority DESC, CASE WHEN b.status <> 'Released' THEN b.batch_id END ASC, b.batch_id DESC";
     $batchOverdueSql = !empty($slaSettings['enabled'])
-        ? "CASE WHEN ((b.document_type = 'Incoming' AND b.status = 'Pending' AND b.batch_date < (CURDATE() - INTERVAL " . (int)$slaSettings['incomingDays'] . " DAY))
+        ? "CASE WHEN ((b.document_type = 'Incoming' AND b.status IN (" . doc_status_open_sql() . ") AND b.batch_date < (CURDATE() - INTERVAL " . (int)$slaSettings['incomingDays'] . " DAY))
             OR (b.document_type = 'Outgoing' AND b.status = 'For Release' AND b.batch_date < (CURDATE() - INTERVAL " . (int)$slaSettings['outgoingDays'] . " DAY))) THEN 1 ELSE 0 END AS is_overdue"
         : '0 AS is_overdue';
     $overdueFilterSql = $overdueOnly && !empty($slaSettings['enabled'])
-        ? " AND ((b.document_type = 'Incoming' AND b.status = 'Pending' AND b.batch_date < (CURDATE() - INTERVAL " . (int)$slaSettings['incomingDays'] . " DAY))
+        ? " AND ((b.document_type = 'Incoming' AND b.status IN (" . doc_status_open_sql() . ") AND b.batch_date < (CURDATE() - INTERVAL " . (int)$slaSettings['incomingDays'] . " DAY))
             OR (b.document_type = 'Outgoing' AND b.status = 'For Release' AND b.batch_date < (CURDATE() - INTERVAL " . (int)$slaSettings['outgoingDays'] . " DAY)))"
         : '';
     if ($search !== '') {
@@ -1020,7 +1085,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                         </td>
                                         <td>
                                             <div class="d-inline-flex flex-column align-items-center gap-1">
-                                                <span class="badge <?php echo admin_status_badge_class($batch['status']); ?>"><?php echo batch_text($batch['status']); ?></span>
+                                                <?php render_batch_status_badge($batch); ?>
                                                 <?php if (!empty($batch['is_overdue'])): ?><span class="badge text-bg-danger" title="Past the applicable incoming or outgoing processing time limit">Overdue</span><?php endif; ?>
                                             </div>
                                         </td>
@@ -1064,7 +1129,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                             <h6 class="mb-1 text-break fw-bold"><?php echo batch_text($batch['batch_code']); ?></h6>
                                             <p class="mb-0 small text-muted"><?php echo sanitize(date('M j, Y', strtotime($batch['batch_date']))); ?></p>
                                         </div>
-                                        <span class="badge rounded-pill flex-shrink-0 <?php echo admin_status_badge_class($batch['status']); ?>"><?php echo batch_text($batch['status']); ?></span>
+                                        <?php render_batch_status_badge($batch, 'rounded-pill flex-shrink-0'); ?>
                                     </div>
                                     <?php if (!empty($batch['is_overdue'])): ?>
                                         <span class="badge text-bg-danger mt-2" title="Past the applicable incoming or outgoing processing time limit">Overdue</span>
@@ -1187,7 +1252,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                     <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                     <input type="hidden" name="token" value="<?php echo sanitize($_SESSION['batch_papers_token']); ?>">
                     <input type="hidden" name="status_batch_id" id="confirmBatchReleaseId">
-                    <input type="hidden" name="expected_status" value="Pending">
+                    <input type="hidden" name="expected_status" id="confirmBatchReleaseStatus" value="Received">
                     <label class="form-label fw-semibold" for="statusReceivedCount">Documents physically received</label>
                     <input class="form-control mb-3" type="number" name="status_received_count" id="statusReceivedCount" min="0" max="9999" inputmode="numeric" required>
                     <label class="form-label fw-semibold" for="statusIntakeNotes">Count difference / condition note</label>
@@ -1307,6 +1372,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const trigger = event.relatedTarget;
         if (!trigger) return;
         releaseId.value = trigger.dataset.batchId || '';
+        document.getElementById('confirmBatchReleaseStatus').value = trigger.dataset.batchStatus || 'Received';
         releaseCount.value = trigger.dataset.paperCount || '';
         releaseCount.dataset.expectedCount = trigger.dataset.paperCount || '';
         releaseNotes.value = '';

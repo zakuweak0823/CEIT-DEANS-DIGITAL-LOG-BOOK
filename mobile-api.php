@@ -20,6 +20,8 @@ require_once 'batch_support.php';
 require_once 'mobile_form_settings.php';
 require_once 'mobile_app_settings.php';
 require_once 'document_tracking.php';
+require_once 'requirements_support.php';
+require_once 'message_composer.php';
 
 // Initialize incremental schema additions before serving any mobile action.
 try {
@@ -28,7 +30,6 @@ try {
     $conn->query("ALTER TABLE documents ADD COLUMN IF NOT EXISTS submitter_type VARCHAR(20) NOT NULL DEFAULT 'Other'");
     $conn->query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_priority TINYINT(1) NOT NULL DEFAULT 0');
     $conn->query("UPDATE documents SET submitter_type = sender WHERE submitter_type = 'Other' AND sender IN ('Student', 'Faculty')");
-    $conn->query("UPDATE documents SET status = 'Pending' WHERE type = 'Incoming' AND status = 'Received'");
     $conn->query('ALTER TABLE borrowed_items ADD COLUMN IF NOT EXISTS borrower_phone VARCHAR(20) DEFAULT NULL');
     $conn->query("CREATE TABLE IF NOT EXISTS mobile_api_tokens (
         token_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -102,6 +103,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'documen
             'status' => $document['status'],
             'date' => $document['date'],
         ],
+        'history' => fetch_status_history($conn, 'doc_id', (int)$document['doc_id']),
+        'missing' => $document['status'] === DOC_STATUS_INCOMPLETE ? requirements_pending_labels($conn, (int)$document['doc_id']) : [],
     ]);
     exit;
 }
@@ -372,16 +375,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode(['success' => false, 'message' => 'This incoming document was not found or has already been released']);
             exit;
         }
-        if ($document['status'] !== 'Pending') {
+        if (!in_array($document['status'], doc_status_can_prepare_release(), true)) {
             http_response_code(409);
-            echo json_encode(['success' => false, 'message' => 'Only pending documents can be prepared for release']);
+            echo json_encode(['success' => false, 'message' => 'Only Received, In Review, Forwarded, or Approved documents can be prepared for release']);
             exit;
         }
         // Repeat the eligibility checks in the write to prevent stale mobile clients overwriting a newer state.
         $outgoingSender = trim((string)$document['recipient']) !== ''
             ? $document['recipient']
             : "Dean's Office";
-        $stmt = safe_query($conn, "UPDATE documents SET type = 'Outgoing', status = 'For Release', sender = ?, recipient = ? WHERE doc_id = ? AND type = 'Incoming' AND status = 'Pending'", 'ssi', [$outgoingSender, $document['sender'], $documentId]);
+        $stmt = safe_query($conn, "UPDATE documents SET type = 'Outgoing', status = 'For Release', sender = ?, recipient = ? WHERE doc_id = ? AND type = 'Incoming' AND status IN (" . doc_status_sql_in(doc_status_can_prepare_release()) . ")", 'ssi', [$outgoingSender, $document['sender'], $documentId]);
         if ($stmt === false || mysqli_stmt_affected_rows($stmt) !== 1) {
             if ($stmt !== false) mysqli_stmt_close($stmt);
             http_response_code(409);
@@ -445,7 +448,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode(['success' => false, 'message' => 'No valid client contact number is saved for this document']);
             exit;
         }
-        $smsText = "CvSU Dean's Office: The document '{$document['subject']}' has been released. Please contact the office if you need assistance.";
+        $smsContext = composer_document_context($conn, $documentId, $documentTrackingSettings) ?? ['reference' => document_tracking_reference($documentId), 'url' => ''];
+        $smsContext['status'] = 'Released';
+        $smsContext['subject'] = (string)$document['subject'];
+        $smsText = compose_sms_message($smsContext);
         $smsResult = send_logged_sms($conn, $clientPhone, $smsText);
         echo json_encode(['success' => true, 'sms' => $smsResult]);
         exit;
@@ -563,13 +569,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$batch) {
                 throw new RuntimeException('The batch was not found');
             }
-            $nextStatus = $batch['status'] === 'Pending'
-                ? 'For Release'
-                : ($batch['status'] === 'For Release' ? 'Released' : '');
+            $nextStatus = doc_status_next($batch['status']) ?? '';
             if ($nextStatus === '') {
-                throw new RuntimeException('This batch has already been released');
+                throw new DomainException(in_array($batch['status'], [DOC_STATUS_INCOMPLETE, DOC_STATUS_ON_HOLD], true)
+                    ? 'This bulk submission is ' . $batch['status'] . '. Change its status in Admin before moving it to For Release.'
+                    : 'This bulk submission cannot move to the next step from its current status.');
             }
-            if ($batch['status'] === 'Pending' && $batch['received_at'] === null) {
+            if ($nextStatus === DOC_STATUS_FOR_RELEASE && $batch['received_at'] === null) {
                 throw new DomainException('Confirm receipt in Admin before moving this bulk submission to For Release.');
             }
             $stmt = safe_query($conn, 'UPDATE document_batches SET status = ? WHERE batch_id = ?', 'si', [$nextStatus, $batchId]);
@@ -644,7 +650,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $conn,
                     'INSERT INTO document_batches (batch_code, document_type, batch_type, status, batch_date, sender, sender_type, submitter_name, recipient, recipient_contact_type, remarks,                                         tracking_token, paper_count, document_pages, is_priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                                         'ssssssssssssisi',
-                                        [$batchCode, $documentType, $batchType, 'Pending', $batchDate, $senderType, $senderType, $submitterName, $recipientValue, $recipientContactType, $batchRemarks, $trackingToken, $paperCount, $documentPagesJson, $isPriority]
+                                        [$batchCode, $documentType, $batchType, 'Received', $batchDate, $senderType, $senderType, $submitterName, $recipientValue, $recipientContactType, $batchRemarks, $trackingToken, $paperCount, $documentPagesJson, $isPriority]
                 );
                 if ($stmt === false) throw new RuntimeException('Could not create the batch');
                 mysqli_stmt_close($stmt);
@@ -690,7 +696,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'trackingToken' => $trackingToken,
                 'documentType' => $documentType,
                 'batchType' => $batchType,
-                'status' => $action === 'add_batch' ? 'Pending' : $batchStatus,
+                'status' => $action === 'add_batch' ? 'Received' : $batchStatus,
                 'isPriority' => $isPriority,
                 'batchDate' => $batchDate,
                 'sender' => $senderType,
@@ -732,7 +738,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $entrySource = $isQuickSubmit ? 'quick_submit' : 'standard';
             $conn->begin_transaction();
             try {
-                $stmt = safe_query($conn, "INSERT INTO documents(type, sender, submitter_name, recipient, client_phone, subject, remarks, status, date_created, entry_source, submitter_type) VALUES('Incoming', ?, ?, ?, ?, ?, ?, 'Pending', NOW(), ?, ?)", 'ssssssss', [$sender, $submitterName, $recipient, $phoneValue, $subject, $remarks, $entrySource, $submitterType]);
+                $stmt = safe_query($conn, "INSERT INTO documents(type, sender, submitter_name, recipient, client_phone, subject, remarks, status, date_created, entry_source, submitter_type) VALUES('Incoming', ?, ?, ?, ?, ?, ?, 'Received', NOW(), ?, ?)", 'ssssssss', [$sender, $submitterName, $recipient, $phoneValue, $subject, $remarks, $entrySource, $submitterType]);
                 if ($stmt === false) {
                     throw new RuntimeException('Incoming document insert failed');
                 }
@@ -776,7 +782,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'success' => true,
                     'message' => 'Incoming document submitted',
                     'id' => $documentId,
-                    'status' => 'Pending',
+                    'status' => 'Received',
                     'reference' => document_tracking_reference($documentId),
                     'submitterName' => $submitterName,
                     'trackerUrl' => $trackingToken === null

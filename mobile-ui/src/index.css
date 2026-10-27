@@ -567,6 +567,12 @@ img {
 }
 
 /* Pastel status colors: gold = waiting, teal = ready, green = done */
+.welcome-status-panel .status-tile[data-status="Received"],
+.welcome-status-panel .status-tile[data-status="In Review"],
+.welcome-status-panel .status-tile[data-status="Forwarded"],
+.welcome-status-panel .status-tile[data-status="Incomplete"],
+.welcome-status-panel .status-tile[data-status="On Hold"],
+.welcome-status-panel .status-tile[data-status="Approved"],
 .welcome-status-panel .status-tile[data-status="Pending"] {
   border-color: #f3dc8a;
   background: #fdf6d8;

@@ -6,6 +6,7 @@ import jsQR from 'jsqr';
 import QRCode from 'qrcode';
 import {
   BiArchiveIn,
+  BiBook,
   BiArchiveOut,
   BiBox,
   BiFile,
@@ -46,10 +47,18 @@ const playSwipeTone = () => {
   });
 };
 
+const canAdvanceStatuses = ['Received', 'In Review', 'Forwarded', 'Approved', 'For Release'];
+
 const statusClasses = {
   'For Release': 'border border-teal-200 bg-teal-100 text-teal-800',
   Released: 'border border-green-200 bg-green-100 text-green-800',
   Received: 'border border-lime-200 bg-lime-100 text-emerald-900',
+  'In Review': 'border border-yellow-300 bg-yellow-100 text-slate-800',
+  Forwarded: 'border border-orange-200 bg-orange-100 text-orange-800',
+  Incomplete: 'border border-rose-200 bg-rose-100 text-rose-700',
+  'On Hold': 'border border-slate-300 bg-slate-100 text-slate-700',
+  Approved: 'border border-sky-200 bg-sky-100 text-sky-800',
+  Cancelled: 'border border-slate-300 bg-slate-100 text-slate-600',
   Pending: 'border border-yellow-300 bg-yellow-100 text-slate-800',
   Queued: 'border border-yellow-300 bg-yellow-100 text-slate-800',
   Borrowed: 'border border-yellow-300 bg-yellow-100 text-slate-800',
@@ -60,7 +69,15 @@ const statusClasses = {
   Failed: 'border border-rose-200 bg-rose-100 text-rose-700',
 };
 const neutralBadgeClass = 'border border-slate-200 bg-slate-100 text-slate-700';
-const statusLabel = (status) => status;
+const mobilePendingStatuses = ['Received', 'In Review', 'Forwarded', 'Incomplete', 'On Hold', 'Approved'];
+const mobileClosedStatuses = ['Returned', 'Cancelled'];
+// The mobile app shows only three document states; borrowed items keep their own Borrowed/Returned.
+const statusLabel = (status, type = 'Document') => {
+  if (type === 'Borrowed') return status;
+  if (mobilePendingStatuses.includes(status)) return 'Pending';
+  if (mobileClosedStatuses.includes(status)) return 'Released';
+  return status;
+};
 
 const defaultFormLabels = {
   sender: 'Role',
@@ -82,8 +99,8 @@ const defaultMobileSettings = {
 const inputClass = 'block w-full min-h-12 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200';
 const labelClass = 'block text-sm font-semibold text-emerald-900';
 const helperClass = 'mt-1 block text-xs text-slate-600';
-const buttonClass = 'inline-flex min-h-12 items-center justify-center rounded-2xl bg-emerald-900 px-5 py-3.5 text-base font-semibold text-white transition hover:bg-emerald-700 active:scale-[0.99]';
-const secondaryButtonClass = 'inline-flex min-h-12 w-full items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3.5 text-base font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-60 sm:w-auto sm:min-w-36';
+const buttonClass = 'inline-flex min-h-12 items-center justify-center rounded-2xl bg-emerald-800 px-5 py-3.5 text-base font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.99]';
+const secondaryButtonClass = 'inline-flex min-h-12 w-full items-center justify-center rounded-2xl border border-emerald-300 bg-white px-5 py-3.5 text-base font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-60 sm:w-auto sm:min-w-36';
 const formPrimaryClass = 'w-full disabled:cursor-wait disabled:opacity-70 sm:w-auto sm:min-w-48';
 const formActionsClass = 'sticky -bottom-4 z-10 -mx-4 -mb-4 mt-5 flex flex-col-reverse gap-3 rounded-b-3xl border-t border-emerald-100 bg-white px-4 pb-4 pt-3 sm:-bottom-6 sm:-mx-6 sm:-mb-6 sm:flex-row sm:justify-end sm:px-6 sm:pb-6';
 const MIN_RECORD_DATE = '2020-01-01';
@@ -91,7 +108,7 @@ const cardClass = 'rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm'
 const sectionTitleClass = 'text-left text-lg font-semibold text-emerald-950';
 const emptyStateClass = 'rounded-2xl border border-emerald-200 bg-white p-5 text-left text-sm text-slate-600 shadow-sm';
 const badgeClass = 'inline-flex shrink-0 cursor-default select-none items-center rounded-full px-2.5 py-1 text-xs font-semibold';
-const cardActionClass = 'mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-200 disabled:cursor-wait disabled:opacity-60 sm:w-auto';
+const cardActionClass = 'mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-800 bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800 active:scale-[0.98] focus:outline-none focus:ring-4 focus:ring-emerald-300 disabled:cursor-wait disabled:opacity-60 sm:w-auto';
 const parseDocumentPages = (value) => {
   if (Array.isArray(value)) return value;
   try {
@@ -281,13 +298,18 @@ function App() {
   };
 
   const documentStatusCounts = useMemo(() => {
-    const counts = new Map((apiData?.documentStatuses || []).map((item) => [item.status, Number(item.count) || 0]));
-    if (!counts.has('Pending')) counts.set('Pending', 0);
+    const counts = new Map([['Pending', 0], ['For Release', 0], ['Released', 0]]);
+    (apiData?.documentStatuses || []).forEach((item) => {
+      const label = statusLabel(item.status);
+      counts.set(label, (counts.get(label) || 0) + (Number(item.count) || 0));
+    });
+    const order = ['Pending', 'For Release', 'Released'];
     return [...counts.entries()]
       .map(([status, count]) => ({ status, count }))
       .sort((left, right) => {
-        if (left.status === 'Pending') return -1;
-        if (right.status === 'Pending') return 1;
+        const leftIndex = order.indexOf(left.status);
+        const rightIndex = order.indexOf(right.status);
+        if (leftIndex !== -1 || rightIndex !== -1) return (leftIndex === -1 ? 99 : leftIndex) - (rightIndex === -1 ? 99 : rightIndex);
         return left.status.localeCompare(right.status);
       });
   }, [apiData?.documentStatuses]);
@@ -727,7 +749,7 @@ function App() {
           }
         }
         const clientPhone = incomingModalMode === 'standard' ? incomingForm.clientPhone : '';
-        const incomingStatus = 'Pending';
+        const incomingStatus = 'Received';
         const submissionDate = todayLocalDate();
         setIncomingItems((prev) => [{ id: result.id, reference: result.reference, date: submissionDate, from: formLabels.senderEnabled ? incomingForm.from : '', submitterName: incomingForm.submitterName.trim(), subject: incomingForm.subject, recipient: 'Dean’s Office', clientPhone, status: incomingStatus }, ...prev]);
         setReportItems((prev) => [
@@ -745,7 +767,7 @@ function App() {
             details: [
               { label: 'Submitted by', value: incomingForm.submitterName.trim() },
               { label: formLabels.documentType, value: incomingForm.subject },
-              { label: 'Status', value: result.status || incomingStatus },
+              { label: 'Status', value: statusLabel(result.status || incomingStatus) },
             ],
             reference: result.reference || (result.id ? `Reference #${result.id}` : ''),
             trackerUrl: result.trackerUrl || '',
@@ -783,7 +805,7 @@ function App() {
 
       setIncomingItems((items) => items.filter((record) => record.id !== item.id));
       setOutgoingItems((items) => [{ id: item.id, date: item.date, to: result.recipient, subject: item.subject, clientPhone: item.clientPhone, status: 'For Release' }, ...items]);
-      incrementDocumentStatusCount('Pending', -1);
+      incrementDocumentStatusCount(item.status || 'Received', -1);
       incrementDocumentStatusCount('For Release');
       setReleaseDocumentId(null);
       showActionFeedback({ title: 'Document prepared for release', description: 'The document was moved to Outgoing documents and is now marked For Release.', tone: 'success' });
@@ -1083,7 +1105,7 @@ function App() {
           details: [
             { label: 'Bulk submission type', value: savedBatch.batchType },
             { label: 'Submitted by', value: savedBatch.submitterName },
-            { label: 'Status', value: savedBatch.status },
+            { label: 'Status', value: statusLabel(savedBatch.status) },
             { label: 'Number of documents', value: String(savedBatch.paperCount) },
             ...(totalPages ? [{ label: 'Total pages', value: String(totalPages) }] : []),
           ],
@@ -1347,10 +1369,10 @@ function App() {
                       {item.recipient ? `To ${item.recipient}` : ''}
                     </p>
                   </div>
-                  <span className={`${badgeClass} ${statusClasses[item.status] || neutralBadgeClass}`}>{item.status}</span>
+                  <span className={`${badgeClass} ${statusClasses[statusLabel(item.status)] || neutralBadgeClass}`}>{statusLabel(item.status)}</span>
                 </div>
                 <p className="mt-3 text-left text-xs text-slate-600">{item.reference ? `${item.reference} · ` : ''}Submitted {String(item.date).slice(0, 10)}</p>
-                {item.id && item.status === 'Pending' && <button type="button" className={cardActionClass} disabled={releaseBusy || !isOnline} onClick={() => handlePrepareIncoming(item)}>{releaseBusy && releaseDocumentId === item.id ? 'Preparing…' : 'Prepare for release'}</button>}
+                {item.id && ['Received', 'In Review', 'Forwarded', 'Approved'].includes(item.status) && <button type="button" className={cardActionClass} disabled={releaseBusy || !isOnline} onClick={() => handlePrepareIncoming(item)}>{releaseBusy && releaseDocumentId === item.id ? 'Preparing…' : 'Prepare for release'}</button>}
               </article>
             ))}
           </div>
@@ -1375,7 +1397,7 @@ function App() {
                     <p className="mt-1 text-left text-sm text-slate-600">Recipient: {item.to}</p>
                     {item.clientPhone && <p className="mt-1 text-left text-xs text-slate-600">Contact number: {item.clientPhone}</p>}
                   </div>
-                  <span className={`${badgeClass} ${statusClasses[item.status] || neutralBadgeClass}`}>{item.status}</span>
+                  <span className={`${badgeClass} ${statusClasses[statusLabel(item.status)] || neutralBadgeClass}`}>{statusLabel(item.status)}</span>
                 </div>
                 <p className="mt-3 text-left text-xs text-slate-600">Date: {String(item.date).slice(0, 10)}</p>
                 {item.remarks && <p className="mt-2 whitespace-pre-wrap break-words text-left text-sm text-slate-600">{item.remarks}</p>}
@@ -1390,7 +1412,7 @@ function App() {
                   </button>
                 )}
                 {item.id && item.status === 'Released' && item.clientPhone ? (
-                  <button type="button" className={`${cardActionClass} sm:ml-2`} disabled={smsBusyId === item.id || !isOnline} onClick={() => handleNotifyClient(item)}>{smsBusyId === item.id ? 'Sending…' : 'Send SMS'}</button>
+                  <button type="button" className={`${cardActionClass} sm:ml-2 !border-sky-800 !bg-sky-700 hover:!bg-sky-800`} disabled={smsBusyId === item.id || !isOnline} onClick={() => handleNotifyClient(item)}>{smsBusyId === item.id ? 'Sending…' : 'Send SMS'}</button>
                 ) : item.status === 'Released' ? <p className="mt-2 text-left text-xs text-slate-600">No contact number saved.</p> : null}
               </article>
             ))}
@@ -1415,7 +1437,7 @@ function App() {
                     <p className="break-words text-left font-semibold text-emerald-950">{item.item}</p>
                     <p className="mt-1 text-left text-sm text-slate-600">Borrowed by {item.borrower}</p>
                   </div>
-                  <span className={`${badgeClass} ${statusClasses[item.status] || neutralBadgeClass}`}>{statusLabel(item.status)}</span>
+                  <span className={`${badgeClass} ${statusClasses[item.status] || neutralBadgeClass}`}>{statusLabel(item.status, 'Borrowed')}</span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
                   <span>Borrowed on {String(item.borrowed).slice(0, 10)}</span>
@@ -1461,7 +1483,7 @@ function App() {
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     {Number(batch.isPriority) === 1 && <span className={`${badgeClass} border border-rose-200 bg-rose-100 text-rose-700`}>Priority</span>}
-                    <span className={`${badgeClass} ${statusClasses[batch.status] || statusClasses.Pending}`}>{batch.status || 'Pending'}</span>
+                    <span className={`${badgeClass} ${statusClasses[statusLabel(batch.status || 'Received')] || statusClasses.Pending}`}>{statusLabel(batch.status || 'Received')}</span>
                   </div>
                 </div>
                 <p className="mt-2 text-sm font-semibold text-emerald-900">{batch.batchType || 'Bulk submission'} · {batch.paperCount} expected{parseDocumentPages(batch.documentPages).reduce((sum, value) => sum + (Number(value) || 0), 0) ? ` · ${parseDocumentPages(batch.documentPages).reduce((sum, value) => sum + (Number(value) || 0), 0)} pages` : ''}</p>
@@ -1472,7 +1494,7 @@ function App() {
                 <p className="mt-2 text-sm text-slate-600">Recipient: {batch.recipientContactType || 'Unassigned'}{batch.recipient ? ` · ${batch.recipient}` : ''}</p>
                 {batch.remarks && <p className="mt-2 break-words text-sm text-slate-600">{batch.remarks}</p>}
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                {batch.id && batch.status !== 'Released' && (
+                {batch.id && canAdvanceStatuses.includes(batch.status) && (
                   <button
                     type="button"
                     disabled={batchStatusBusyId !== null || !isOnline}
@@ -1570,8 +1592,8 @@ function App() {
                     <span className="break-words">{item.date}</span>
                     <span className="break-words">{item.type === 'Borrowed' ? 'Borrowed Item' : item.type}</span>
                     <span className="break-words">{item.subject}</span>
-                    <span className={`${badgeClass} w-fit justify-center ${statusClasses[item.status] || neutralBadgeClass}`}>
-                      {statusLabel(item.status)}
+                    <span className={`${badgeClass} w-fit justify-center ${statusClasses[statusLabel(item.status, item.type)] || neutralBadgeClass}`}>
+                      {statusLabel(item.status, item.type)}
                     </span>
                   </div>
                 ))
@@ -1729,9 +1751,18 @@ function App() {
                 <button
                   type="button"
                   onClick={() => setLogbookPopupOpen(true)}
-                  className="mt-7 inline-flex min-h-14 w-full items-center justify-center gap-3 rounded-2xl bg-emerald-900 px-7 py-3.5 text-center text-base font-bold text-white shadow-md shadow-emerald-950/15 transition hover:bg-emerald-800 hover:shadow-lg focus:outline-none focus:ring-4 focus:ring-emerald-300 active:scale-[0.99] sm:w-auto sm:min-w-60"
+                  className="group mt-7 flex w-full items-center gap-4 rounded-2xl bg-emerald-900 p-3 pr-4 text-left text-white shadow-lg shadow-emerald-900/25 ring-1 ring-emerald-950/40 transition hover:bg-emerald-800 focus:outline-none focus:ring-4 focus:ring-emerald-300 active:scale-[0.98] sm:w-auto sm:min-w-80"
                 >
-                  Open logbook <BiChevronLeft className="rotate-180" size={22} aria-hidden="true" />
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/25">
+                    <BiBook size={26} aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-lg font-bold leading-tight">Open logbook</span>
+                    <span className="mt-0.5 block text-xs font-medium text-emerald-100/80">Submit, borrow or check a document</span>
+                  </span>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-emerald-900 transition group-hover:translate-x-0.5">
+                    <BiChevronLeft className="rotate-180" size={22} aria-hidden="true" />
+                  </span>
                 </button>
               </div>
               <aside className="welcome-guide rounded-2xl border border-emerald-200 bg-white p-4 sm:p-5" aria-labelledby="quick-guide-title">
@@ -2140,8 +2171,8 @@ function App() {
                             <p className="mt-1 break-words text-xs text-slate-600">{record.reference} · {record.type}{Number(record.paperCount) > 0 ? ` · ${record.paperCount} documents` : ''}</p>
                             <p className="mt-1 text-xs text-slate-600">{record.date}</p>
                           </div>
-                          <span className={`${badgeClass} ${statusClasses[record.status] || neutralBadgeClass}`}>
-                            {record.status}
+                          <span className={`${badgeClass} ${statusClasses[statusLabel(record.status)] || neutralBadgeClass}`}>
+                            {statusLabel(record.status)}
                           </span>
                         </div>
                       </article>

@@ -28,6 +28,12 @@ $isLoginPage = $isLoginPage ?? false;
 <?php endif; ?>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+// Fixed positioning keeps status menus from being clipped by scrolling tables.
+document.querySelectorAll('.status-menu-toggle').forEach(function (toggle) {
+    new bootstrap.Dropdown(toggle, { popperConfig: { strategy: 'fixed' } });
+});
+</script>
+<script>
 // Long admin tables are split into pages so staff never have to scroll through every record.
 (function () {
     const PAGE_SIZE = 10;
@@ -565,9 +571,9 @@ if (document.body.classList.contains('admin-body')) {
             const panelTransitionDuration = 190;
             const answers = [
                 {
-                    match: /\b(pending|awaiting|inbox)\b/i,
-                    text: 'Open Pending Inbox to review incoming documents that still need attention. Select a record to view its details and available actions.',
-                    links: [{ label: 'Open Pending Inbox', href: 'incoming?status=Pending' }]
+                    match: /\b(pending|open|awaiting|inbox)\b/i,
+                    text: 'Open the Open Inbox to review incoming documents that still need attention. Select a record to view its details and available actions.',
+                    links: [{ label: 'Open Inbox', href: 'incoming?status=Open' }]
                 },
                 {
                     match: /\b(register|new document|add document|submit document|quick submit)\b/i,
@@ -714,7 +720,7 @@ if (document.body.classList.contains('admin-body')) {
                     'I can help find admin pages and explain common workflows, but I do not read document records or handle account actions. Try asking about pending documents, incoming or outgoing records, bulk documents, borrowed items, reports, settings, or server recovery.',
                     true,
                     [
-                        { label: 'Pending Inbox', href: 'incoming?status=Pending' },
+                        { label: 'Open Inbox', href: 'incoming?status=Open' },
                         { label: 'Quick Submit', href: 'quick_document' },
                         { label: 'Reports', href: 'reports' }
                     ]

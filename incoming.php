@@ -4,6 +4,9 @@ require_once 'db.php';
 require_once 'mobile_form_settings.php';
 require_once 'document_tracking.php';
 require_once 'sla_support.php';
+require_once 'message_composer.php';
+require_once 'requirements_support.php';
+require_once 'sms_service.php';
 ensure_admin();
 
 $mobileFormLabels = get_mobile_form_labels($conn);
@@ -17,7 +20,6 @@ try {
             "ALTER TABLE documents ADD COLUMN IF NOT EXISTS submitter_type VARCHAR(20) NOT NULL DEFAULT 'Other'",
             'ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_priority TINYINT(1) NOT NULL DEFAULT 0',
             "UPDATE documents SET submitter_type = sender WHERE submitter_type = 'Other' AND sender IN ('Student', 'Faculty')",
-            "UPDATE documents SET status = 'Pending' WHERE type = 'Incoming' AND status = 'Received'",
         ] as $schemaSql) {
             if ($conn->query($schemaSql) === false) {
                 throw new RuntimeException($conn->error);
@@ -85,11 +87,15 @@ $search = isset($_GET['search']) && is_string($_GET['search']) ? trim($_GET['sea
 $documentIdParam = $_GET['document_id'] ?? '';
 $documentIdFilter = is_string($documentIdParam) && ctype_digit($documentIdParam) ? (int)$documentIdParam : 0;
 $statusFilter = isset($_GET['status']) && is_string($_GET['status']) ? trim($_GET['status']) : '';
+// Old bookmarks and links used "Pending" for everything the office still has to handle.
+if ($statusFilter === 'Pending') {
+    $statusFilter = 'Open';
+}
 $overdueFilter = ($_GET['overdue'] ?? '') === '1';
 $orderFilter = ($_GET['order'] ?? '') === 'newest' ? 'newest' : 'oldest';
 $slaSettings = get_sla_settings($conn);
 $overdueDays = (int)$slaSettings['incomingDays'];
-$validStatusFilters = ['Pending', 'For Release', 'Released'];
+$validStatusFilters = array_merge(['Open'], doc_status_incoming());
 if (!in_array($statusFilter, $validStatusFilters, true)) {
     $statusFilter = '';
 }
@@ -156,7 +162,7 @@ if (isset($_POST['issue_tracking_qr'])) {
         $reopenAddModal = true;
     } else {
         $phoneValue = $clientPhone === '' ? null : $clientPhone;
-        $stmt = safe_query($conn, "INSERT INTO documents(type, sender, submitter_name, recipient, client_phone, subject, remarks, status, submitter_type) VALUES('Incoming', ?, ?, ?, ?, ?, ?, 'Pending', ?)", 'sssssss', [$sender, $submitterName, $recipient, $phoneValue, $subject, $remarks, $submitterType]);
+        $stmt = safe_query($conn, "INSERT INTO documents(type, sender, submitter_name, recipient, client_phone, subject, remarks, status, submitter_type) VALUES('Incoming', ?, ?, ?, ?, ?, ?, 'Received', ?)", 'sssssss', [$sender, $submitterName, $recipient, $phoneValue, $subject, $remarks, $submitterType]);
         if ($stmt !== false) {
             mysqli_stmt_close($stmt);
             $message = show_alert('Incoming document saved successfully.');
@@ -212,9 +218,9 @@ if (isset($_POST['prepare_release'])) {
         if (!$releaseDocument) {
             $message = show_alert('This incoming document was not found or has already been moved.', 'danger');
             $setReleaseOutcome('Document not found', 'This incoming document may have already been moved. Refresh the list and check Outgoing Documents.', 'danger');
-        } elseif ($releaseDocument['status'] !== 'Pending') {
-            $message = show_alert('Only pending documents can be prepared for release.', 'warning');
-            $setReleaseOutcome('Document is no longer pending', 'Only pending incoming documents can be prepared for release. Refresh the list to see its current status.', 'warning');
+        } elseif (!in_array($releaseDocument['status'], doc_status_can_prepare_release(), true)) {
+            $message = show_alert('Only documents that are Received, In Review, Forwarded, or Approved can be prepared for release.', 'warning');
+            $setReleaseOutcome('Document cannot be released yet', 'This document is ' . $releaseDocument['status'] . '. Only Received, In Review, Forwarded, or Approved documents can be prepared for release. Refresh the list to see its current status.', 'warning');
         } else {
             // Moving an incoming item to outgoing reverses who sent and receives it.
             // The status predicate also protects against a concurrent update after the read.
@@ -226,7 +232,7 @@ if (isset($_POST['prepare_release'])) {
             $outgoingRecipient = trim((string)$releaseDocument['sender']) !== ''
                 ? $releaseDocument['sender']
                 : trim((string)($releaseDocument['submitter_name'] ?? ''));
-            $stmt = safe_query($conn, "UPDATE documents SET type = 'Outgoing', status = 'For Release', sender = ?, recipient = ? WHERE doc_id = ? AND type = 'Incoming' AND status = 'Pending'", 'ssi', [$outgoingSender, $outgoingRecipient, $id]);
+            $stmt = safe_query($conn, "UPDATE documents SET type = 'Outgoing', status = 'For Release', sender = ?, recipient = ? WHERE doc_id = ? AND type = 'Incoming' AND status IN (" . doc_status_sql_in(doc_status_can_prepare_release()) . ")", 'ssi', [$outgoingSender, $outgoingRecipient, $id]);
             if ($stmt === false || mysqli_stmt_affected_rows($stmt) !== 1) {
                 if ($stmt !== false) mysqli_stmt_close($stmt);
                 $message = show_alert('The document could not be prepared. Refresh the page and try again.', 'danger');
@@ -236,6 +242,108 @@ if (isset($_POST['prepare_release'])) {
                 $message = show_alert('Document moved to Outgoing as For Release.');
                 $setReleaseOutcome('Document prepared for release', 'The document is now in Outgoing with status “For Release”. Its previous recipient is used as the outgoing sender, or Dean’s Office if no recipient was saved. The original sender becomes the recipient, or the submitter’s name if no department or office was saved.', 'success');
             }
+        }
+    }
+}
+
+if (isset($_POST['change_status'])) {
+    $shouldRedirect = true;
+    $id = $postId('status_doc_id');
+    $newStatus = $postText('new_status');
+    if ($id <= 0 || !in_array($newStatus, doc_status_incoming(), true)) {
+        $message = show_alert('Choose a valid status for the selected document.', 'danger');
+    } else {
+        // Only incoming items can change here; releasing stays a separate action with its own checks.
+        $stmt = safe_query($conn, "UPDATE documents SET status = ? WHERE doc_id = ? AND type = 'Incoming' AND status <> ?", 'sis', [$newStatus, $id, $newStatus]);
+        if ($stmt === false) {
+            $message = show_alert('Could not update the document status.', 'danger');
+        } else {
+            $changed = mysqli_stmt_affected_rows($stmt) === 1;
+            mysqli_stmt_close($stmt);
+            $message = $changed
+                ? show_alert('Status updated to ' . $newStatus . '.')
+                : show_alert('The document was not found or already has that status.', 'warning');
+        }
+    }
+}
+
+// Sends a generated (or staff-edited) SMS to the submitter and returns a short sentence for the page message.
+$sendDocumentSms = static function (string $phone, string $text) use ($conn): string {
+    if (!is_valid_contact_number($phone)) {
+        return ' No SMS was sent because no valid contact number is saved.';
+    }
+    $smsResult = send_logged_sms($conn, $phone, $text);
+    return $smsResult['success'] ? ' SMS sent to the submitter.' : ' The SMS was not sent: ' . $smsResult['message'];
+};
+
+if (isset($_POST['mark_incomplete'])) {
+    $shouldRedirect = true;
+    $id = $postId('incomplete_doc_id');
+    $labels = requirements_clean_labels(array_merge(
+        isset($_POST['req_items']) && is_array($_POST['req_items']) ? array_filter($_POST['req_items'], 'is_string') : [],
+        [$postText('req_other')]
+    ));
+    $context = $id > 0 ? composer_document_context($conn, $id, $documentTrackingSettings) : null;
+    $typeCheck = $id > 0 ? safe_scalar($conn, 'SELECT type FROM documents WHERE doc_id = ?', 'i', [$id]) : null;
+    if ($context === null || $typeCheck !== 'Incoming') {
+        $message = show_alert('The incoming document was not found.', 'danger');
+    } elseif (!$labels) {
+        $message = show_alert('Select or type at least one missing requirement.', 'warning');
+    } else {
+        requirements_add($conn, $id, $labels);
+        if ($context['status'] !== DOC_STATUS_INCOMPLETE) {
+            $stmt = safe_query($conn, "UPDATE documents SET status = 'Incomplete' WHERE doc_id = ? AND type = 'Incoming'", 'i', [$id]);
+            if ($stmt !== false) {
+                mysqli_stmt_close($stmt);
+            }
+        }
+        $pendingLabels = requirements_pending_labels($conn, $id);
+        if ($context['status'] !== DOC_STATUS_INCOMPLETE) {
+            requirements_note_latest_event($conn, $id, 'Needs: ' . implode(', ', $pendingLabels));
+        }
+        $smsNote = '';
+        if (!empty($_POST['send_sms'])) {
+            $context['status'] = DOC_STATUS_INCOMPLETE;
+            $context['items'] = $pendingLabels;
+            $smsText = $postText('sms_text');
+            if ($smsText === '') {
+                $smsText = compose_sms_message($context);
+            }
+            $smsNote = $sendDocumentSms($context['phone'], mb_substr($smsText, 0, 320, 'UTF-8'));
+        }
+        $message = show_alert('Marked as Incomplete. Missing: ' . implode(', ', $pendingLabels) . '.' . $smsNote);
+    }
+}
+
+if (isset($_POST['update_requirements'])) {
+    $shouldRedirect = true;
+    $id = $postId('req_doc_id');
+    $context = $id > 0 ? composer_document_context($conn, $id, $documentTrackingSettings) : null;
+    $typeCheck = $id > 0 ? safe_scalar($conn, 'SELECT type FROM documents WHERE doc_id = ?', 'i', [$id]) : null;
+    if ($context === null || $typeCheck !== 'Incoming') {
+        $message = show_alert('The incoming document was not found.', 'danger');
+    } else {
+        $receivedIds = isset($_POST['req_received']) && is_array($_POST['req_received'])
+            ? array_map('intval', array_filter($_POST['req_received'], 'is_string'))
+            : [];
+        requirements_set_received($conn, $id, $receivedIds);
+        requirements_add($conn, $id, requirements_clean_labels([$postText('req_new')]));
+        $pendingLabels = requirements_pending_labels($conn, $id);
+        if ($pendingLabels || $context['status'] !== DOC_STATUS_INCOMPLETE) {
+            $message = show_alert($pendingLabels ? 'Requirements updated. Still needed: ' . implode(', ', $pendingLabels) . '.' : 'Requirements updated.');
+        } else {
+            $stmt = safe_query($conn, "UPDATE documents SET status = 'Received' WHERE doc_id = ? AND type = 'Incoming' AND status = 'Incomplete'", 'i', [$id]);
+            if ($stmt !== false) {
+                mysqli_stmt_close($stmt);
+            }
+            requirements_note_latest_event($conn, $id, 'All requirements received');
+            $smsNote = '';
+            if (!empty($_POST['send_sms'])) {
+                $context['event'] = 'requirements_complete';
+                $context['status'] = DOC_STATUS_RECEIVED;
+                $smsNote = $sendDocumentSms($context['phone'], compose_sms_message($context));
+            }
+            $message = show_alert('All requirements received. Status moved back to Received.' . $smsNote);
         }
     }
 }
@@ -271,7 +379,7 @@ $whereTypes = '';
 $whereParams = [];
 if ($overdueFilter && $documentIdFilter === 0) {
     // The dashboard's overdue tile must list only documents past their processing time.
-    $whereClauses[] = "status = 'Pending'";
+    $whereClauses[] = 'status IN (' . doc_status_open_sql() . ')';
     $whereClauses[] = 'date_created < (NOW() - INTERVAL ? DAY)';
     $whereTypes .= 'i';
     $whereParams[] = $overdueDays;
@@ -288,7 +396,9 @@ if ($overdueFilter && $documentIdFilter === 0) {
         $whereTypes .= 's';
         $whereParams[] = $submitterFilter;
     }
-    if ($statusFilter !== '') {
+    if ($statusFilter === 'Open') {
+        $whereClauses[] = 'status IN (' . doc_status_open_sql() . ')';
+    } elseif ($statusFilter !== '') {
         $whereClauses[] = 'status = ?';
         $whereTypes .= 's';
         $whereParams[] = $statusFilter;
@@ -311,7 +421,7 @@ if ($overdueFilter && $documentIdFilter === 0) {
         ? 'is_priority DESC, date_created DESC, doc_id DESC'
         : 'is_priority DESC, date_created ASC, doc_id ASC';
 }
-$listSql = "SELECT *, (status = 'Pending' AND date_created < (NOW() - INTERVAL ? DAY)) AS is_overdue FROM documents WHERE "
+$listSql = "SELECT *, (status IN (" . doc_status_open_sql() . ") AND date_created < (NOW() - INTERVAL ? DAY)) AS is_overdue FROM documents WHERE "
     . implode(' AND ', $whereClauses) . ' ORDER BY ' . $orderSql;
 $stmt = safe_query($conn, $listSql, 'i' . $whereTypes, array_merge([$overdueDays], $whereParams));
 
@@ -326,6 +436,11 @@ if ($stmt !== false) {
     mysqli_stmt_close($stmt);
 }
 $clearFilterQuery = $submitterFilter !== 'All' ? ['submitter' => $submitterFilter] : [];
+$requirementPresets = requirements_presets($conn);
+$documentRequirements = [];
+foreach ($documents as $listedDocument) {
+    $documentRequirements[(int)$listedDocument['doc_id']] = requirements_list($conn, (int)$listedDocument['doc_id']);
+}
 ?>
 <?php include 'header.php'; ?>
 <div class="row g-4">
@@ -476,12 +591,27 @@ $clearFilterQuery = $submitterFilter !== 'All' ? ['submitter' => $submitterFilte
                                         <td data-label="Recipient"><?php echo sanitize(trim((string)($document['recipient'] ?? '')) !== '' ? $document['recipient'] : 'Not provided'); ?></td>
                                         <td data-label="Contact number"><?php echo sanitize($documentPhone !== '' ? $documentPhone : 'Not provided'); ?></td>
                                         <td data-label="Status">
-                                            <span class="badge <?php echo admin_status_badge_class($document['status']); ?>">
-                                                <?php echo sanitize($document['status']); ?>
-                                            </span>
-                                            <?php if (!empty($slaSettings['enabled']) && !empty($document['is_overdue'])): ?>
-                                                <span class="badge text-bg-danger ms-1" title="Waiting longer than <?php echo (int)$overdueDays; ?> day(s)">Overdue</span>
-                                            <?php endif; ?>
+                                            <div class="d-inline-flex flex-column align-items-start gap-1">
+                                                <?php render_status_menu($document['status'], doc_status_incoming(), ['status_doc_id' => (int)$document['doc_id']], 'change_status', $documentReference); ?>
+                                                <?php
+                                                $rowRequirements = $documentRequirements[(int)$document['doc_id']] ?? [];
+                                                $rowReceived = count(array_filter($rowRequirements, static function ($requirement) {
+                                                    return $requirement['received_at'] !== null;
+                                                }));
+                                                ?>
+                                                <?php if ($document['status'] === DOC_STATUS_INCOMPLETE): ?>
+                                                    <button type="button" class="btn btn-sm btn-outline-danger js-requirements"
+                                                        data-doc-id="<?php echo (int)$document['doc_id']; ?>"
+                                                        data-reference="<?php echo sanitize($documentReference); ?>"
+                                                        data-has-phone="<?php echo is_valid_contact_number($documentPhone) ? '1' : '0'; ?>"
+                                                        data-requirements="<?php echo htmlspecialchars(json_encode($rowRequirements, JSON_INVALID_UTF8_SUBSTITUTE) ?: '[]', ENT_QUOTES, 'UTF-8'); ?>">
+                                                        <i class="bi bi-list-check me-1" aria-hidden="true"></i>Requirements <?php echo $rowRequirements ? '(' . $rowReceived . '/' . count($rowRequirements) . ')' : ''; ?>
+                                                    </button>
+                                                <?php endif; ?>
+                                                <?php if (!empty($slaSettings['enabled']) && !empty($document['is_overdue'])): ?>
+                                                    <span class="badge text-bg-danger" title="Waiting longer than <?php echo (int)$overdueDays; ?> day(s)">Overdue</span>
+                                                <?php endif; ?>
+                                            </div>
                                         </td>
                                         <td data-label="Priority">
                                             <?php if ($document['submitter_type'] === 'Faculty'): ?>
@@ -501,7 +631,7 @@ $clearFilterQuery = $submitterFilter !== 'All' ? ['submitter' => $submitterFilte
                                             <button type="button" class="btn btn-sm btn-outline-primary document-action-button js-edit-document" title="Edit document" aria-label="Edit <?php echo sanitize($documentReference); ?>" data-document="<?php echo htmlspecialchars($editPayload !== false ? $editPayload : '{}', ENT_QUOTES, 'UTF-8'); ?>">
                                                 <i class="bi bi-pencil" aria-hidden="true"></i><span class="action-label">Edit</span>
                                             </button>
-                                            <?php if ($document['status'] === 'Pending'): ?>
+                                            <?php if (in_array($document['status'], doc_status_can_prepare_release(), true)): ?>
                                                 <?php
                                                 $releaseSenderLabel = trim((string)$document['sender']) !== '' ? $document['sender'] : ($documentSubmitterName !== '' ? $documentSubmitterName : 'Not provided');
                                                 $releaseRecipientLabel = trim((string)$document['recipient']) !== '' ? $document['recipient'] : "Dean's Office";
@@ -660,6 +790,73 @@ $clearFilterQuery = $submitterFilter !== 'All' ? ['submitter' => $submitterFilte
     </div>
 </div>
 
+<div class="modal fade" id="incompleteModal" tabindex="-1" aria-labelledby="incompleteTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form method="POST" class="modal-content border-0 shadow" id="incompleteForm" data-admin-confirm="false">
+            <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+            <input type="hidden" name="incomplete_doc_id" id="incompleteDocId" value="">
+            <div class="modal-header">
+                <h5 class="modal-title" id="incompleteTitle"><i class="bi bi-exclamation-circle me-2 text-danger" aria-hidden="true"></i>Mark as Incomplete <small class="text-muted" id="incompleteRef"></small></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="fw-semibold mb-2">What is missing?</p>
+                <div class="d-flex flex-wrap gap-2 mb-2" id="incompletePresets">
+                    <?php foreach ($requirementPresets as $presetIndex => $preset): ?>
+                        <input type="checkbox" class="btn-check js-req-item" name="req_items[]" id="reqPreset<?php echo (int)$presetIndex; ?>" value="<?php echo sanitize($preset); ?>" autocomplete="off">
+                        <label class="btn btn-sm btn-outline-secondary" for="reqPreset<?php echo (int)$presetIndex; ?>"><?php echo sanitize($preset); ?></label>
+                    <?php endforeach; ?>
+                </div>
+                <label class="form-label small" for="incompleteOther">Other (separate items with commas)</label>
+                <input type="text" class="form-control mb-3" id="incompleteOther" name="req_other" maxlength="200" placeholder="e.g. Photocopy of diploma, Barangay certificate">
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="send_sms" value="1" id="incompleteSendSms" checked>
+                    <label class="form-check-label" for="incompleteSendSms">Notify the submitter by SMS</label>
+                </div>
+                <div id="incompleteSmsBox">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label small mb-0" for="incompleteSmsText">Message (generated from the document; you can edit it)</label>
+                        <button type="button" class="btn btn-sm btn-link p-0" id="incompleteRegenerate"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Different wording</button>
+                    </div>
+                    <textarea class="form-control" id="incompleteSmsText" name="sms_text" rows="4" maxlength="320"></textarea>
+                    <div class="small text-muted mt-1" id="incompleteSmsMeta"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" name="mark_incomplete" value="1" class="btn btn-danger">Mark Incomplete</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="requirementsModal" tabindex="-1" aria-labelledby="requirementsTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form method="POST" class="modal-content border-0 shadow" data-admin-confirm="false">
+            <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+            <input type="hidden" name="req_doc_id" id="requirementsDocId" value="">
+            <div class="modal-header">
+                <h5 class="modal-title" id="requirementsTitle"><i class="bi bi-list-check me-2" aria-hidden="true"></i>Requirements <small class="text-muted" id="requirementsRef"></small></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted">Tick each item once the submitter has handed it in. When everything is ticked, the document goes back to Received.</p>
+                <div id="requirementsList" class="mb-3"></div>
+                <label class="form-label small" for="requirementsNew">Add another missing item</label>
+                <input type="text" class="form-control mb-3" id="requirementsNew" name="req_new" maxlength="100">
+                <div class="form-check" id="requirementsSmsRow">
+                    <input class="form-check-input" type="checkbox" name="send_sms" value="1" id="requirementsSendSms" checked>
+                    <label class="form-check-label" for="requirementsSendSms">SMS the submitter when all requirements are complete</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" name="update_requirements" value="1" class="btn btn-success">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <div class="modal fade" id="prepareReleaseModal" tabindex="-1" aria-labelledby="prepareReleaseTitle" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
@@ -793,6 +990,141 @@ document.addEventListener('click', function (event) {
 });
 
 document.addEventListener('DOMContentLoaded', function () {
+    const docMeta = <?php
+        $docMeta = [];
+        foreach ($documents as $metaDocument) {
+            $metaId = (int)$metaDocument['doc_id'];
+            $docMeta[$metaId] = [
+                'ref' => document_tracking_reference($metaId),
+                'hasPhone' => is_valid_contact_number(trim((string)($metaDocument['client_phone'] ?? ''))),
+                'pending' => array_values(array_map(static function ($requirement) {
+                    return $requirement['label'];
+                }, array_filter($documentRequirements[$metaId] ?? [], static function ($requirement) {
+                    return $requirement['received_at'] === null;
+                }))),
+            ];
+        }
+        echo json_encode($docMeta ?: new stdClass(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE);
+    ?>;
+    const incompleteModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('incompleteModal'));
+    const smsText = document.getElementById('incompleteSmsText');
+    const smsMeta = document.getElementById('incompleteSmsMeta');
+    const sendSms = document.getElementById('incompleteSendSms');
+    const smsBox = document.getElementById('incompleteSmsBox');
+    const otherInput = document.getElementById('incompleteOther');
+    let incompleteDocId = 0;
+    let variant = 0;
+    let timer = null;
+    let userEdited = false;
+
+    const selectedItems = function () {
+        const items = Array.from(document.querySelectorAll('#incompletePresets .js-req-item:checked')).map(function (box) { return box.value; });
+        return items.concat(otherInput.value.split(/[\n,;]+/).map(function (part) { return part.trim(); }).filter(Boolean));
+    };
+    const refreshPreview = function () {
+        if (!incompleteDocId || userEdited) return;
+        const params = new URLSearchParams({ doc_id: String(incompleteDocId), status: 'Incomplete', variant: String(variant) });
+        selectedItems().forEach(function (item) { params.append('items[]', item); });
+        fetch('compose_message.php?' + params.toString(), { credentials: 'same-origin' })
+            .then(function (response) { return response.json(); })
+            .then(function (result) {
+                if (!result.success || userEdited) return;
+                smsText.value = result.message;
+                smsMeta.textContent = result.message.length + ' characters' + (result.message.length > 160 ? ' (sent as ' + Math.ceil(result.message.length / 153) + ' SMS)' : ' (1 SMS)');
+            })
+            .catch(function () { smsMeta.textContent = 'Could not generate the message. You can type one.'; });
+    };
+    const schedulePreview = function () {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(refreshPreview, 250);
+    };
+
+    document.addEventListener('submit', function (event) {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.classList.contains('status-menu')) return;
+        if (!event.submitter || event.submitter.name !== 'new_status' || event.submitter.value !== 'Incomplete') return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const id = form.querySelector('[name="status_doc_id"]').value;
+        const meta = docMeta[id] || { ref: '', hasPhone: false, pending: [] };
+        incompleteDocId = parseInt(id, 10);
+        variant = 0;
+        userEdited = false;
+        document.getElementById('incompleteDocId').value = id;
+        document.getElementById('incompleteRef').textContent = meta.ref;
+        otherInput.value = '';
+        document.querySelectorAll('#incompletePresets .js-req-item').forEach(function (box) {
+            box.checked = meta.pending.indexOf(box.value) !== -1;
+        });
+        const custom = meta.pending.filter(function (label) {
+            return !Array.from(document.querySelectorAll('#incompletePresets .js-req-item')).some(function (box) { return box.value === label; });
+        });
+        otherInput.value = custom.join(', ');
+        sendSms.disabled = !meta.hasPhone;
+        sendSms.checked = meta.hasPhone;
+        smsBox.hidden = !meta.hasPhone;
+        if (!meta.hasPhone) {
+            smsMeta.textContent = '';
+        }
+        smsText.value = '';
+        incompleteModal.show();
+        refreshPreview();
+    }, true);
+
+    document.getElementById('incompletePresets').addEventListener('change', schedulePreview);
+    otherInput.addEventListener('input', schedulePreview);
+    smsText.addEventListener('input', function () {
+        userEdited = smsText.value.trim() !== '';
+        smsMeta.textContent = smsText.value.length + ' characters (edited)';
+    });
+    document.getElementById('incompleteRegenerate').addEventListener('click', function () {
+        variant += 1;
+        userEdited = false;
+        refreshPreview();
+    });
+    sendSms.addEventListener('change', function () { smsBox.hidden = !sendSms.checked; });
+
+    const requirementsModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('requirementsModal'));
+    document.querySelectorAll('.js-requirements').forEach(function (button) {
+        button.addEventListener('click', function () {
+            let items = [];
+            try { items = JSON.parse(button.dataset.requirements || '[]'); } catch (error) { items = []; }
+            document.getElementById('requirementsDocId').value = button.dataset.docId;
+            document.getElementById('requirementsRef').textContent = button.dataset.reference;
+            document.getElementById('requirementsNew').value = '';
+            const sms = document.getElementById('requirementsSendSms');
+            sms.disabled = button.dataset.hasPhone !== '1';
+            sms.checked = button.dataset.hasPhone === '1';
+            document.getElementById('requirementsSmsRow').hidden = button.dataset.hasPhone !== '1';
+            const list = document.getElementById('requirementsList');
+            list.replaceChildren();
+            if (items.length === 0) {
+                const empty = document.createElement('p');
+                empty.className = 'small text-muted mb-0';
+                empty.textContent = 'No requirements were listed for this document.';
+                list.append(empty);
+            }
+            items.forEach(function (item) {
+                const row = document.createElement('div');
+                row.className = 'form-check';
+                const box = document.createElement('input');
+                box.type = 'checkbox';
+                box.className = 'form-check-input';
+                box.name = 'req_received[]';
+                box.value = item.req_id;
+                box.id = 'req' + item.req_id;
+                box.checked = item.received_at !== null;
+                const label = document.createElement('label');
+                label.className = 'form-check-label';
+                label.htmlFor = box.id;
+                label.textContent = item.label + (item.received_at ? ' (received ' + item.received_at.slice(0, 10) + ')' : '');
+                row.append(box, label);
+                list.append(row);
+            });
+            requirementsModal.show();
+        });
+    });
+
     const prepareModalElement = document.getElementById('prepareReleaseModal');
     const prepareModal = bootstrap.Modal.getOrCreateInstance(prepareModalElement);
     document.querySelectorAll('.js-prepare-release').forEach(function (button) {
