@@ -26,7 +26,7 @@ network settings.
 2. Start MySQL in the XAMPP Control Panel. Open phpMyAdmin and import
    [`database/schema.sql`](../database/schema.sql) to initialize a new, empty
    database.
-3. Check the connection settings in [`db.php`](../db.php). The defaults are
+3. Check the connection settings in [`includes/db.php`](../includes/db.php). The defaults are
    database `dit_logbook`, user `root`, and an empty password. Adjust them if
    the local MySQL account is configured differently.
 4. Double-click [`start-office-server.bat`](../start-office-server.bat).
@@ -71,7 +71,7 @@ enable inbound access on Public networks.
    `htdocs` directory. You may use a different folder name.
 3. On the new computer, start MySQL and import the SQL export in phpMyAdmin.
    Do not copy a live MySQL data directory while its server is running.
-4. Check the MySQL settings in the copied `db.php` file. Update them if the
+4. Check the MySQL settings in the copied `includes/db.php` file. Update them if the
    new computer uses different database credentials.
 5. Double-click `start-office-server.bat` on the new computer and approve the
    Private-network firewall prompt. Use the network URL it prints on other
@@ -116,7 +116,7 @@ public internet.
 | --- | --- |
 | Launcher cannot find XAMPP | Put the project folder somewhere inside XAMPP's `htdocs` directory. |
 | MySQL or Apache does not start | Check the corresponding XAMPP window and confirm another service is not already using port 3306 or 80. |
-| Database connection error | Start MySQL; confirm the imported database is named `dit_logbook` and check `db.php` credentials. |
+| Database connection error | Start MySQL; confirm the imported database is named `dit_logbook` and check `includes/db.php` credentials. |
 | Another computer cannot connect | Run the launcher on the host, approve the firewall prompt, make sure both computers share the same trusted Private network, and use the printed network URL. |
 | Clean admin page URLs return 404 | Confirm Apache `mod_rewrite` is enabled and `.htaccess` overrides are allowed. |
 | Phone camera is unavailable | For the Vite mobile app, use `npm run dev:lan` and open its `https://<office-LAN-IP>:5173/` address. Install and trust the office CA certificate on the phone. Run `start-office-server.bat` to configure the Private-network firewall rules; upload a QR image if HTTPS is not available. |

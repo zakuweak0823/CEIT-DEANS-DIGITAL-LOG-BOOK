@@ -34,6 +34,7 @@
 - [Windows setup and computer-to-computer use](docs/WINDOWS-SETUP.md)
 - [Mobile app](#mobile-app)
 - [Project layout](#project-layout)
+- [Changelog](changelogs.md)
 - [Patch history](#patch-history)
 - [Security features](#security-features)
 - [Security before deployment](#security-before-deployment)
@@ -189,8 +190,8 @@ the sections below and in the [Windows setup guide](docs/WINDOWS-SETUP.md).
   sheet, and presents records in touch-friendly cards. Its mint-and-cream
   palette uses CVSU green for active navigation and primary actions.
 - **Compact Mode controls** are available in both the administrator dropdown
-  and **Settings**. The larger switch shows a clear On/Off state and updates
-  immediately when changed.
+  and **Settings**. Both switches show a clear On/Off state and update
+  immediately when changed; the administrator menu uses a concise label.
 - **Compact Mode quick actions** use a balanced two-column layout. Incoming
   document forms stay within a readable dialog instead of stretching across
   the full screen.
@@ -246,7 +247,7 @@ are only needed to build or run the native Android project.
 2. On first setup, start **Apache** and **MySQL** in the XAMPP Control Panel,
    open phpMyAdmin, and import [`database/schema.sql`](database/schema.sql).
    It creates the `dit_logbook` database and the tables used by the application.
-3. Review the connection values in [`db.php`](db.php). The local defaults are:
+3. Review the connection values in [`includes/db.php`](includes/db.php). The local defaults are:
 
    | Setting | Default |
    | --- | --- |
@@ -279,7 +280,7 @@ To move existing records, export the `dit_logbook` database as an SQL file from
 phpMyAdmin on the old computer, then import that export on the new computer.
 [`database/schema.sql`](database/schema.sql) initializes the schema for a
 fresh install; it does not contain your live records. Check the new computer's
-database username and password in [`db.php`](db.php), then run
+database username and password in [`includes/db.php`](includes/db.php), then run
 [`start-office-server.bat`](start-office-server.bat). Do not copy a live MySQL
 data directory while its server is running.
 
@@ -605,39 +606,34 @@ another server, set `VITE_API_ENDPOINT` at build time to the complete
 │   ├── SECURITY.md                   # Security model and deployment checklist
 │   ├── WINDOWS-SETUP.md              # Windows setup and computer transfer
 │   └── Patch V1.00.md                # Project patch history
+├── includes/                         # Shared PHP runtime, layout, and domain helpers
+├── pages/                            # Admin and tracker page implementations
+├── api/                              # JSON and AJAX endpoint implementations
 ├── tools/
 │   ├── start-office-server.ps1       # XAMPP startup and network helper
 │   ├── mobile_submission_console.php
 │   └── start_mobile_submission_log.bat
 ├── start-office-server.bat           # Double-click Windows launcher
-├── auth.php                          # Sessions, CSRF checks, and role enforcement
-├── login.php / forgot_password.php   # Sign-in (with show/hide password) and SMS password recovery
-├── users.php                         # Super Admin account management
-├── sla_support.php                   # Overdue-record time limits
-├── db.php                            # Database connection and query helpers
-├── header.php / footer.php           # Shared admin layout
-├── dashboard.php                     # Admin dashboard
-├── incoming.php / outgoing.php       # Document workflows
-├── batch_papers.php                  # Bulk paper registration
-├── batch_tracker.php                 # Batch tracking
-├── borrowed.php                      # Borrowed item management
-├── records.php                       # Document search
-├── reports.php                       # Reports
-├── sms.php                           # SMS logs and operations
-├── mobile-api.php                    # API for the mobile client
+├── *.php                              # Root entrypoint shims; preserve existing URLs
 └── mobile-ui/
     ├── src/                         # React/Vite mobile client
     ├── android/                     # Capacitor Android project
     └── expo-wrapper/                # Optional Expo wrapper with separate dependencies
 ```
 
-The root PHP files intentionally stay together because XAMPP serves this
-directory as the application root and the clean routes, shared includes, and
-form endpoints rely on those paths. Keep the whole project folder intact when
-copying it to another XAMPP `htdocs` directory; the launcher detects its new
-folder name. Do not copy `node_modules`, `dist`, or Android build/Gradle output
-to move the project; those are generated or machine-specific and can be
+The small root PHP entrypoint shims preserve XAMPP's existing clean routes,
+mobile API URLs, and form endpoints while implementations are grouped by role.
+`includes/` contains shared PHP code, `pages/` contains page implementations,
+and `api/` contains JSON/AJAX handlers. Keep the whole project folder intact
+when copying it to another XAMPP `htdocs` directory; the launcher detects its
+new folder name. Do not copy `node_modules`, `dist`, or Android build/Gradle
+output to move the project; those are generated or machine-specific and can be
 recreated from the package manifests and source.
+
+This organization makes the source easier to navigate; folders by themselves
+do not increase the number of users the server can handle. Concurrent-user
+performance still depends on database query time, indexes, request frequency,
+and Apache/MySQL resources.
 
 ## Patch history
 
@@ -798,7 +794,7 @@ hosting setup:
 
 | Problem | Things to check |
 | --- | --- |
-| Database connection error | Start MySQL and confirm the host, username, password, and database in `db.php`. |
+| Database connection error | Start MySQL and confirm the host, username, password, and database in `includes/db.php`. |
 | Clean page routes return 404 | Enable Apache `mod_rewrite` and allow `.htaccess` overrides for the project directory. |
 | Another computer cannot open the site | Run `start-office-server.bat` on the host computer, approve its Private-network firewall prompt, and use the network URL it prints. Keep both computers on the same trusted network and leave Apache/MySQL running. |
 | Mobile app cannot reach the API | Keep Apache/MySQL running and verify the Vite proxy or `VITE_API_ENDPOINT`. On Android emulators, use `10.0.2.2` rather than `localhost`. |

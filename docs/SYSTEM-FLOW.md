@@ -95,39 +95,31 @@ can only ever read a limited status subset from the tracker page.
 
 | File / folder | Role in the flow |
 | --- | --- |
-| `db.php` | Opens the MySQLi connection (`dit_logbook`, UTF-8 `utf8mb4`), defines `safe_query()`, `safe_scalar()`, phone validation, and the **database-down recovery page**. |
-| `auth.php` | Starts the session with hardened cookie flags, exposes `ensure_admin()`, `ensure_super_admin()`, `verify_csrf_request()`, `csrf_token()`, `sanitize()`, `show_alert()`. |
+| `includes/db.php` | Opens the MySQLi connection (`dit_logbook`, UTF-8 `utf8mb4`), defines `safe_query()`, `safe_scalar()`, phone validation, and the **database-down recovery page**. |
+| `includes/auth.php` | Starts the session with hardened cookie flags, exposes `ensure_admin()`, `ensure_super_admin()`, `verify_csrf_request()`, `csrf_token()`, `sanitize()`, `show_alert()`. |
 | `router.php` | Router used **only** by PHP's built-in server (`php -S`). Apache uses `.htaccess` instead. |
 | `.htaccess` | Apache rewrite rules for extension-free URLs and the `document-tracker` alias. |
-| `header.php` / `footer.php` | Shared layout, sidebar, page titles, live status widgets. `header.php` reads `SCRIPT_FILENAME` (set by the router) so navigation highlighting works with clean URLs. |
-| `login.php` / `logout.php` / `forgot_password.php` | Sign-in, sign-out, SMS one-time-code password recovery (`password_reset_support.php`). |
-| `users.php` | Super Admin account management (create / reset / delete / change own password). |
-| `incoming.php` | Incoming document create, edit, tracking QR issue, priority toggle, **Prepare for Release**. |
-| `outgoing.php` | Outgoing document edit, status change, SMS notification, tracking QR. |
-| `quick_document.php` | Read-only list of records created through mobile Quick Submit (`entry_source = 'quick_submit'`). |
-| `batch_papers.php` | Bulk submissions: register batch, link document-level papers, intake receipt, status advance, priority. |
-| `batch_tracker.php` | Admin-facing batch lookup by QR/code. |
-| `borrowed.php` / `item_categories.php` | Borrowed items and categories. |
-| `records.php` | Cross-cutting document search. |
-| `reports.php` | Date-filtered reports, print layout, Excel export. |
-| `sms.php` | SMS logs, manual send, status refresh. |
-| `notification_settings.php` | Communication (SMS/email) configuration. |
-| `settings.php` | Admin Settings hub (kiosk, tracker, SLA, form labels, mobile appearance, certificate download). |
-| `mobile_api.php` | The JSON API used by the mobile client. |
-| `document_tracker.php` | Public, mobile-friendly status page (reads via `mobile-api.php`). |
-| `document_tracking.php` | Tracking token helpers, tracker base-URL normalisation, schema bootstrap. |
-| `batch_support.php` | Batch workflow settings + `ensure_batch_storage()` migration bootstrap. |
-| `sla_support.php` | Overdue thresholds and queries. |
-| `sms_service.php` | PhilSMS integration, logging, delivery-status refresh. |
-| `server_health.php` | JSON health check used by the recovery page. |
-| `mobile-api.php`, `admin_document_activity.php`, `server_health.php` | Return JSON (including on DB outage). |
+| `includes/header.php` / `includes/footer.php` | Shared layout, sidebar, page titles, live status widgets. `header.php` reads `SCRIPT_FILENAME` (set by the router) so navigation highlighting works with clean URLs. |
+| `pages/` | Admin page and public tracker implementations. Root-level PHP shims preserve the existing browser routes and form targets. |
+| `api/` | JSON and AJAX endpoint implementations. Root-level PHP shims preserve the mobile API, activity, health-check, and message-composer URLs. |
+| `includes/` | Shared PHP runtime and domain helpers, including database, authentication, tracking, reporting, SMS, and workflow support. |
+| `api/mobile-api.php` | The JSON API used by the mobile client, exposed at the existing root URL `mobile-api.php`. |
+| `pages/document_tracker.php` | Public, mobile-friendly status page (reads via `mobile-api.php`). |
+| `includes/document_tracking.php` | Tracking token helpers, tracker base-URL normalisation, schema bootstrap. |
+| `includes/batch_support.php` | Batch workflow settings + `ensure_batch_storage()` migration bootstrap. |
+| `includes/sla_support.php` | Overdue thresholds and queries. |
+| `includes/sms_service.php` | PhilSMS integration, logging, delivery-status refresh. |
+| `api/server_health.php` | JSON health check used by the recovery page. |
+| `api/mobile-api.php`, `api/admin_document_activity.php`, `api/server_health.php` | Return JSON (including on DB outage) through their unchanged root URLs. |
 | `mobile-ui/` | React/Vite mobile client + Capacitor Android project. |
 | `start-office-server.bat` → `tools/start-office-server.ps1` | Windows launcher: starts XAMPP, adds a Private-only firewall rule, prints LAN URLs. |
 
-> **Why flat?** XAMPP serves this folder as the application root, and the clean
-> routes, shared includes, and POST endpoints rely on those relative paths.
-> Moving PHP into subfolders would break every `?action=` endpoint and the
-> service-worker-free navigation.
+> **Compatibility:** XAMPP still serves the project root. Thin root-level PHP
+> entrypoint shims keep existing clean routes, direct API URLs, and form
+> endpoints working; implementations live in `pages/`, `api/`, and `includes/`.
+> The shims set the project root as the working directory for legacy
+> root-relative PHP includes. This source organization improves maintainability,
+> not request throughput by itself.
 
 ---
 
@@ -608,6 +600,11 @@ The API deliberately runs its setup steps **before** dispatch, in this order:
 11. kiosk gate: !kioskEnabled && !token → 401
 12. authenticated action dispatch
 ```
+
+While the app is open, it refreshes shared records every 15 seconds when the
+page is visible and the device is online. Returning to the app, reconnecting,
+and pull-to-refresh trigger an immediate check, so the longer background
+interval reduces repeated API/database work without blocking manual updates.
 
 **Why the early exits for tracker actions:** the public tracker page must work
 even when the kiosk is disabled. Moving those two actions above the gate is the

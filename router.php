@@ -22,6 +22,11 @@ $adminPages = [
 $requestPath = rawurldecode((string)parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH));
 $requestMethod = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 
+if (preg_match('~^/(?:pages|api|includes)(?:/|$)~i', $requestPath)) {
+    http_response_code(404);
+    exit('Not found.');
+}
+
 // Canonicalize browser navigation, but never redirect POSTs that carry form submissions.
 if (in_array($requestMethod, ['GET', 'HEAD'], true)
     && preg_match('~/(dashboard|quick_document|incoming|outgoing|batch_papers|batch_tracker|document_tracker|borrowed|item_categories|sms|notification_settings|settings|reports|records|login|forgot_password|users|logout)\.php$~i', $requestPath, $matches)

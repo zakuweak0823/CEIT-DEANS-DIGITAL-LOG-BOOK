@@ -30,6 +30,7 @@ const API_ENDPOINT = import.meta.env.DEV
   ? '/api/mobile-api.php'
   : import.meta.env.VITE_API_ENDPOINT
     || `http://10.0.2.2${import.meta.env.VITE_PROJECT_PATH}/mobile-api.php`;
+const MOBILE_REFRESH_INTERVAL_MS = 15_000;
 
 const playConfirmTone = () => {
   const audio = new Audio(confirmToneUrl);
@@ -465,7 +466,7 @@ function App() {
     const refreshWhenVisible = () => {
       if (!document.hidden && navigator.onLine) fetchData();
     };
-    const refreshInterval = window.setInterval(refreshWhenVisible, 3000);
+    const refreshInterval = window.setInterval(refreshWhenVisible, MOBILE_REFRESH_INTERVAL_MS);
     document.addEventListener('visibilitychange', refreshWhenVisible);
     window.addEventListener('online', refreshWhenVisible);
     fetchData();

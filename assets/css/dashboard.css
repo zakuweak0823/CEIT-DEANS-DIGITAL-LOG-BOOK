@@ -1,0 +1,106 @@
+.dashboard-delta {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    padding: .05rem .45rem;
+    border-radius: 999px;
+    font-size: .72rem;
+    font-weight: 600;
+    background: #eef2f1;
+    color: #475569;
+}
+
+.dashboard-delta.is-up {
+    background: #e3f3e8;
+    color: #17613e;
+}
+
+.dashboard-delta.is-down {
+    background: #fdecee;
+    color: #a23a47;
+}
+
+.dashboard-range-pills {
+    display: inline-flex;
+    gap: .25rem;
+    padding: .2rem;
+    border-radius: 999px;
+    background: #eef2f1;
+}
+
+.dashboard-range-pills a {
+    padding: .2rem .75rem;
+    border-radius: 999px;
+    font-size: .8rem;
+    font-weight: 600;
+    color: #475569;
+    text-decoration: none;
+}
+
+.dashboard-range-pills a.is-active {
+    background: #17613e;
+    color: #fff;
+}
+
+.dashboard-chart-wide {
+    grid-column: 1 / -1;
+}
+
+.dashboard-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin: 0 0 1rem;
+}
+
+.dashboard-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .3rem .7rem;
+    border-radius: 999px;
+    font-size: .8rem;
+    background: #eef2f1;
+    color: #334155;
+}
+
+.dashboard-chip strong {
+    font-weight: 700;
+}
+
+.dashboard-chip.is-warn {
+    background: #fdf3d3;
+    color: #7a5b00;
+}
+
+.dashboard-chip.is-bad {
+    background: #fdecee;
+    color: #a23a47;
+}
+
+.dashboard-chip.is-good {
+    background: #e3f3e8;
+    color: #17613e;
+}
+
+.dashboard-loan-days {
+    display: inline-block;
+    margin-left: .35rem;
+    padding: 0 .4rem;
+    border-radius: 999px;
+    font-size: .72rem;
+    font-weight: 600;
+    background: #eef2f1;
+    color: #475569;
+}
+
+.dashboard-loan-days.is-late {
+    background: #fdecee;
+    color: #a23a47;
+}
+
+.dashboard-panel-note {
+    margin: .75rem 0 0;
+    font-size: .8rem;
+    color: #64748b;
+}
