@@ -108,7 +108,13 @@ if (isset($_POST['issue_tracking_qr'])) {
         $message = show_alert('Enter an 11-digit contact number using digits only, or leave it blank.', 'danger');
     } else {
         $phoneValue = $clientPhone === '' ? null : $clientPhone;
-        $stmt = safe_query($conn, "INSERT INTO documents(type, sender, submitter_name, recipient, client_phone, subject, remarks, status, submitter_type) VALUES('Incoming', ?, ?, ?, ?, ?, ?, 'Pending', ?)", 'sssssss', [$sender, $submitterName, $recipient, $phoneValue, $subject, $remarks, $submitterType]);
+        try {
+            $insert = insert_document_with_reference($conn, "INSERT INTO documents(type, sender, submitter_name, recipient, client_phone, subject, remarks, status, submitter_type, local_reference) VALUES('Incoming', ?, ?, ?, ?, ?, ?, 'Pending', ?, ?)", 'sssssss', [$sender, $submitterName, $recipient, $phoneValue, $subject, $remarks, $submitterType]);
+            $stmt = $insert['statement'];
+        } catch (Throwable $error) {
+            error_log('Incoming document creation failed: ' . $error->getMessage());
+            $stmt = false;
+        }
         if ($stmt !== false) {
             mysqli_stmt_close($stmt);
             $message = show_alert('Incoming document saved successfully.');
@@ -357,13 +363,13 @@ if ($orderFilter === 'newest') {
                                             </div>
                                             <div class="mt-1 fw-semibold"><?php echo sanitize(trim((string)($document['submitter_name'] ?? '')) !== '' ? $document['submitter_name'] : 'Name not recorded'); ?></div>
                                         </td>
-                                        <td data-label="Reference"><code><?php echo sanitize(document_tracking_reference($document['doc_id'])); ?></code></td>
+                                        <td data-label="Reference"><code><?php echo sanitize(document_tracking_reference($document['doc_id'], $document['local_reference'])); ?></code></td>
                                         <td data-label="Tracking QR">
                                             <?php if (!$documentTrackingSettings['enabled']): ?>
                                                 <span class="small text-muted">QR tracking is disabled</span>
                                             <?php elseif (!empty($document['tracking_token'])): ?>
                                                 <?php $documentTrackerUrl = $documentTrackingSettings['baseUrl'] . '?token=' . rawurlencode($document['tracking_token']); ?>
-                                                <button type="button" class="btn btn-sm btn-outline-success" aria-label="View tracking QR code for <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?>" onclick="showDocumentTrackingQr(<?php echo htmlspecialchars(json_encode($documentTrackerUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode(document_tracking_reference($document['doc_id']), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                                <button type="button" class="btn btn-sm btn-outline-success" aria-label="View tracking QR code for <?php echo sanitize(document_tracking_reference($document['doc_id'], $document['local_reference'])); ?>" onclick="showDocumentTrackingQr(<?php echo htmlspecialchars(json_encode($documentTrackerUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode(document_tracking_reference($document['doc_id'], $document['local_reference']), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
                                                     <i class="bi bi-qr-code me-1" aria-hidden="true"></i>View QR code
                                                 </button>
                                             <?php else: ?>
@@ -389,7 +395,7 @@ if ($orderFilter === 'newest') {
                                                 <form method="POST" class="document-priority-control">
                                                     <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                                                     <input type="hidden" name="priority_doc_id" value="<?php echo (int)$document['doc_id']; ?>">
-                                                    <button class="btn btn-sm <?php echo (int)$document['is_priority'] === 1 ? 'btn-warning' : 'btn-outline-secondary'; ?>" type="submit" name="toggle_priority" aria-label="<?php echo (int)$document['is_priority'] === 1 ? 'Remove priority from' : 'Mark as priority'; ?> <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?>">
+                                                    <button class="btn btn-sm <?php echo (int)$document['is_priority'] === 1 ? 'btn-warning' : 'btn-outline-secondary'; ?>" type="submit" name="toggle_priority" aria-label="<?php echo (int)$document['is_priority'] === 1 ? 'Remove priority from' : 'Mark as priority'; ?> <?php echo sanitize(document_tracking_reference($document['doc_id'], $document['local_reference'])); ?>">
                                                         <i class="bi bi-star<?php echo (int)$document['is_priority'] === 1 ? '-fill' : ''; ?> me-1" aria-hidden="true"></i><?php echo (int)$document['is_priority'] === 1 ? 'Priority' : 'Standard'; ?>
                                                     </button>
                                                 </form>
@@ -399,7 +405,7 @@ if ($orderFilter === 'newest') {
                                         </td>
                                         <td data-label="Actions">
                                             <div class="table-actions document-row-actions">
-                                            <button type="button" class="btn btn-sm btn-outline-primary document-action-button" title="Edit document" aria-label="Edit <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?>" onclick="editDocument(<?php echo (int)$document['doc_id']; ?>, <?php echo htmlspecialchars(json_encode($document['sender'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['submitter_name'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['client_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['subject'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['remarks'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['submitter_type'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                            <button type="button" class="btn btn-sm btn-outline-primary document-action-button" title="Edit document" aria-label="Edit <?php echo sanitize(document_tracking_reference($document['doc_id'], $document['local_reference'])); ?>" onclick="editDocument(<?php echo (int)$document['doc_id']; ?>, <?php echo htmlspecialchars(json_encode($document['sender'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['submitter_name'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['client_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['subject'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['remarks'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['submitter_type'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
                                                 <i class="bi bi-pencil" aria-hidden="true"></i><span class="action-label">Edit</span>
                                             </button>
                                             <?php if ($document['status'] === 'Pending'): ?>
@@ -407,7 +413,7 @@ if ($orderFilter === 'newest') {
                                                     class="btn btn-sm btn-outline-success js-prepare-release document-action-button"
                                                     type="button"
                                                     title="Prepare for release"
-                                                    aria-label="Prepare <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?> for release"
+                                                    aria-label="Prepare <?php echo sanitize(document_tracking_reference($document['doc_id'], $document['local_reference'])); ?> for release"
                                                     data-document-id="<?php echo (int)$document['doc_id']; ?>"
                                                     data-document-subject="<?php echo sanitize($document['subject']); ?>"
                                                     data-document-sender="<?php echo sanitize($document['sender']); ?>"

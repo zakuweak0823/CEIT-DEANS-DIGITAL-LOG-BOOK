@@ -996,7 +996,7 @@ $showPrintHeader = $reportGenerated && ($printSettings['letterhead'] || $printSe
                                         <?php elseif ($reportType === 'Borrowed Items'): ?>
                                             <td><?php echo sanitize((string)$row['item_name']); ?></td>
                                             <td><?php echo sanitize((string)$row['borrower']); ?></td>
-                                            <td data-csv-value="<?php echo sanitize((string)$row['date_borrowed']); ?>"><?php echo sanitize(date('M j, Y', strtotime((string)$row['date_borrowed']))); ?></td>
+                                            <td data-csv-value="<?php echo sanitize((string)$row['date_borrowed']); ?>"><?php echo sanitize(date('M j, Y g:i A', strtotime((string)$row['date_borrowed']))); ?></td>
                                             <td><span class="badge <?php echo admin_status_badge_class($row['status']); ?>"><?php echo sanitize((string)$row['status']); ?></span></td>
                                         <?php elseif ($reportType === 'SMS Logs'): ?>
                                             <td class="report-date-cell" data-csv-value="<?php echo sanitize((string)$row['date_sent']); ?>">

@@ -237,6 +237,12 @@ function normalize_philsms_recipient($recipient)
     return $digits;
 }
 
+function is_valid_logged_sms_recipient($recipient): bool
+{
+    return is_string($recipient)
+        && (is_valid_contact_number($recipient) || preg_match('/^63[0-9]{10}$/', $recipient) === 1);
+}
+
 function log_sms_attempt($conn, $recipient, $message, $status, $messageId = null)
 {
     $logStmt = safe_query(

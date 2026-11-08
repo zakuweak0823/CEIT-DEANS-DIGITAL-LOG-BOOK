@@ -54,13 +54,10 @@ $apiUrl = ($apiPath === '' ? '' : '/' . $apiPath) . '/mobile-api.php';
         main { width: min(100%, 48rem); }
         .card { overflow: hidden; border: 1px solid #bbf7d0; border-radius: 1.25rem; background: #fff; box-shadow: 0 20px 50px #064e3b14; }
         .body { padding: clamp(1.25rem, 5vw, 3rem); }
-        .receipt-letterhead { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) auto; align-items: center; gap: 1rem; padding-bottom: 1.25rem; border-bottom: 2px solid #0f5132; }
+        .receipt-letterhead { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); align-items: center; gap: 1rem; padding-bottom: 1.25rem; border-bottom: 2px solid #0f5132; }
         .receipt-letterhead img { width: 4.25rem; height: 4.25rem; object-fit: contain; }
         .receipt-letterhead p { margin: 0; color: #466356; font-size: .78rem; line-height: 1.45; }
         .receipt-letterhead .receipt-university { color: #064e3b; font-size: 1rem; font-weight: 800; letter-spacing: .035em; }
-        .receipt-stamp { text-align: right; }
-        .receipt-stamp span { display: block; color: #0f5132; font-size: .68rem; font-weight: 800; letter-spacing: .12em; }
-        .receipt-stamp strong { display: block; margin-top: .25rem; color: #064e3b; font-size: .9rem; overflow-wrap: anywhere; }
         h1 { margin: 1.25rem 0 .25rem; color: #064e3b; font-size: 1.55rem; font-weight: 750; line-height: 1.2; }
         .intro { margin: 0 0 1.25rem; color: #526d63; line-height: 1.55; }
         .notice { padding: 1rem; border: 1px solid #bbf7d0; border-radius: 1rem; background: #f0fdf4; }
@@ -91,15 +88,9 @@ $apiUrl = ($apiPath === '' ? '' : '/' . $apiPath) . '/mobile-api.php';
         .timeline li:not(.is-latest) .tl-title { color: #526d63; font-weight: 600; }
         .timeline .tl-note { margin: .1rem 0 0; color: #526d63; font-size: .85rem; }
         .timeline .tl-time { margin: .1rem 0 0; color: #60766b; font-size: .78rem; }
-        .receipt-confirmation { padding: 1rem 1.1rem; border: 1px solid #b7ddc3; border-left: 4px solid #16834a; border-radius: .75rem; background: #f1faf3; }
-        .receipt-confirmation p { margin: 0 0 .25rem; }
-        .receipt-confirmation p:last-child { margin-bottom: 0; }
-        .receipt-signoff { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2.5rem; }
-        .receipt-signoff div { padding-top: .45rem; border-top: 1px solid #506b5c; color: #526d63; font-size: .78rem; }
-        .receipt-print-meta { margin: 1.5rem 0 0; padding-top: .75rem; border-top: 1px solid #dce9df; color: #60766b; font-size: .72rem; text-align: center; }
+        .tracker-update { color: #526d63; font-size: .85rem; line-height: 1.5; }
         .actions { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: 1.25rem; }
         button { min-height: 2.8rem; padding: .7rem 1rem; border: 0; border-radius: .85rem; background: #065f46; color: white; font: inherit; font-weight: 700; cursor: pointer; }
-        button.is-secondary { border: 1px solid #86efac; background: #fff; color: #065f46; }
         button:focus-visible, .return-link:focus-visible { outline: 3px solid #6ee7b7; outline-offset: 3px; }
         .return-link { display: inline-flex; align-items: center; justify-content: center; min-height: 2.8rem; margin-top: 1.25rem; padding: .7rem 1rem; border: 1px solid #86efac; border-radius: .85rem; background: #fff; color: #065f46; font-weight: 700; text-decoration: none; }
         .actions + .return-link { margin-top: .6rem; }
@@ -108,24 +99,7 @@ $apiUrl = ($apiPath === '' ? '' : '/' . $apiPath) . '/mobile-api.php';
         @media (max-width: 520px) {
             .receipt-letterhead { grid-template-columns: 3.4rem minmax(0, 1fr); gap: .7rem; }
             .receipt-letterhead img { width: 3.25rem; height: 3.25rem; }
-            .receipt-stamp { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; text-align: left; }
             .receipt-details { grid-template-columns: 1fr; gap: .55rem; }
-            .receipt-signoff { gap: 1rem; }
-        }
-        @media print {
-            @page { size: A4 portrait; margin: 14mm; }
-            body { min-height: 0; display: block; padding: 0; background: #fff; color: #111; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-            main { width: 100%; }
-            .card { border: 0; border-radius: 0; box-shadow: none; }
-            .body { padding: 0; }
-            .receipt-letterhead { grid-template-columns: 20mm minmax(0, 1fr) auto; gap: 5mm; padding-bottom: 4mm; }
-            .receipt-letterhead img { width: 19mm; height: 19mm; }
-            h1 { margin-top: 7mm; font-size: 18pt; }
-            .receipt-detail, .receipt-confirmation { break-inside: avoid; }
-            .receipt-detail { padding: 3mm; }
-            .receipt-signoff { margin-top: 18mm; }
-            .receipt-print-meta { margin-top: 10mm; }
-            .no-print { display: none !important; }
         }
     </style>
 </head>
@@ -141,10 +115,6 @@ $apiUrl = ($apiPath === '' ? '' : '/' . $apiPath) . '/mobile-api.php';
                     <p>College of Engineering and Information Technology</p>
                     <p>Dean's Office · Digital Logbook</p>
                 </div>
-                <div class="receipt-stamp">
-                    <span>DOCUMENT RECORD</span>
-                    <strong id="stampReference">Status tracker</strong>
-                </div>
             </header>
             <h1>Document status tracker</h1>
             <p class="intro">This page shows the latest status recorded by the office for the document linked to your official tracking QR code.</p>
@@ -158,36 +128,27 @@ $apiUrl = ($apiPath === '' ? '' : '/' . $apiPath) . '/mobile-api.php';
                 <section id="trackerRecord" hidden>
                     <h2 class="record-title" id="recordSubject"></h2>
                     <dl class="receipt-details">
-                        <div class="receipt-detail"><dt>Reference</dt><dd class="receipt-reference" id="recordReference"></dd></div>
-                        <div class="receipt-detail"><dt>Document type</dt><dd id="recordType"></dd></div>
+                        <div class="receipt-detail"><dt>CEIT reference</dt><dd class="receipt-reference" id="recordReference"></dd></div>
+                        <div class="receipt-detail" id="universityReferenceDetail" hidden><dt>University tracking reference</dt><dd id="universityReference"></dd></div>
                         <div class="receipt-detail"><dt>Current status</dt><dd><span class="status" id="recordStatus"></span></dd></div>
                         <div class="receipt-detail"><dt>Date submitted</dt><dd id="recordDate"></dd></div>
                     </dl>
                     <div class="banner" id="trackerMissing" hidden>
-            <strong>Action needed: please submit the following to the Dean's Office</strong>
-            <ul id="trackerMissingList"></ul>
-        </div>
-        <section class="history" aria-labelledby="historyTitle">
+                        <strong>Action needed: please submit the following to the Dean's Office</strong>
+                        <ul id="trackerMissingList"></ul>
+                    </div>
+                    <section class="history" aria-labelledby="historyTitle">
                         <h3 id="historyTitle">Tracking history</h3>
                         <ol class="timeline" id="recordHistory"></ol>
                     </section>
-                    <div class="receipt-confirmation">
-                        <p><strong>Status recorded by the CEIT Dean's Office</strong></p>
-                        <p class="no-print">Status updates are recorded by the office. This page refreshes automatically every minute.</p>
-                    </div>
-                    <div class="receipt-signoff">
-                        <div>CEIT Dean's Office representative</div>
-                        <div>Submitter's copy</div>
-                    </div>
-                    <p class="receipt-print-meta">Generated <span id="generatedAt"></span> · Reference <span id="metaReference"></span> · Verify using the official document tracking link.</p>
-                    <div class="actions no-print">
+                    <p class="tracker-update">Status updates are recorded by the office. This page refreshes automatically every minute.</p>
+                    <div class="actions">
                         <button type="button" id="refreshTracker">Refresh status</button>
-                        <button type="button" class="is-secondary" id="printRecord">Print / save record</button>
                     </div>
                 </section>
             <?php endif; ?>
             <!-- Hidden until the script finds a safe place to return to; a bare "./" can point at a folder with no page (403 Forbidden). -->
-            <a class="return-link no-print" id="returnLink" href="#" hidden>Return</a>
+            <a class="return-link" id="returnLink" href="#" hidden>Return</a>
         </div>
     </article>
 </main>
@@ -246,10 +207,9 @@ async function refreshDocumentStatus() {
         document.getElementById('recordSubject').textContent = textOrDash(record.subject);
         const reference = textOrDash(record.reference);
         document.getElementById('recordReference').textContent = reference;
-        document.getElementById('stampReference').textContent = reference;
-        document.getElementById('metaReference').textContent = reference;
-        document.getElementById('generatedAt').textContent = new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' });
-        document.getElementById('recordType').textContent = textOrDash(record.type);
+        const universityReference = String(record.universityReference || '').trim();
+        document.getElementById('universityReference').textContent = universityReference;
+        document.getElementById('universityReferenceDetail').hidden = universityReference === '';
         document.getElementById('recordDate').textContent = textOrDash(record.date);
         const status = document.getElementById('recordStatus');
         const statusText = textOrDash(record.status);
@@ -277,7 +237,6 @@ async function refreshDocumentStatus() {
 }
 
 document.getElementById('refreshTracker').addEventListener('click', refreshDocumentStatus);
-document.getElementById('printRecord').addEventListener('click', () => window.print());
 refreshDocumentStatus();
 window.setInterval(refreshDocumentStatus, 60000);
 </script>

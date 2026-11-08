@@ -90,7 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET'
     }
     $stmt = safe_query(
         $conn,
-        "SELECT doc_id, type, subject, status, DATE_FORMAT(date_created, '%Y-%m-%d') AS date
+        "SELECT doc_id, local_reference, type, subject, status, university_reference, DATE_FORMAT(date_created, '%Y-%m-%d') AS date
          FROM documents WHERE tracking_token = ? LIMIT 1",
         's',
         [$trackingToken]
@@ -116,7 +116,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET'
     echo json_encode([
         'success' => true,
         'record' => [
-            'reference' => document_tracking_reference($document['doc_id']),
+            'reference' => document_tracking_reference($document['doc_id'], $document['local_reference']),
+            'universityReference' => $document['university_reference'],
             'type' => $document['type'],
             'subject' => $document['subject'],
             'status' => $document['status'],
@@ -443,7 +444,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'notify_client') {
         $documentId = (int)($input['doc_id'] ?? 0);
-        $stmt = safe_query($conn, "SELECT subject, client_phone FROM documents WHERE doc_id = ? AND type = 'Outgoing' AND status = 'Released'", 'i', [$documentId]);
+        $stmt = safe_query($conn, "SELECT subject, client_phone, local_reference FROM documents WHERE doc_id = ? AND type = 'Outgoing' AND status = 'Released'", 'i', [$documentId]);
         $document = null;
         if ($stmt !== false) {
             $result = mysqli_stmt_get_result($stmt);
@@ -461,7 +462,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode(['success' => false, 'message' => 'No valid client contact number is saved for this document']);
             exit;
         }
-        $smsContext = composer_document_context($conn, $documentId, $documentTrackingSettings) ?? ['reference' => document_tracking_reference($documentId), 'url' => ''];
+        $smsContext = composer_document_context($conn, $documentId, $documentTrackingSettings) ?? ['reference' => document_tracking_reference($documentId, $document['local_reference']), 'url' => ''];
         $smsContext['status'] = 'Released';
         $smsContext['subject'] = (string)$document['subject'];
         $smsText = compose_sms_message($smsContext);
@@ -480,7 +481,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $stmt = safe_query(
             $conn,
-            "SELECT CONCAT('DIT-', LPAD(doc_id, 6, '0')) AS reference,
+            "SELECT " . document_tracking_reference_sql() . " AS reference,
                     subject, DATE_FORMAT(date_created, '%Y-%m-%d') AS date, type, status,
                     0 AS paperCount, 'document' AS recordType
              FROM documents
@@ -751,10 +752,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $entrySource = $isQuickSubmit ? 'quick_submit' : 'standard';
             $conn->begin_transaction();
             try {
-                $stmt = safe_query($conn, "INSERT INTO documents(type, sender, submitter_name, recipient, client_phone, subject, remarks, status, date_created, entry_source, submitter_type) VALUES('Incoming', ?, ?, ?, ?, ?, ?, 'Received', NOW(), ?, ?)", 'ssssssss', [$sender, $submitterName, $recipient, $phoneValue, $subject, $remarks, $entrySource, $submitterType]);
-                if ($stmt === false) {
-                    throw new RuntimeException('Incoming document insert failed');
-                }
+                $insert = insert_document_with_reference($conn, "INSERT INTO documents(type, sender, submitter_name, recipient, client_phone, subject, remarks, status, date_created, entry_source, submitter_type, local_reference) VALUES('Incoming', ?, ?, ?, ?, ?, ?, 'Received', NOW(), ?, ?, ?)", 'ssssssss', [$sender, $submitterName, $recipient, $phoneValue, $subject, $remarks, $entrySource, $submitterType]);
+                $stmt = $insert['statement'];
+                $localReference = $insert['reference'];
                 $documentId = mysqli_insert_id($conn);
                 mysqli_stmt_close($stmt);
                 $logStmt = safe_query(
@@ -796,7 +796,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'message' => 'Incoming document submitted',
                     'id' => $documentId,
                     'status' => 'Received',
-                    'reference' => document_tracking_reference($documentId),
+                    'reference' => $localReference,
                     'submitterName' => $submitterName,
                     'trackerUrl' => $trackingToken === null
                         ? null
@@ -828,11 +828,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($sender && $subject && $validClientPhone) {
             $phoneValue = $clientPhone === '' ? null : $clientPhone;
-            $stmt = safe_query($conn, "INSERT INTO documents(type, sender, recipient, client_phone, subject, remarks, status, date_created) VALUES('Outgoing', ?, ?, ?, ?, ?, 'For Release', NOW())", 'sssss', [$sender, $recipient, $phoneValue, $subject, $remarks]);
+            try {
+                $insert = insert_document_with_reference($conn, "INSERT INTO documents(type, sender, recipient, client_phone, subject, remarks, status, date_created, local_reference) VALUES('Outgoing', ?, ?, ?, ?, ?, 'For Release', NOW(), ?)", 'sssss', [$sender, $recipient, $phoneValue, $subject, $remarks]);
+                $stmt = $insert['statement'];
+                $localReference = $insert['reference'];
+            } catch (Throwable $error) {
+                error_log('Mobile outgoing document creation failed: ' . $error->getMessage());
+                $stmt = false;
+            }
             if ($stmt !== false) {
                 $documentId = mysqli_insert_id($conn);
                 mysqli_stmt_close($stmt);
-                echo json_encode(['success' => true, 'message' => 'Outgoing document added', 'id' => $documentId, 'status' => 'For Release']);
+                echo json_encode(['success' => true, 'message' => 'Outgoing document added', 'id' => $documentId, 'reference' => $localReference, 'status' => 'For Release']);
             } else {
                 echo json_encode(['success' => false, 'message' => 'Failed to add outgoing document']);
             }
@@ -873,16 +880,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $borrowed_date = trim($input['borrowed_date'] ?? '');
         $borrower_phone = contact_number_input($input['borrower_phone'] ?? '');
         $category_id = $input['category_id'] ?? null; // Allow null for category_id
-        $borrowedDateObject = DateTime::createFromFormat('!Y-m-d', $borrowed_date);
+        $borrowedDateObject = $borrowed_date === '' ? null : DateTime::createFromFormat('!Y-m-d', $borrowed_date);
 
-        if ($item && $borrower && $borrower_phone !== null && ($borrower_phone === '' || is_valid_contact_number($borrower_phone)) && $borrowedDateObject && $borrowedDateObject->format('Y-m-d') === $borrowed_date) {
+        if ($item && $borrower && $borrower_phone !== null && ($borrower_phone === '' || is_valid_contact_number($borrower_phone)) && ($borrowed_date === '' || ($borrowedDateObject && $borrowedDateObject->format('Y-m-d') === $borrowed_date))) {
             $loanStatus = 'Borrowed';
             $borrowerPhoneValue = $borrower_phone === '' ? null : $borrower_phone;
+            if ($borrowed_date === '') {
+                $borrowed_date = safe_scalar($conn, 'SELECT NOW()');
+                if (!is_string($borrowed_date)) {
+                    http_response_code(500);
+                    echo json_encode(['success' => false, 'message' => 'Could not record the borrowed time. Please try again.']);
+                    exit;
+                }
+            }
             $stmt = safe_query($conn, 'INSERT INTO borrowed_items(item_name, category_id, borrower, borrower_phone, returned_date, date_borrowed, status) VALUES(?, ?, ?, ?, NULL, ?, ?)', 'sissss', [$item, $category_id, $borrower, $borrowerPhoneValue, $borrowed_date, $loanStatus]);
             if ($stmt !== false) {
                 $itemId = mysqli_insert_id($conn);
                 mysqli_stmt_close($stmt);
-                echo json_encode(['success' => true, 'message' => 'Borrowed item recorded', 'id' => $itemId, 'status' => $loanStatus]);
+                echo json_encode(['success' => true, 'message' => 'Borrowed item recorded', 'id' => $itemId, 'status' => $loanStatus, 'borrowedAt' => $borrowed_date]);
             } else {
                 echo json_encode(['success' => false, 'message' => 'The borrowed item could not be recorded. Please try again.']);
             }
@@ -949,9 +964,9 @@ $response = [
     'smsSummary' => $smsSummary,
     'systemOverview' => $systemOverview,
     'documentStatuses' => fetch_rows($conn, "SELECT status, COUNT(*) AS count FROM documents WHERE date_created >= ? AND date_created < DATE_ADD(?, INTERVAL 1 DAY) GROUP BY status ORDER BY status", 'ss', [$today, $today]),
-    'recentDocuments' => fetch_rows($conn, "SELECT doc_id AS id, CONCAT('DIT-', LPAD(doc_id, 6, '0')) AS reference, date_created AS date, type, sender, submitter_name AS submitterName, recipient, client_phone AS clientPhone, subject AS details, remarks, CONCAT(sender, ' / ', recipient) AS fromTo, status, submitter_type AS submitterType, is_priority AS isPriority FROM documents ORDER BY date_created DESC LIMIT 50"),
+    'recentDocuments' => fetch_rows($conn, "SELECT doc_id AS id, " . document_tracking_reference_sql() . " AS reference, date_created AS date, type, sender, submitter_name AS submitterName, recipient, client_phone AS clientPhone, subject AS details, remarks, CONCAT(sender, ' / ', recipient) AS fromTo, status, submitter_type AS submitterType, is_priority AS isPriority FROM documents ORDER BY date_created DESC LIMIT 50"),
     'recentBatches' => fetch_rows($conn, "SELECT b.batch_id AS id, b.batch_code AS batchCode, b.document_type AS documentType, b.batch_type AS batchType, b.status, b.batch_date AS batchDate, b.sender_type AS senderType, b.submitter_name AS submitterName, b.recipient, b.recipient_contact_type AS recipientContactType, b.remarks, b.paper_count AS paperCount, b.document_pages AS documentPages, b.received_paper_count AS receivedPaperCount, b.intake_expected_count AS intakeExpectedCount, b.received_at AS receivedAt, b.is_priority AS isPriority FROM document_batches b ORDER BY b.is_priority DESC, b.batch_date DESC, b.batch_id DESC LIMIT 20"),
-    'borrowedItems' => fetch_rows($conn, "SELECT item_id AS id, item_name AS item, borrower, DATE(date_borrowed) AS borrowed, DATE(returned_date) AS returned, CASE WHEN status = 'Returned' THEN 'Returned' ELSE 'Borrowed' END AS status FROM borrowed_items ORDER BY date_borrowed DESC LIMIT 5"),
+    'borrowedItems' => fetch_rows($conn, "SELECT item_id AS id, item_name AS item, borrower, DATE(date_borrowed) AS borrowed, date_borrowed AS borrowedAt, DATE(returned_date) AS returned, CASE WHEN status = 'Returned' THEN 'Returned' ELSE 'Borrowed' END AS status FROM borrowed_items ORDER BY date_borrowed DESC LIMIT 5"),
     'smsLogs' => fetch_rows($conn, "SELECT recipient AS user, message, status, DATE_FORMAT(date_sent, '%h:%i %p') AS time FROM sms_logs ORDER BY date_sent DESC LIMIT 5"),
 ];
 

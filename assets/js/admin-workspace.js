@@ -964,10 +964,39 @@ if (document.body.classList.contains('admin-body')) {
     }
 
     const customOutcomeExists = document.querySelector('#smsOutcomeModal, #prepareReleaseOutcome, #releaseSmsOutcomeModal');
+    const showSuccessNotice = function (title, detail) {
+        const notice = document.createElement('div');
+        notice.className = 'admin-success-notice';
+        notice.setAttribute('role', 'status');
+        notice.setAttribute('aria-live', 'polite');
+        const copy = document.createElement('div');
+        const heading = document.createElement('strong');
+        heading.textContent = title;
+        const message = document.createElement('div');
+        message.textContent = detail;
+        copy.append(heading, message);
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'btn-close';
+        close.setAttribute('aria-label', 'Dismiss notification');
+        close.addEventListener('click', function () { notice.remove(); });
+        notice.append(copy, close);
+        document.body.appendChild(notice);
+    };
+    if (customOutcomeExists && customOutcomeExists.dataset.outcomeTone === 'success') {
+        showSuccessNotice(customOutcomeExists.querySelector('.modal-title').textContent.trim(),
+            customOutcomeExists.querySelector('.modal-body').textContent.trim());
+        customOutcomeExists.remove();
+    }
     const firstAlert = Array.from(document.querySelectorAll('.admin-content .alert[role="alert"]')).find(function (alert) {
         return !alert.hidden && getComputedStyle(alert).display !== 'none';
     });
-    if (firstAlert && !customOutcomeExists) {
+    if (firstAlert && customOutcomeExists && customOutcomeExists.dataset.outcomeTone === 'success' && firstAlert.classList.contains('alert-success')) {
+        firstAlert.remove();
+    } else if (firstAlert && !customOutcomeExists && firstAlert.classList.contains('alert-success')) {
+        showSuccessNotice('Action completed', firstAlert.textContent.trim());
+        firstAlert.remove();
+    } else if (firstAlert && !customOutcomeExists) {
         const tone = ['success', 'danger', 'warning', 'info'].find(function (variant) {
             return firstAlert.classList.contains('alert-' + variant);
         }) || 'info';

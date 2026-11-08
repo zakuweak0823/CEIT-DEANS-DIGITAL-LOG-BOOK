@@ -1,4 +1,3 @@
-// Keep every column heading aligned with the content beneath it, at any window size.
 (function () {
     // One body-level tooltip for row action buttons; it cannot be clipped by the scrolling table.
     const tooltip = document.createElement('div');
@@ -39,25 +38,4 @@
     document.addEventListener('scroll', hideActionTooltip, true);
     window.addEventListener('resize', hideActionTooltip);
 
-    const syncTableHeadingAlignment = function () {
-        document.querySelectorAll('.admin-content table').forEach(function (table) {
-            const headings = table.querySelectorAll(':scope > thead > tr:last-child > th');
-            if (headings.length === 0) return;
-            const row = Array.from(table.querySelectorAll(':scope > tbody > tr')).find(function (candidate) {
-                return candidate.children.length === headings.length && !candidate.querySelector('td[colspan]');
-            });
-            if (!row) return;
-            headings.forEach(function (heading, index) {
-                const align = window.getComputedStyle(row.children[index]).textAlign;
-                heading.style.textAlign = align === 'center' ? 'center' : (align === 'right' || align === 'end' ? 'right' : 'left');
-            });
-        });
-    };
-    let resizeTimer = null;
-    document.addEventListener('DOMContentLoaded', syncTableHeadingAlignment);
-    window.addEventListener('load', syncTableHeadingAlignment);
-    window.addEventListener('resize', function () {
-        window.clearTimeout(resizeTimer);
-        resizeTimer = window.setTimeout(syncTableHeadingAlignment, 120);
-    });
 })();

@@ -29,15 +29,14 @@ if (isset($_POST['refresh_statuses'])) {
         if (!empty($refreshResult['checked']) || !empty($refreshResult['failed'])) {
             $_SESSION['sms_status_refresh_at'] = time();
         }
-        $alertType = empty($refreshResult['success']) ? 'danger' : 'success';
         $detail = $refreshResult['message'];
         if (!empty($refreshResult['untracked'])) {
             $detail .= ' ' . $refreshResult['untracked'] . ' older or untracked pending message(s) cannot be refreshed through PhilSMS.';
         }
-        $message = show_alert($detail, $alertType);
         $popupType = empty($refreshResult['success'])
             ? 'danger'
             : (!empty($refreshResult['pending']) ? 'warning' : (!empty($refreshResult['checked']) ? 'success' : 'info'));
+        $message = show_alert($detail, $popupType);
         $setSmsPopup('SMS status refresh', $detail, $popupType);
     }
 }
@@ -57,7 +56,6 @@ if (isset($_POST['send'])) {
     } else {
         $result = send_logged_sms($conn, $recipient, $smsMessage);
         if ($result['success']) {
-            $message = show_alert($result['message']);
             $status = strtolower($result['status'] ?? '');
             if (empty($result['logged'])) {
                 $setSmsPopup('PhilSMS accepted the SMS, but logging failed', 'Do not send it again yet, because PhilSMS may already be processing it. Check the PhilSMS dashboard before retrying.', 'warning');
@@ -68,6 +66,7 @@ if (isset($_POST['send'])) {
             } else {
                 $setSmsPopup('SMS accepted by PhilSMS', $result['message'], 'info');
             }
+            $message = show_alert($smsPopup['detail'], $smsPopup['type']);
             $recipient = $smsMessage = '';
         } else {
             $detail = 'SMS failed: ' . $result['message'];
@@ -122,9 +121,9 @@ if (isset($_POST['resend_failed_sms'])) {
             $detail = 'Only SMS records currently marked Failed can be resent. Refresh the logs and check the latest status.';
             $message = show_alert($detail, 'warning');
             $setSmsPopup('SMS was not resent', $detail, 'warning');
-        } elseif (!is_valid_contact_number(trim((string)$failedLog['recipient']))) {
+        } elseif (!is_valid_logged_sms_recipient(trim((string)$failedLog['recipient']))) {
             $conn->rollback();
-            $detail = 'This SMS recipient does not have a valid 11-digit number. Update the contact before resending.';
+            $detail = 'This SMS recipient is not a valid 11-digit number or a saved 63-prefixed number. Verify the number and send a new message.';
             $message = show_alert($detail, 'danger');
             $setSmsPopup('SMS was not resent', $detail, 'danger');
         } else {
@@ -167,7 +166,7 @@ if (isset($_POST['resend_failed_sms'])) {
                     $popupType = 'danger';
                     $popupTitle = 'SMS could not be resent';
                 }
-                $message = show_alert($detail, $popupType === 'warning' ? 'success' : $popupType);
+                $message = show_alert($detail, $popupType);
                 $setSmsPopup($popupTitle, $detail, $popupType);
             }
         }
@@ -415,7 +414,7 @@ $smsStatusInfo = static function (array $log): array {
             'info' => 'bi-info-circle-fill',
         ][$popupTone];
         ?>
-        <div class="modal fade" id="smsOutcomeModal" tabindex="-1" aria-labelledby="smsOutcomeTitle" aria-hidden="true">
+        <div class="modal fade" id="smsOutcomeModal" data-outcome-tone="<?php echo sanitize($popupTone); ?>" tabindex="-1" aria-labelledby="smsOutcomeTitle" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content border-0 shadow">
                     <div class="modal-header">

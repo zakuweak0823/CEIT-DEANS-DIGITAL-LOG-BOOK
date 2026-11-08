@@ -105,6 +105,97 @@
     cursor: pointer;
 }
 
+@media (min-width: 768px) {
+    .admin-body .admin-content .table-responsive > .table > thead > tr > th {
+        text-align: center;
+    }
+
+    .admin-body .admin-content .table-responsive > .table > tbody > tr > td[data-label="Date borrowed"],
+    .admin-body .admin-content .table-responsive > .batch-history-data-table > tbody > tr > td:first-child:not([colspan]) {
+        text-align: center;
+    }
+}
+
+@media (min-width: 1200px) {
+    .admin-body .admin-content .table-responsive > .table:is(.incoming-documents-table, .outgoing-documents-table) {
+        min-width: 64rem;
+        table-layout: fixed;
+    }
+
+    .admin-body .admin-content .table-responsive > .table:is(.incoming-documents-table, .outgoing-documents-table) > thead > tr > th,
+    .admin-body .admin-content .table-responsive > .table:is(.incoming-documents-table, .outgoing-documents-table) > tbody > tr > td {
+        min-width: 0;
+        padding: .55rem .35rem;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-body:not(.admin-compact):not(.admin-theme-civic):not(.admin-theme-glass) .admin-content .table-responsive > .table:is(.incoming-documents-table, .outgoing-documents-table) > tbody > tr > td {
+        padding: .55rem .35rem;
+    }
+
+    .admin-body .admin-content .table-responsive > .table:is(.incoming-documents-table, .outgoing-documents-table) > thead > tr > th,
+    .admin-body .admin-content .table-responsive > .table:is(.incoming-documents-table, .outgoing-documents-table) > tbody > tr > td[data-label="Date"] {
+        white-space: normal;
+    }
+
+    .admin-body .admin-content .incoming-documents-table th:nth-child(1),
+    .admin-body .admin-content .outgoing-documents-table th:nth-child(1) { width: 8%; }
+    .admin-body .admin-content .incoming-documents-table th:nth-child(2) { width: 12%; }
+    .admin-body .admin-content .incoming-documents-table th:nth-child(3),
+    .admin-body .admin-content .outgoing-documents-table th:nth-child(2) { width: 12%; }
+    .admin-body .admin-content .incoming-documents-table th:nth-child(4) { width: 12%; }
+    .admin-body .admin-content .outgoing-documents-table th:nth-child(3) { width: 11%; }
+    .admin-body .admin-content .incoming-documents-table th:nth-child(5),
+    .admin-body .admin-content .outgoing-documents-table th:nth-child(6) { width: 9%; }
+    .admin-body .admin-content .incoming-documents-table th:nth-child(6),
+    .admin-body .admin-content .outgoing-documents-table th:nth-child(5) { width: 8%; }
+    .admin-body .admin-content .incoming-documents-table th:nth-child(7),
+    .admin-body .admin-content .outgoing-documents-table th:nth-child(7) { width: 10%; }
+    .admin-body .admin-content .outgoing-documents-table th:nth-child(4) { width: 9%; }
+    .admin-body .admin-content .incoming-documents-table th:nth-child(8),
+    .admin-body .admin-content .outgoing-documents-table th:nth-child(8) { width: 10%; }
+    .admin-body .admin-content .incoming-documents-table th:nth-child(9) { width: 9%; }
+    .admin-body .admin-content .incoming-documents-table th:nth-child(10) { width: 10%; }
+    .admin-body .admin-content .outgoing-documents-table th:nth-child(9) { width: 9%; }
+    .admin-body .admin-content .outgoing-documents-table th:nth-child(10) { width: 14%; }
+
+    .admin-body .admin-content .table:is(.incoming-documents-table, .outgoing-documents-table) td[data-label="Reference"] code {
+        max-width: 100%;
+        font-size: .75rem;
+        letter-spacing: 0;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-body .admin-content .table:is(.incoming-documents-table, .outgoing-documents-table) td[data-label="Tracking QR"] .btn {
+        max-width: 100%;
+        padding-right: .4rem;
+        padding-left: .4rem;
+        white-space: normal;
+    }
+
+    .admin-body .admin-content .incoming-documents-table .document-priority-control .btn {
+        min-width: 0;
+        max-width: 100%;
+        padding-right: .35rem;
+        padding-left: .35rem;
+        white-space: nowrap;
+    }
+
+    .admin-body .admin-content .table:is(.incoming-documents-table, .outgoing-documents-table) td[data-label="Status"] .badge {
+        max-width: 100%;
+        overflow-wrap: normal;
+        white-space: normal;
+    }
+}
+
+@media (min-width: 1200px) and (max-width: 1399.98px) {
+    .admin-body .admin-content .table-responsive > .table:is(.incoming-documents-table, .outgoing-documents-table).admin-table-has-actions > thead > tr > th:last-child,
+    .admin-body .admin-content .table-responsive > .table:is(.incoming-documents-table, .outgoing-documents-table).admin-table-has-actions > tbody > tr > td:last-child {
+        position: static;
+    }
+}
+
 .admin-sort-heading::after {
     content: "\2195";
     flex: none;
@@ -135,20 +226,24 @@
 }
 
 .admin-mobile-sort-headings {
-    display: none;
-    overflow-x: auto;
+    display: block;
     margin-bottom: .75rem;
     padding: .5rem;
     border: 1px solid #dcebe1;
     border-radius: .75rem;
     background: #f7fbf8;
-    scrollbar-width: thin;
-    scrollbar-color: #b6d2be transparent;
 }
 
-.admin-mobile-sort-headings table {
-    border-collapse: separate;
-    border-spacing: .25rem 0;
+.admin-mobile-sort-headings table,
+.admin-mobile-sort-headings thead {
+    display: block;
+    width: 100%;
+}
+
+.admin-mobile-sort-headings tr {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .25rem;
 }
 
 .admin-mobile-sort-headings th {
@@ -186,20 +281,17 @@
 }
 
 @media (max-width: 767.98px) {
-    .admin-mobile-sort-headings,
     .admin-mobile-status-guide {
         display: block;
     }
 }
 
 @media (max-width: 1199.98px) {
-    .admin-mobile-sort-headings--batch,
     .admin-mobile-status-guide--batch {
         display: block;
     }
 }
 
-.admin-body.admin-compact .admin-mobile-sort-headings,
 .admin-body.admin-compact .admin-mobile-status-guide {
     display: block;
 }

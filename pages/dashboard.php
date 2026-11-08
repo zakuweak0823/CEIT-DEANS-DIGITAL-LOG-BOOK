@@ -706,7 +706,7 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
                     <?php foreach ($loanList as $item): ?>
                         <a class="dashboard-followup-item" href="borrowed?search=<?php echo rawurlencode($item['item_name']); ?>">
                             <span class="dashboard-followup-icon"><i class="bi bi-box" aria-hidden="true"></i></span>
-                            <span class="dashboard-followup-copy"><strong><?php echo sanitize($item['item_name']); ?></strong><small><?php echo sanitize($item['borrower']); ?> - borrowed on <?php echo sanitize(date('M j, Y', strtotime($item['date_borrowed']))); ?><span class="dashboard-loan-days <?php echo (int)$item['days_out'] > $loanLimitDays ? 'is-late' : ''; ?>"><?php echo sanitize($plural(max(0, (int)$item['days_out']), 'day')); ?> out</span></small></span>
+                            <span class="dashboard-followup-copy"><strong><?php echo sanitize($item['item_name']); ?></strong><small><?php echo sanitize($item['borrower']); ?> - borrowed on <?php echo sanitize(date('M j, Y g:i A', strtotime($item['date_borrowed']))); ?><span class="dashboard-loan-days <?php echo (int)$item['days_out'] > $loanLimitDays ? 'is-late' : ''; ?>"><?php echo sanitize($plural(max(0, (int)$item['days_out']), 'day')); ?> out</span></small></span>
                             <i class="bi bi-chevron-right dashboard-followup-arrow" aria-hidden="true"></i>
                         </a>
                     <?php endforeach; ?>

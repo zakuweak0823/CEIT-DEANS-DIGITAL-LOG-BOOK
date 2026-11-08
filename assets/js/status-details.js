@@ -5,6 +5,18 @@
     const fields = document.getElementById('statusDetailsFields');
     const note = document.getElementById('statusDetailsNote');
     const summary = document.getElementById('statusDetailsSummary');
+    const suggestions = {
+        'Received': "Received by the CEIT Dean's Office.",
+        'In Review': "For review by the CEIT Dean's Office.",
+        'Forwarded': 'Forwarded for further action.',
+        'Incomplete': 'Additional requirements are needed.',
+        'On Hold': 'Processing is on hold.',
+        'Approved': 'Document approved.',
+        'For Release': "Ready for release by the CEIT Dean's Office.",
+        'Released': 'Document released.',
+        'Returned': 'Document returned.',
+        'Cancelled': 'Processing cancelled.',
+    };
 
     document.addEventListener('submit', function (event) {
         const form = event.target;
@@ -22,7 +34,7 @@
             input.value = value;
             fields.appendChild(input);
         });
-        note.value = '';
+        note.value = suggestions[button.dataset.statusDetails || button.value] || '';
         summary.textContent = 'New status: ' + (button.dataset.statusDetails || button.value);
         modal.show();
     });

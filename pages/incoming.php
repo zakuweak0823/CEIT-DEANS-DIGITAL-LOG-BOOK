@@ -162,7 +162,13 @@ if (isset($_POST['issue_tracking_qr'])) {
         $reopenAddModal = true;
     } else {
         $phoneValue = $clientPhone === '' ? null : $clientPhone;
-        $stmt = safe_query($conn, "INSERT INTO documents(type, sender, submitter_name, recipient, client_phone, subject, remarks, status, submitter_type) VALUES('Incoming', ?, ?, ?, ?, ?, ?, 'Received', ?)", 'sssssss', [$sender, $submitterName, $recipient, $phoneValue, $subject, $remarks, $submitterType]);
+        try {
+            $insert = insert_document_with_reference($conn, "INSERT INTO documents(type, sender, submitter_name, recipient, client_phone, subject, remarks, status, submitter_type, local_reference) VALUES('Incoming', ?, ?, ?, ?, ?, ?, 'Received', ?, ?)", 'sssssss', [$sender, $submitterName, $recipient, $phoneValue, $subject, $remarks, $submitterType]);
+            $stmt = $insert['statement'];
+        } catch (Throwable $error) {
+            error_log('Incoming document creation failed: ' . $error->getMessage());
+            $stmt = false;
+        }
         if ($stmt !== false) {
             mysqli_stmt_close($stmt);
             $message = show_alert('Incoming document saved successfully.');
@@ -434,7 +440,7 @@ if ($overdueFilter && $documentIdFilter === 0) {
         $whereParams[] = $statusFilter;
     }
     if ($search !== '') {
-        $searchColumns = ['submitter_name', 'sender', 'recipient', 'subject', 'remarks'];
+        $searchColumns = ['submitter_name', 'sender', 'recipient', 'subject', 'remarks', 'local_reference', 'university_reference'];
         if ($statusFilter === '') {
             $searchColumns[] = 'status';
         }
@@ -570,7 +576,7 @@ foreach ($documents as $listedDocument) {
                             <?php else: ?>
                                 <?php foreach ($documents as $document): ?>
                                     <?php
-                                    $documentReference = document_tracking_reference($document['doc_id']);
+                                    $documentReference = document_tracking_reference($document['doc_id'], $document['local_reference']);
                                     $documentSubmitterName = trim((string)($document['submitter_name'] ?? ''));
                                     $documentPhone = trim((string)($document['client_phone'] ?? ''));
                                     $editPayload = json_encode([
@@ -928,7 +934,7 @@ foreach ($documents as $listedDocument) {
         'info' => 'bi-info-circle-fill',
     ][$releaseTone];
     ?>
-    <div class="modal fade" id="prepareReleaseOutcome" tabindex="-1" aria-labelledby="prepareReleaseOutcomeTitle" aria-hidden="true">
+    <div class="modal fade" id="prepareReleaseOutcome" data-outcome-tone="<?php echo sanitize($releaseTone); ?>" tabindex="-1" aria-labelledby="prepareReleaseOutcomeTitle" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-0 shadow">
                 <div class="modal-header">
@@ -1017,7 +1023,7 @@ document.addEventListener('DOMContentLoaded', function () {
         foreach ($documents as $metaDocument) {
             $metaId = (int)$metaDocument['doc_id'];
             $docMeta[$metaId] = [
-                'ref' => document_tracking_reference($metaId),
+                'ref' => document_tracking_reference($metaId, $metaDocument['local_reference']),
                 'hasPhone' => is_valid_contact_number(trim((string)($metaDocument['client_phone'] ?? ''))),
                 'pending' => array_values(array_map(static function ($requirement) {
                     return $requirement['label'];
@@ -1152,7 +1158,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.js-prepare-release').forEach(function (button) {
         button.addEventListener('click', function () {
             document.getElementById('prepareReleaseId').value = button.dataset.documentId;
-            document.getElementById('prepareReleaseNote').value = '';
+            document.getElementById('prepareReleaseNote').value = "Ready for release by the CEIT Dean's Office.";
             document.getElementById('prepareReleaseSubject').textContent = button.dataset.documentSubject;
             document.getElementById('prepareReleaseSender').textContent = button.dataset.documentSender;
             document.getElementById('prepareReleaseRecipient').textContent = button.dataset.documentRecipient;

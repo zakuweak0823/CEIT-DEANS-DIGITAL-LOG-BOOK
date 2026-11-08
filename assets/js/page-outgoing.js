@@ -50,6 +50,14 @@ function showDocumentTrackingQr(trackerUrl, reference) {
 
 // Row buttons carry their data in attributes, so one handler covers every row.
 document.addEventListener('click', function (event) {
+    const referenceButton = event.target.closest('.js-university-reference');
+    if (referenceButton) {
+        document.getElementById('universityReferenceDocumentId').value = referenceButton.dataset.documentId;
+        document.getElementById('universityReferenceDocument').textContent = referenceButton.dataset.documentReference;
+        document.getElementById('universityReferenceInput').value = referenceButton.dataset.universityReference || '';
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('universityReferenceModal')).show();
+        return;
+    }
     const editButton = event.target.closest('.js-edit-document');
     if (editButton) {
         let data = null;

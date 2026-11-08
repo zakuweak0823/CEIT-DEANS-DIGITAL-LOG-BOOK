@@ -5,9 +5,9 @@ import swipeToneUrl from './assets/audio/swipe.mp3';
 import jsQR from 'jsqr';
 import QRCode from 'qrcode';
 import DocumentStatusPanel from './components/DocumentStatusPanel.jsx';
-import { API_ENDPOINT, getBatchTrackerBaseUrl, readApiResponse, verifyOfficeTrackerQr } from './services/tracker.js';
+import { API_ENDPOINT, getActiveTrackerUrl, getBatchTrackerBaseUrl, readApiResponse, verifyOfficeTrackerQr } from './services/tracker.js';
 import { canAdvanceStatuses, neutralBadgeClass, statusClasses, statusLabel } from './domain/documentStatus.js';
-import { contactNumberDigits, isValidContactNumber, parseDocumentPages, todayLocalDate } from './utils/records.js';
+import { contactNumberDigits, formatBorrowedDateTime, isValidContactNumber, parseDocumentPages, todayLocalDate } from './utils/records.js';
 import {
   BiArchiveIn,
   BiBook,
@@ -282,6 +282,7 @@ function App() {
           item: b.item,
           borrower: b.borrower,
           borrowed: b.borrowed,
+          borrowedAt: b.borrowedAt,
           returned: b.returned || '',
           status: b.status,
         })));
@@ -497,22 +498,29 @@ function App() {
       setDocumentScannerStatus('Choose a QR image no larger than 10 MB.');
       return;
     }
-    if (typeof createImageBitmap !== 'function') {
-      setDocumentScannerStatus('This browser cannot read uploaded images. Use the camera scanner on a secure connection.');
-      return;
-    }
     setDocumentScannerBusy(true);
     setDocumentScannerStatus('Reading the QR image…');
     let imageBitmap;
+    let imageUrl;
     try {
-      imageBitmap = await createImageBitmap(file);
+      if (typeof createImageBitmap === 'function') {
+        imageBitmap = await createImageBitmap(file);
+      } else {
+        imageUrl = URL.createObjectURL(file);
+        imageBitmap = await new Promise((resolve, reject) => {
+          const image = new Image();
+          image.onload = () => resolve(image);
+          image.onerror = () => reject(new Error('The selected image could not be opened.'));
+          image.src = imageUrl;
+        });
+      }
       const canvas = document.createElement('canvas');
       const scale = Math.min(1, 1600 / Math.max(imageBitmap.width, imageBitmap.height));
       canvas.width = Math.round(imageBitmap.width * scale);
       canvas.height = Math.round(imageBitmap.height * scale);
       const context = canvas.getContext('2d', { willReadFrequently: true });
       if (!context) throw new Error('This browser could not prepare the QR image.');
-      context.drawImage(imageBitmap, 0, 0);
+      context.drawImage(imageBitmap, 0, 0, canvas.width, canvas.height);
       const image = context.getImageData(0, 0, canvas.width, canvas.height);
       const qrCode = jsQR(image.data, image.width, image.height, { inversionAttempts: 'attemptBoth' });
       if (!qrCode) throw new Error('No readable QR code was found in that image.');
@@ -526,7 +534,8 @@ function App() {
       setDocumentScannerStatus(error instanceof Error ? error.message : 'The QR image could not be read.');
       setDocumentScannerBusy(false);
     } finally {
-      imageBitmap?.close();
+      if (imageBitmap && typeof imageBitmap.close === 'function') imageBitmap.close();
+      if (imageUrl) URL.revokeObjectURL(imageUrl);
     }
   };
 
@@ -599,8 +608,10 @@ function App() {
         if (mobileSettings.confirmationSound) playConfirmTone();
         let trackerQrImage = '';
         let trackerQrError = '';
+        let trackerOpenUrl = '';
         if (result.trackerUrl) {
           try {
+            trackerOpenUrl = getActiveTrackerUrl(result.trackerUrl, 'document').href;
             trackerQrImage = await QRCode.toDataURL(result.trackerUrl, {
               width: 256,
               margin: 2,
@@ -634,7 +645,7 @@ function App() {
               { label: 'Status', value: statusLabel(result.status || incomingStatus) },
             ],
             reference: result.reference || (result.id ? `Reference #${result.id}` : ''),
-            trackerUrl: result.trackerUrl || '',
+            trackerUrl: trackerOpenUrl,
             trackerQrImage,
             trackerQrError,
             trackerDisabled: !result.trackerUrl,
@@ -775,7 +786,6 @@ function App() {
           item: borrowedForm.item,
           borrower: borrowedForm.borrower,
           borrower_phone: borrowedForm.phone,
-          borrowed_date: todayLocalDate(),
         }),
       });
       
@@ -786,9 +796,9 @@ function App() {
       if (result.success) {
         if (mobileSettings.confirmationSound) playConfirmTone();
         const borrowedStatus = result.status || 'Borrowed';
-        setBorrowedItems((prev) => [{ id: result.id, ...borrowedForm, borrowed: todayLocalDate(), returned: '', status: borrowedStatus }, ...prev]);
+        setBorrowedItems((prev) => [{ id: result.id, ...borrowedForm, borrowed: result.borrowedAt.slice(0, 10), borrowedAt: result.borrowedAt, returned: '', status: borrowedStatus }, ...prev]);
         setReportItems((prev) => [
-          { id: result.id, date: todayLocalDate(), type: 'Borrowed', from: borrowedForm.borrower, subject: borrowedForm.item, status: borrowedStatus },
+          { id: result.id, date: result.borrowedAt.slice(0, 10), type: 'Borrowed', from: borrowedForm.borrower, subject: borrowedForm.item, status: borrowedStatus },
           ...prev,
         ]);
         setBorrowedForm({ item: '', borrower: '', phone: '' });
@@ -947,8 +957,8 @@ function App() {
           try {
             const batchUrl = getBatchTrackerBaseUrl(apiData?.batchTrackerBaseUrl || '');
             batchUrl.search = new URLSearchParams({ token: savedBatch.trackingToken }).toString();
-            trackerUrl = batchUrl.href;
-            trackerQrImage = await QRCode.toDataURL(trackerUrl, {
+            trackerUrl = getActiveTrackerUrl(batchUrl, 'batch').href;
+            trackerQrImage = await QRCode.toDataURL(batchUrl.href, {
               width: 256,
               margin: 2,
               errorCorrectionLevel: 'Q',
@@ -1191,7 +1201,7 @@ function App() {
             </label>
           </div>
           <p className={helperClass}>
-            The borrowed date is recorded automatically. Mark the item as returned when it is brought back.
+            The borrowed date and time are recorded automatically. Mark the item as returned when it is brought back.
           </p>
 
           <div className={formActionsClass}>
@@ -1302,7 +1312,7 @@ function App() {
                   <span className={`${badgeClass} ${statusClasses[item.status] || neutralBadgeClass}`}>{statusLabel(item.status, 'Borrowed')}</span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
-                  <span>Borrowed on {String(item.borrowed).slice(0, 10)}</span>
+                  <span>Borrowed on {formatBorrowedDateTime(item.borrowedAt || item.borrowed)}</span>
                   <span>{item.returned ? `Returned on ${String(item.returned).slice(0, 10)}` : 'Not yet returned'}</span>
                 </div>
                 {item.status !== 'Returned' && item.id && (
@@ -1863,13 +1873,19 @@ function App() {
               {submissionSuccess.reference && (
                 <p className="mt-3 text-center text-xs font-medium text-emerald-700">{submissionSuccess.reference}</p>
               )}
-              {submissionSuccess.trackerQrImage && (
+              {(submissionSuccess.trackerQrImage || submissionSuccess.trackerUrl) && (
                 <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-center">
-                  <img src={submissionSuccess.trackerQrImage} alt={`Tracking QR code for ${submissionSuccess.reference}`} className="mx-auto h-48 w-48 rounded-xl bg-white p-2" />
-                  <p className="mt-3 text-sm font-semibold text-emerald-950">{submissionSuccess.trackerQrLabel || 'Scan this office-issued QR code to track the document status.'}</p>
-                  <a href={submissionSuccess.trackerUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex min-h-10 items-center rounded-xl px-3 text-sm font-semibold text-emerald-800 underline">
-                    {submissionSuccess.trackerLinkLabel || 'Open the status tracker'}
-                  </a>
+                  {submissionSuccess.trackerQrImage && (
+                    <>
+                      <img src={submissionSuccess.trackerQrImage} alt={`Tracking QR code for ${submissionSuccess.reference}`} className="mx-auto h-48 w-48 rounded-xl bg-white p-2" />
+                      <p className="mt-3 text-sm font-semibold text-emerald-950">{submissionSuccess.trackerQrLabel || 'Scan this office-issued QR code to track the document status.'}</p>
+                    </>
+                  )}
+                  {submissionSuccess.trackerUrl && (
+                    <a href={submissionSuccess.trackerUrl} className="mt-2 inline-flex min-h-10 items-center rounded-xl px-3 text-sm font-semibold text-emerald-800 underline">
+                      {submissionSuccess.trackerLinkLabel || 'Open the status tracker'}
+                    </a>
+                  )}
                 </div>
               )}
               {submissionSuccess.trackerQrError && (
@@ -2066,7 +2082,7 @@ function App() {
               </p>
               <label className="mt-4 block rounded-2xl border border-dashed border-emerald-300 bg-white p-4 text-sm font-semibold text-emerald-900">
                 Or choose a QR image
-                <input type="file" accept="image/*" capture="environment" onChange={handleDocumentTrackerQrImage} disabled={documentScannerBusy || !isOnline} className="mt-2 block w-full text-sm font-normal text-emerald-700" />
+                <input type="file" accept="image/*" onChange={handleDocumentTrackerQrImage} disabled={documentScannerBusy || !isOnline} className="mt-2 block w-full text-sm font-normal text-emerald-700" />
               </label>
               <p className="mt-3 text-xs leading-relaxed text-emerald-700">For camera access over Wi-Fi, start the mobile app on the office computer with <strong>npm run dev:lan</strong>, then open its HTTPS LAN address on your phone. Trust the office certificate first if prompted.</p>
             </section>

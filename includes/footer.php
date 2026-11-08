@@ -38,7 +38,7 @@ $isLoginPage = $isLoginPage ?? false;
                 <p id="statusDetailsSummary" class="text-muted"></p>
                 <label for="statusDetailsNote" class="form-label fw-semibold">What happened or where is the document going?</label>
                 <textarea class="form-control" id="statusDetailsNote" name="status_note" rows="3" maxlength="255" required placeholder="For example: Forwarded to the Registrar for review."></textarea>
-                <p class="form-text mb-0">These details appear in tracking history and can be seen by anyone with the tracking link. Do not include confidential information.</p>
+                <p class="form-text mb-0">Edit the suggested wording to match what actually happened. These details are public to anyone with the tracking link; do not include confidential information.</p>
                 <div id="statusDetailsFields"></div>
             </div>
             <div class="modal-footer">

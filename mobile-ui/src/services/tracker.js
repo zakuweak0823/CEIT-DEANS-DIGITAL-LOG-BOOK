@@ -9,6 +9,17 @@ export const readApiResponse = async (response) => {
     throw new Error('The office server returned an unreadable response. If you submitted a change, check the records before retrying.');
   }
 };
+
+export const getActiveTrackerUrl = (url, trackerType) => {
+  const activeTrackerUrl = new URL(url);
+  if (import.meta.env.DEV && import.meta.env.VITE_PROJECT_PATH) {
+    activeTrackerUrl.pathname = `${import.meta.env.VITE_PROJECT_PATH}/${trackerType === 'batch' ? 'batch_tracker' : 'document-tracker'}`;
+    activeTrackerUrl.host = window.location.host;
+    activeTrackerUrl.protocol = window.location.protocol;
+  }
+  return activeTrackerUrl;
+};
+
 export const verifyOfficeTrackerQr = async (payload, trackerBaseUrl, batchTrackerBaseUrl) => {
   let scannedUrl;
   let trackerUrl;
@@ -55,18 +66,13 @@ export const verifyOfficeTrackerQr = async (payload, trackerBaseUrl, batchTracke
     throw new Error(result.message || 'This tracking QR code could not be verified by the office.');
   }
 
-  const activeTrackerUrl = new URL(trackerUrl);
-  if (window.location.port === '5173' && import.meta.env.VITE_PROJECT_PATH) {
-    activeTrackerUrl.pathname = `${import.meta.env.VITE_PROJECT_PATH}/${trackerType === 'batch' ? 'batch_tracker' : 'document-tracker'}`;
-    activeTrackerUrl.host = window.location.host;
-    activeTrackerUrl.protocol = window.location.protocol;
-  }
+  const activeTrackerUrl = getActiveTrackerUrl(trackerUrl, trackerType);
   activeTrackerUrl.search = new URLSearchParams({ token, return: `${window.location.origin}${window.location.pathname}` }).toString();
   return activeTrackerUrl;
 };
 
 export const getBatchTrackerBaseUrl = (configuredBaseUrl = '') => {
-  if (window.location.port === '5173' && import.meta.env.VITE_PROJECT_PATH) {
+  if (import.meta.env.DEV && import.meta.env.VITE_PROJECT_PATH) {
     return new URL(`${import.meta.env.VITE_PROJECT_PATH}/batch_tracker`, window.location.origin);
   }
   if (configuredBaseUrl) return new URL(configuredBaseUrl);

@@ -113,6 +113,6 @@ function sanitize($value)
 
 function show_alert($message, $type = 'success')
 {
-    $type = $type === 'danger' ? 'danger' : 'success';
+    $type = in_array($type, ['success', 'warning', 'danger', 'info'], true) ? $type : 'info';
     return '<div class="alert alert-' . $type . '" role="alert">' . sanitize($message) . '</div>';
 }

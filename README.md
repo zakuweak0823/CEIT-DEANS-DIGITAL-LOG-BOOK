@@ -116,7 +116,7 @@ the sections below and in the [Windows setup guide](docs/WINDOWS-SETUP.md).
 | **Incoming documents** | Record the submitter's name and submitter type separately; optionally note the submitting department or office; issue office-verified QR tracking codes; search, filter by status, and sort records; and prepare documents for release. Staff can mark any submitter's document as Priority. By default, Priority documents appear first, then oldest first. |
 | **Outgoing documents** | Track outgoing records and release status, manage each document directly, and send client notifications. For Release documents are listed first, oldest first, so the longest-waiting document is handled first; select a column heading to change the order. |
 | **Bulk Documents** | Register bulk submissions, associate document-level records, separate Priority from Standard submissions, scan office QR codes, record received counts, and follow release status. |
-| **Borrowed Items** | Manage item categories, borrowers, and return status; sort the list by item, category, borrower, date, or status. |
+| **Borrowed Items** | Manage item categories, borrowers, and return status; sort the list by item, category, borrower, date, or status. New entries record the date and time automatically. Earlier mobile entries saved only a date, so their stored midnight time may not be the actual borrowing time. |
 | **Records and reports** | Search logbook records; generate Incoming, Outgoing, Borrowed Items, SMS Logs, or All Reports; filter and sort results; print a formal portrait document or export a formatted Excel workbook. |
 | **SMS and notifications** | Send client updates, review delivery logs, and choose browser alerts and sounds. SMS provider configuration is server-only; email delivery is not implemented. New-submission alerts appear in a neat top-of-screen notification. |
 | **Admin Assistant** | Get privacy-friendly workflow guidance from a clickable side-peeking launcher and links to admin tools. Optional form assistance previews changes and requires approval before filling fields; it never submits forms. Toggle it in Settings. |
@@ -147,6 +147,8 @@ the sections below and in the [Windows setup guide](docs/WINDOWS-SETUP.md).
   pages, a centered university heading, fixed-width columns, and wrapped
   headings and category names. Very long print details are shortened to keep
   rows readable; the Excel workbook retains the complete report content.
+- **Borrowed Items** reports display the recorded borrowing date and time
+  together. Older mobile entries saved only a date may show a midnight time.
 - Search and status filters work with the report preview and update its
   visible record count. The Excel export includes clear headings, the selected
   reporting period, generation time, and readable column widths.
@@ -441,6 +443,8 @@ XAMPP installation at `C:\xampp\htdocs\DIT-LOGBOOK_RETRY`:
    (maximum 11 characters). Keep `enabled = 0` to disable SMS and SMS
    password recovery.
 3. Save it, then use SMS Logs to send a test message to a number you control.
+   Failed messages can be retried from the same log entry, including numbers
+   saved with PhilSMS's `63` country prefix.
    The application reads the file on each request; an Apache restart is not
    normally required. SMS messages may incur charges.
 
@@ -589,6 +593,28 @@ Scanning an old QR directly with the phone's camera still uses its old address;
 open the mobile app and use its QR scanner instead. QR tracking can be disabled
 in the same Admin Settings section; disabling it blocks existing QR links as
 well as new ones.
+
+In the mobile scanner, **Or choose a QR image** opens the phone's image picker
+so an existing QR photo or screenshot can be selected. The live camera remains
+available above it. After submitting a document, **Open the status tracker**
+opens in the same tab; in the Vite development app it uses the current mobile
+server and its tracker proxy. The document QR image retains the office-configured
+tracker address, so that address must still be reachable on devices scanning
+the QR directly. For built or deployed apps, configure a reachable tracker URL
+in Admin Settings.
+
+New documents receive a local reference such as `CEIT-20261108-123456`:
+`20261108` is the submission date in Philippine time (YYYYMMDD), and the last
+six digits are random. The database enforces uniqueness and retries on a
+reference collision. Previously issued references remain unchanged. None is a
+university tracking number. When the university assigns its own number, staff
+can enter, change, or clear it using the **University reference** action in
+the document's **Outgoing Documents** row, including after it is released. The optional
+university reference appears on the public tracker for anyone with the
+document's tracking link, so do not enter confidential information. Existing
+local references and QR codes remain unchanged. Status-change details are also
+public; edit the suggested wording to describe what actually happened.
+The individual document tracker is a status page, not a receipt.
 
 After a document tracker opens, both its token and record number are removed
 from the address bar. The record selection is kept in that browser tab's

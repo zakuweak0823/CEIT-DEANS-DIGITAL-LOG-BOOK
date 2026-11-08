@@ -4,11 +4,25 @@ function ensure_document_tracking_schema($conn): void
     $statements = [
         'ALTER TABLE documents ADD COLUMN IF NOT EXISTS submitter_name VARCHAR(255) NOT NULL DEFAULT \'\'',
         'ALTER TABLE documents ADD COLUMN IF NOT EXISTS tracking_token CHAR(64) DEFAULT NULL',
+        'ALTER TABLE documents ADD COLUMN IF NOT EXISTS university_reference VARCHAR(100) DEFAULT NULL',
+        'ALTER TABLE documents ADD COLUMN IF NOT EXISTS local_reference VARCHAR(40) DEFAULT NULL',
     ];
     foreach ($statements as $sql) {
         if ($conn->query($sql) === false) {
             throw new RuntimeException('Could not prepare document tracking storage: ' . $conn->error);
         }
+    }
+
+    $columns = $conn->query("SHOW COLUMNS FROM documents LIKE 'local_reference'");
+    if ($columns === false || !($column = $columns->fetch_assoc())) {
+        throw new RuntimeException('Could not check document reference storage.');
+    }
+    $columns->free();
+    if (preg_match('/^varchar\((\d+)\)$/i', (string)$column['Type'], $matches) !== 1) {
+        throw new RuntimeException('Document reference storage has an unexpected type.');
+    }
+    if ((int)$matches[1] < 40 && $conn->query('ALTER TABLE documents MODIFY COLUMN local_reference VARCHAR(40) DEFAULT NULL') === false) {
+        throw new RuntimeException('Could not expand document reference storage: ' . $conn->error);
     }
 
     $indexes = $conn->query("SHOW INDEX FROM documents WHERE Key_name = 'uq_documents_tracking_token'");
@@ -19,6 +33,16 @@ function ensure_document_tracking_schema($conn): void
     $indexes->free();
     if (!$hasTrackingIndex && $conn->query('ALTER TABLE documents ADD UNIQUE KEY uq_documents_tracking_token (tracking_token)') === false) {
         throw new RuntimeException('Could not add the document tracking token index: ' . $conn->error);
+    }
+
+    $indexes = $conn->query("SHOW INDEX FROM documents WHERE Key_name = 'uq_documents_local_reference'");
+    if ($indexes === false) {
+        throw new RuntimeException('Could not check document reference indexes: ' . $conn->error);
+    }
+    $hasReferenceIndex = $indexes->num_rows > 0;
+    $indexes->free();
+    if (!$hasReferenceIndex && $conn->query('ALTER TABLE documents ADD UNIQUE KEY uq_documents_local_reference (local_reference)') === false) {
+        throw new RuntimeException('Could not add the document reference index: ' . $conn->error);
     }
 }
 
@@ -116,7 +140,38 @@ function create_document_tracking_token(): string
     return bin2hex(random_bytes(32));
 }
 
-function document_tracking_reference($documentId): string
+function create_document_reference(): string
 {
-    return 'DIT-' . str_pad((string)(int)$documentId, 6, '0', STR_PAD_LEFT);
+    $date = new DateTimeImmutable('now', new DateTimeZone('Asia/Manila'));
+    return 'CEIT-' . $date->format('Ymd') . '-' . str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+}
+
+function insert_document_with_reference($conn, string $sql, string $types, array $params, ?callable $generateReference = null): array
+{
+    $generateReference = $generateReference ?? 'create_document_reference';
+    for ($attempt = 0; $attempt < 5; $attempt++) {
+        $reference = $generateReference();
+        try {
+            $stmt = safe_query($conn, $sql, $types . 's', array_merge($params, [$reference]));
+            if ($stmt === false) {
+                throw new RuntimeException('Document insert failed.');
+            }
+            return ['statement' => $stmt, 'reference' => $reference];
+        } catch (mysqli_sql_exception $error) {
+            if ($error->getCode() !== 1062 || strpos($error->getMessage(), 'uq_documents_local_reference') === false) {
+                throw $error;
+            }
+        }
+    }
+    throw new RuntimeException('Could not generate a unique document reference after multiple attempts.');
+}
+
+function document_tracking_reference($documentId, ?string $localReference): string
+{
+    return $localReference ?? ('DIT-' . str_pad((string)(int)$documentId, 6, '0', STR_PAD_LEFT));
+}
+
+function document_tracking_reference_sql(): string
+{
+    return "COALESCE(local_reference, CONCAT('DIT-', LPAD(doc_id, GREATEST(6, CHAR_LENGTH(doc_id)), '0')))";
 }

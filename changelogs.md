@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- Displayed both the date and time in Borrowed Items report timestamps.
+- Simplified the document tracker to a status page and added a dedicated
+  university-reference action on outgoing and released document rows.
+- Kept document references and priority controls visible in the incoming and
+  outgoing tables, wrapping long references instead of widening the table.
+- Generated date-based CEIT references with a random numeric suffix for new
+  documents while preserving previously issued references.
+- Fixed mobile QR image selection, decoding of large images, and tracker links
+  opened from a submission on the mobile development server.
+- Added an optional university tracking reference to outgoing documents and
+  their public tracker, separate from the existing CEIT reference.
+- Suggested editable tracking details for status changes and release, and
+  replaced successful admin outcome dialogs with top-of-page notifications.
+- Fixed resending failed SMS logs stored with the PhilSMS 63 country prefix.
+- Centered admin table headings and date values in the bulk and borrowed lists.
+- Show the existing sort buttons above sortable admin tables on all screen
+  sizes, wrapping them on narrow screens.
+- Matched the default admin table styling to Compact Mode and removed the
+  shadow beside sticky action columns.
 - Hid document tracker record numbers from the address bar while keeping
   per-tab refresh and session-checked access.
 - Redirected browser navigation to known page files to their public URLs, so

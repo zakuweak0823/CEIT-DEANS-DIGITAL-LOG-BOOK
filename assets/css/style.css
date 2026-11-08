@@ -960,6 +960,24 @@ body {
     color: var(--brand-green);
 }
 
+.admin-success-notice {
+    position: fixed;
+    z-index: 1090;
+    top: max(0.75rem, env(safe-area-inset-top));
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    width: min(38rem, calc(100vw - 1.5rem));
+    padding: 0.9rem 1rem;
+    border: 1px solid #a3cfbb;
+    border-radius: 0.75rem;
+    background: #d1e7dd;
+    color: #0a3622;
+    box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.15);
+}
+
 .admin-submission-toast {
     position: fixed;
     z-index: 1090;
@@ -5251,16 +5269,20 @@ body.admin-body.admin-compact {
     background: #fbfdf9 !important;
 }
 
-.admin-body.admin-compact .admin-content .table {
+.admin-body.admin-compact .admin-content .table,
+.admin-body:not(.admin-theme-civic):not(.admin-theme-glass) .admin-content .table {
     --bs-table-color: #30483a;
     --bs-table-border-color: #e3ece4;
     --bs-table-striped-bg: #f5faf5;
     --bs-table-hover-bg: #edf6ee;
 }
 
-.admin-body.admin-compact .admin-content .table > thead > tr > th {
+.admin-body.admin-compact .admin-content .table > thead > tr > th,
+.admin-body:not(.admin-theme-civic):not(.admin-theme-glass) .admin-content .table > thead > tr > th {
     background: #eaf4eb;
     color: #42634d;
+    font-size: 0.73rem;
+    letter-spacing: 0.04em;
 }
 
 .admin-body.admin-compact .admin-content .form-control,
@@ -8532,6 +8554,14 @@ body.admin-theme-glass.admin-compact .admin-quick-access-count {
 }
 
 @media (min-width: 768px) {
+    .admin-body:not(.admin-compact):not(.admin-theme-civic):not(.admin-theme-glass) .admin-content .table > thead > tr > th {
+        padding: 0.45rem;
+    }
+
+    .admin-body:not(.admin-compact):not(.admin-theme-civic):not(.admin-theme-glass) .admin-content .table > tbody > tr > td {
+        padding: 0.65rem 0.75rem;
+    }
+
     .admin-body .admin-content .table-responsive > .table {
         width: 100%;
         min-width: 64rem;
@@ -10418,13 +10448,8 @@ button.dashboard-sla-stat.dashboard-sla-link { width: 100%; text-align: left; fo
         z-index: 2;
     }
 
-    .admin-body .admin-content .table-responsive > .table.admin-table-has-actions > thead > tr > th:last-child {
-        box-shadow: -8px 0 8px -8px rgba(0, 0, 0, 0.35);
-    }
-
     .admin-body .admin-content .table-responsive > .table.admin-table-has-actions > tbody > tr > td:last-child {
         background-color: #fff;
-        box-shadow: -8px 0 8px -8px rgba(15, 81, 50, 0.25);
     }
 
     .admin-body .admin-content .table-responsive > .table.admin-table-has-actions > tbody > tr:nth-child(even) > td:last-child {

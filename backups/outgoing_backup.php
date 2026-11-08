@@ -281,13 +281,13 @@ if ($orderFilter === 'newest') {
                                 <?php foreach ($documents as $document): ?>
                                     <tr>
                                         <td data-label="Date"><?php echo sanitize(date('M j, Y', strtotime($document['date_created']))); ?><div class="small text-muted"><?php echo sanitize(date('g:i A', strtotime($document['date_created']))); ?></div></td>
-                                        <td data-label="Reference"><code><?php echo sanitize(document_tracking_reference($document['doc_id'])); ?></code></td>
+                                        <td data-label="Reference"><code><?php echo sanitize(document_tracking_reference($document['doc_id'], $document['local_reference'])); ?></code></td>
                                         <td data-label="Tracking QR">
                                             <?php if (!$documentTrackingSettings['enabled']): ?>
                                                 <span class="small text-muted">QR tracking is disabled</span>
                                             <?php elseif (!empty($document['tracking_token'])): ?>
                                                 <?php $documentTrackerUrl = $documentTrackingSettings['baseUrl'] . '?token=' . rawurlencode($document['tracking_token']); ?>
-                                                <button type="button" class="btn btn-sm btn-outline-success" aria-label="View tracking QR code for <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?>" onclick="showDocumentTrackingQr(<?php echo htmlspecialchars(json_encode($documentTrackerUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode(document_tracking_reference($document['doc_id']), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                                <button type="button" class="btn btn-sm btn-outline-success" aria-label="View tracking QR code for <?php echo sanitize(document_tracking_reference($document['doc_id'], $document['local_reference'])); ?>" onclick="showDocumentTrackingQr(<?php echo htmlspecialchars(json_encode($documentTrackerUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode(document_tracking_reference($document['doc_id'], $document['local_reference']), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
                                                     <i class="bi bi-qr-code me-1" aria-hidden="true"></i>View QR code
                                                 </button>
                                             <?php else: ?>
@@ -316,7 +316,7 @@ if ($orderFilter === 'newest') {
                                         </td>
                                         <td data-label="Actions">
                                             <div class="table-actions document-row-actions">
-                                            <button type="button" class="btn btn-sm btn-outline-primary document-action-button" title="Edit document" aria-label="Edit <?php echo sanitize(document_tracking_reference($document['doc_id'])); ?>" onclick="editDocument(<?php echo (int)$document['doc_id']; ?>, <?php echo htmlspecialchars(json_encode($document['client_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['subject'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['remarks'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
+                                            <button type="button" class="btn btn-sm btn-outline-primary document-action-button" title="Edit document" aria-label="Edit <?php echo sanitize(document_tracking_reference($document['doc_id'], $document['local_reference'])); ?>" onclick="editDocument(<?php echo (int)$document['doc_id']; ?>, <?php echo htmlspecialchars(json_encode($document['client_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['subject'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($document['remarks'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>)">
                                                 <i class="bi bi-pencil" aria-hidden="true"></i><span class="action-label">Edit</span>
                                             </button>
                                             <form method="POST" class="d-inline">

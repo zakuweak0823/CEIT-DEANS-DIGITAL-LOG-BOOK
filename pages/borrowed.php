@@ -211,9 +211,9 @@ if ($stmt !== false) {
                         <?php endif; ?>
                     </div>
                 </form>
-                <!-- Shared table styling keeps row separators without vertical cell gridlines. -->
+                <!-- Shared table styling keeps row separators; the card-table class stacks fields on phones. -->
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0" data-status-guide="borrowed">
+                    <table class="table table-hover align-middle admin-mobile-card-table mb-0" data-status-guide="borrowed">
                         <thead class="table-light">
                             <tr>
                                 <th>Item</th>
@@ -230,24 +230,31 @@ if ($stmt !== false) {
                             <?php else: ?>
                                 <?php foreach ($borrowedItems as $itemRow): ?>
                                     <tr>
-                                        <td class="fw-semibold"><?php echo sanitize($itemRow['item_name']); ?></td>
-                                        <td><?php echo sanitize($itemRow['category_name'] ?? 'Uncategorized'); ?></td>
-                                        <td>
+                                        <td class="fw-semibold" data-label="Item"><?php echo sanitize($itemRow['item_name']); ?></td>
+                                        <td data-label="Category"><?php echo sanitize($itemRow['category_name'] ?? 'Uncategorized'); ?></td>
+                                        <td data-label="Borrower">
                                             <div class="fw-semibold"><?php echo sanitize($itemRow['borrower']); ?></div>
                                             <?php if (!empty($itemRow['borrower_phone'])): ?>
                                                 <small class="text-muted"><?php echo sanitize($itemRow['borrower_phone']); ?></small>
                                             <?php endif; ?>
                                         </td>
-                                        <td class="small" data-sort-value="<?php echo sanitize($itemRow['date_borrowed']); ?>">
-                                            <div><span class="text-muted">Date borrowed</span> <?php echo sanitize(date('M j, Y', strtotime($itemRow['date_borrowed']))); ?></div>
+                                        <td class="small" data-label="Date borrowed" data-sort-value="<?php echo sanitize($itemRow['date_borrowed']); ?>">
+                                            <div>
+                                                <span class="d-block text-muted">Borrowed</span>
+                                                <span class="d-block fw-medium"><?php echo sanitize(date('M j, Y', strtotime($itemRow['date_borrowed']))); ?></span>
+                                                <span class="d-block text-muted"><?php echo sanitize(date('g:i A', strtotime($itemRow['date_borrowed']))); ?></span>
+                                            </div>
                                             <?php if (!empty($itemRow['returned_date'])): ?>
-                                                <div class="text-success"><span>Returned</span> <?php echo sanitize(date('M j, Y', strtotime($itemRow['returned_date']))); ?></div>
+                                                <div class="mt-1 text-success">
+                                                    <span class="d-block">Returned</span>
+                                                    <span class="d-block"><?php echo sanitize(date('M j, Y', strtotime($itemRow['returned_date']))); ?></span>
+                                                </div>
                                             <?php endif; ?>
                                         </td>
-                                        <td>
+                                        <td data-label="Status">
                                             <span class="badge rounded-pill <?php echo admin_status_badge_class($itemRow['display_status']); ?>"><?php echo sanitize($itemRow['display_status'] === 'Unreturned' ? 'Not Returned' : $itemRow['display_status']); ?></span>
                                         </td>
-                                        <td>
+                                        <td data-label="Actions">
                                             <div class="table-actions">
                                                 <?php if ($itemRow['display_status'] !== 'Returned'): ?>
                                                     <button type="button" class="btn btn-sm btn-outline-primary" onclick="editItem(<?php echo (int)$itemRow['item_id']; ?>, <?php echo htmlspecialchars(json_encode($itemRow['item_name'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($itemRow['borrower'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($itemRow['borrower_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo $itemRow['category_id'] !== null ? (int)$itemRow['category_id'] : 'null'; ?>)">

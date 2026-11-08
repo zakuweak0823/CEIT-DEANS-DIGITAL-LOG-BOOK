@@ -151,6 +151,42 @@ if (isset($_POST['issue_tracking_qr'])) {
             $message = show_alert('Failed to update outgoing document.', 'danger');
         }
     }
+} elseif (isset($_POST['save_university_reference'])) {
+    $shouldRedirect = true;
+    $id = $postId('reference_doc_id');
+    $rawReference = $_POST['university_reference'] ?? null;
+    if ($id <= 0 || !is_string($rawReference)) {
+        $message = show_alert('Select a valid outgoing document and enter a university reference.', 'danger');
+    } elseif ($textLength(trim($rawReference)) > 100) {
+        $message = show_alert('The university reference must be 100 characters or fewer.', 'danger');
+    } else {
+        try {
+            $conn->begin_transaction();
+            $stmt = safe_query($conn, "SELECT doc_id FROM documents WHERE doc_id = ? AND type = 'Outgoing' FOR UPDATE", 'i', [$id]);
+            if ($stmt === false) throw new RuntimeException('Could not check the outgoing document.');
+            $result = mysqli_stmt_get_result($stmt);
+            if ($result === false) {
+                mysqli_stmt_close($stmt);
+                throw new RuntimeException('Could not read the outgoing document.');
+            }
+            $document = mysqli_fetch_assoc($result);
+            mysqli_stmt_close($stmt);
+            if (!$document) throw new DomainException('The outgoing document was not found. Refresh the list and try again.');
+            $reference = trim($rawReference);
+            $stmt = safe_query($conn, "UPDATE documents SET university_reference = ? WHERE doc_id = ? AND type = 'Outgoing'", 'si', [$reference === '' ? null : $reference, $id]);
+            if ($stmt === false) throw new RuntimeException('Could not save the university reference.');
+            mysqli_stmt_close($stmt);
+            $conn->commit();
+            $message = show_alert($reference === '' ? 'University reference cleared.' : 'University reference saved.');
+        } catch (DomainException $error) {
+            $conn->rollback();
+            $message = show_alert($error->getMessage(), 'danger');
+        } catch (Throwable $error) {
+            $conn->rollback();
+            error_log('University reference update failed: ' . $error->getMessage());
+            $message = show_alert('Could not save the university reference. Try again.', 'danger');
+        }
+    }
 } elseif (isset($_POST['set_outgoing_status'])) {
     $shouldRedirect = true;
     $id = $postId('status_doc_id');
@@ -184,7 +220,7 @@ if (isset($_POST['issue_tracking_qr'])) {
     // Recheck status and contact at send time; the page form may have gone stale.
     $id = $postId('sms_doc_id');
     $smsDocument = null;
-    $stmt = safe_query($conn, "SELECT subject, client_phone, status FROM documents WHERE doc_id = ? AND type = 'Outgoing' AND status = 'For Release'", 'i', [$id]);
+    $stmt = safe_query($conn, "SELECT subject, client_phone, status, local_reference FROM documents WHERE doc_id = ? AND type = 'Outgoing' AND status = 'For Release'", 'i', [$id]);
     if ($stmt !== false) {
         $result = mysqli_stmt_get_result($stmt);
         $smsDocument = $result ? (mysqli_fetch_assoc($result) ?: null) : null;
@@ -210,13 +246,12 @@ if (isset($_POST['issue_tracking_qr'])) {
         } catch (Throwable $error) {
             error_log('Outgoing SMS context failed: ' . $error->getMessage());
         }
-        $smsContext = $smsContext ?? ['reference' => document_tracking_reference($id), 'subject' => (string)$smsDocument['subject']];
+        $smsContext = $smsContext ?? ['reference' => document_tracking_reference($id, $smsDocument['local_reference']), 'subject' => (string)$smsDocument['subject']];
         $smsContext['status'] = 'For Release';
         $smsText = compose_sms_message($smsContext);
         $smsResult = send_logged_sms($conn, $smsDocument['client_phone'], $smsText);
         if ($smsResult['success']) {
             $_SESSION['outgoing_sms_sent_at'][$id] = time();
-            $message = show_alert($smsResult['message']);
             $smsStatus = strtolower($smsResult['status'] ?? '');
             if (empty($smsResult['logged'])) {
                 $setSmsOutcome('PhilSMS accepted the SMS, but logging failed', 'Do not send it again yet, because PhilSMS may already be processing it. Check the PhilSMS dashboard before retrying.', 'warning');
@@ -227,6 +262,7 @@ if (isset($_POST['issue_tracking_qr'])) {
             } else {
                 $setSmsOutcome('SMS accepted by PhilSMS', $smsResult['message'], 'info');
             }
+            $message = show_alert($smsOutcome['detail'], $smsOutcome['type']);
         } else {
             $detail = 'SMS was not sent: ' . $smsResult['message'];
             $message = show_alert($detail, 'danger');
@@ -269,7 +305,7 @@ if ($overdueFilter && $documentIdFilter === 0) {
         $whereParams[] = $statusFilter;
     }
     if ($search !== '') {
-        $searchColumns = ['submitter_name', 'sender', 'recipient', 'subject', 'remarks'];
+        $searchColumns = ['submitter_name', 'sender', 'recipient', 'subject', 'remarks', 'local_reference', 'university_reference'];
         if ($statusFilter === '') {
             $searchColumns[] = 'status';
         }
@@ -386,7 +422,7 @@ if ($stmt !== false) {
                             <?php else: ?>
                                 <?php foreach ($documents as $document): ?>
                                     <?php
-                                    $documentReference = document_tracking_reference($document['doc_id']);
+                                    $documentReference = document_tracking_reference($document['doc_id'], $document['local_reference']);
                                     $documentSubmitterName = trim((string)($document['submitter_name'] ?? ''));
                                     $documentRecipient = trim((string)($document['recipient'] ?? ''));
                                     $documentPhone = trim((string)($document['client_phone'] ?? ''));
@@ -399,7 +435,9 @@ if ($stmt !== false) {
                                     ?>
                                     <tr>
                                         <td data-label="Date" data-sort-value="<?php echo sanitize($document['date_created']); ?>"><?php echo sanitize(date('M j, Y', strtotime($document['date_created']))); ?><div class="small text-muted"><?php echo sanitize(date('g:i A', strtotime($document['date_created']))); ?></div></td>
-                                        <td data-label="Reference"><code><?php echo sanitize($documentReference); ?></code></td>
+                                        <td data-label="Reference"><code><?php echo sanitize($documentReference); ?></code>
+                                            <?php if (!empty($document['university_reference'])): ?><div class="small mt-1">University: <?php echo sanitize($document['university_reference']); ?></div><?php endif; ?>
+                                        </td>
                                         <td data-label="Tracking QR">
                                             <?php if (!$documentTrackingSettings['enabled']): ?>
                                                 <span class="small text-muted">QR tracking is disabled</span>
@@ -442,6 +480,9 @@ if ($stmt !== false) {
                                             <button type="button" class="btn btn-sm btn-outline-primary document-action-button js-edit-document" title="Edit document" aria-label="Edit <?php echo sanitize($documentReference); ?>" data-document="<?php echo htmlspecialchars($editPayload !== false ? $editPayload : '{}', ENT_QUOTES, 'UTF-8'); ?>">
                                                 <i class="bi bi-pencil" aria-hidden="true"></i><span class="action-label">Edit</span>
                                             </button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary document-action-button js-university-reference" title="University reference" aria-label="<?php echo !empty($document['university_reference']) ? 'Edit' : 'Add'; ?> university reference for <?php echo sanitize($documentReference); ?>" data-document-id="<?php echo (int)$document['doc_id']; ?>" data-document-reference="<?php echo sanitize($documentReference); ?>" data-university-reference="<?php echo sanitize((string)($document['university_reference'] ?? '')); ?>">
+                                                <i class="bi bi-hash" aria-hidden="true"></i><span class="action-label">University reference</span>
+                                            </button>
                                             <?php if ($document['status'] === 'For Release' && is_valid_contact_number($documentPhone)): ?>
                                                 <button
                                                     type="button"
@@ -467,6 +508,29 @@ if ($stmt !== false) {
                 </div>
             </div>
         </div>
+    </div>
+</div>
+
+<div class="modal fade" id="universityReferenceModal" tabindex="-1" aria-labelledby="universityReferenceTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form method="POST" class="modal-content" data-admin-confirm="false">
+            <div class="modal-header">
+                <h5 class="modal-title" id="universityReferenceTitle">University tracking reference</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Document: <strong id="universityReferenceDocument"></strong></p>
+                <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                <input type="hidden" name="reference_doc_id" id="universityReferenceDocumentId">
+                <label class="form-label" for="universityReferenceInput">Number assigned by the university</label>
+                <input type="text" name="university_reference" id="universityReferenceInput" class="form-control" maxlength="100">
+                <div class="form-text">Enter the university's number when available, including after release. It is visible to anyone with the document's tracking link. Leave blank to remove it.</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" name="save_university_reference" value="1" class="btn btn-primary">Save reference</button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -545,7 +609,7 @@ if ($stmt !== false) {
         'info' => 'bi-info-circle-fill',
     ][$smsTone];
     ?>
-    <div class="modal fade" id="releaseSmsOutcomeModal" tabindex="-1" aria-labelledby="releaseSmsOutcomeTitle" aria-hidden="true">
+    <div class="modal fade" id="releaseSmsOutcomeModal" data-outcome-tone="<?php echo sanitize($smsTone); ?>" tabindex="-1" aria-labelledby="releaseSmsOutcomeTitle" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-0 shadow">
                 <div class="modal-header">

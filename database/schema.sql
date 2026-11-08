@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS documents (
     sender VARCHAR(255) NOT NULL,
     submitter_name VARCHAR(255) NOT NULL DEFAULT '',
     tracking_token CHAR(64) DEFAULT NULL,
+    local_reference VARCHAR(40) DEFAULT NULL,
+    university_reference VARCHAR(100) DEFAULT NULL,
     recipient VARCHAR(255) NOT NULL,
     client_phone VARCHAR(20) DEFAULT NULL,
     submitter_type VARCHAR(20) NOT NULL DEFAULT 'Other',
@@ -60,12 +62,15 @@ CREATE TABLE IF NOT EXISTS documents (
     subject VARCHAR(255) NOT NULL,
     remarks TEXT,
     status VARCHAR(50) NOT NULL,
-    date_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    date_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_documents_local_reference (local_reference)
 );
 
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS client_phone VARCHAR(20) DEFAULT NULL;
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS submitter_name VARCHAR(255) NOT NULL DEFAULT '';
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS tracking_token CHAR(64) DEFAULT NULL;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS university_reference VARCHAR(100) DEFAULT NULL;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS local_reference VARCHAR(40) DEFAULT NULL;
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS entry_source VARCHAR(32) NOT NULL DEFAULT 'standard';
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS submitter_type VARCHAR(20) NOT NULL DEFAULT 'Other';
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_priority TINYINT(1) NOT NULL DEFAULT 0;

@@ -1366,7 +1366,7 @@ document.addEventListener('DOMContentLoaded', function () {
         releaseCount.value = trigger.dataset.paperCount || '';
         releaseCount.dataset.expectedCount = trigger.dataset.paperCount || '';
         releaseNotes.value = '';
-        document.getElementById('batchReleaseTrackingNote').value = '';
+        document.getElementById('batchReleaseTrackingNote').value = "Ready for release by the CEIT Dean's Office.";
         document.getElementById('confirmBatchReleaseSummary').textContent =
             `${trigger.dataset.batchCode || 'Batch'} · ${trigger.dataset.paperCount || '0'} documents expected`;
         releaseNotes.setCustomValidity('');

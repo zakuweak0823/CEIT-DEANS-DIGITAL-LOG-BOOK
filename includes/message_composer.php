@@ -176,7 +176,7 @@ function compose_sms_message(array $context): string
 /** Loads what the generator needs for one document (subject, name, phone, tracking link, missing items). */
 function composer_document_context($conn, int $documentId, array $trackingSettings): ?array
 {
-    $stmt = safe_query($conn, 'SELECT doc_id, subject, submitter_name, client_phone, status, tracking_token FROM documents WHERE doc_id = ?', 'i', [$documentId]);
+    $stmt = safe_query($conn, 'SELECT doc_id, local_reference, subject, submitter_name, client_phone, status, tracking_token FROM documents WHERE doc_id = ?', 'i', [$documentId]);
     if ($stmt === false) {
         return null;
     }
@@ -194,7 +194,7 @@ function composer_document_context($conn, int $documentId, array $trackingSettin
     return [
         'status' => (string)$document['status'],
         'event' => 'status',
-        'reference' => document_tracking_reference($document['doc_id']),
+        'reference' => document_tracking_reference($document['doc_id'], $document['local_reference']),
         'subject' => (string)$document['subject'],
         'name' => (string)$document['submitter_name'],
         'phone' => trim((string)($document['client_phone'] ?? '')),
