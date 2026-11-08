@@ -39,8 +39,7 @@ function ensure_password_reset_schema($conn): bool
 
 function password_reset_sms_available($conn): bool
 {
-    $enabled = safe_scalar($conn, "SELECT value FROM settings WHERE key_name = 'sms_enabled' LIMIT 1");
-    return !empty($enabled) && get_philsms_api_token($conn) !== '';
+    return sms_delivery_enabled() && get_philsms_api_token($conn) !== '';
 }
 
 function password_reset_username_key(string $username): string

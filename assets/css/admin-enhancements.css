@@ -1,0 +1,217 @@
+.admin-body .sidebar-brand-mark,
+.admin-body.admin-theme-civic .sidebar-brand-mark,
+.admin-body.admin-theme-glass .sidebar-brand-mark {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.login-brand-logo,
+.login-card-logo {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.admin-status-info {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin-left: .35rem;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    opacity: .8;
+    cursor: help;
+}
+
+.admin-status-info:hover,
+.admin-status-info:focus-visible {
+    opacity: 1;
+}
+
+.admin-status-info:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
+
+.admin-status-popover {
+    --bs-popover-max-width: min(23rem, calc(100vw - 2rem));
+    --bs-popover-border-color: #dcebe1;
+    --bs-popover-border-radius: .875rem;
+    --bs-popover-header-bg: #f0f8f2;
+    --bs-popover-header-color: #174e2d;
+    box-shadow: 0 .75rem 2rem rgba(19, 62, 37, .16);
+}
+
+.admin-status-popover .popover-header {
+    padding: .8rem 1rem;
+    border-bottom: 1px solid #dcebe1;
+    font-size: .875rem;
+    font-weight: 700;
+}
+
+.admin-status-popover .popover-body {
+    max-height: min(60vh, 30rem);
+    overflow-y: auto;
+    padding: .75rem 1rem;
+    color: #41564a;
+    font-size: .8125rem;
+}
+
+.status-guide-section + .status-guide-section {
+    margin-top: .75rem;
+    padding-top: .75rem;
+    border-top: 1px solid #e6eee8;
+}
+
+.status-guide-group {
+    margin-bottom: .35rem;
+    color: #3a7650;
+    font-size: .6875rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.status-guide-entry {
+    display: grid;
+    grid-template-columns: minmax(6rem, .9fr) minmax(0, 1.4fr);
+    gap: .75rem;
+    padding: .2rem 0;
+    line-height: 1.4;
+}
+
+.status-guide-entry strong {
+    color: #1b3c29;
+    font-weight: 650;
+}
+
+.admin-sort-heading {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .35rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+    text-align: inherit;
+    text-transform: inherit;
+    cursor: pointer;
+}
+
+.admin-sort-heading::after {
+    content: "\2195";
+    flex: none;
+    font-size: .9em;
+    font-weight: 400;
+    line-height: 1;
+    opacity: .7;
+}
+
+.admin-sort-heading[data-sort-direction="ascending"]::after {
+    content: "\2191";
+    opacity: 1;
+}
+
+.admin-sort-heading[data-sort-direction="descending"]::after {
+    content: "\2193";
+    opacity: 1;
+}
+
+.admin-sort-heading:hover::after {
+    opacity: 1;
+}
+
+.admin-sort-heading:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 3px;
+    border-radius: .15rem;
+}
+
+.admin-mobile-sort-headings {
+    display: none;
+    overflow-x: auto;
+    margin-bottom: .75rem;
+    padding: .5rem;
+    border: 1px solid #dcebe1;
+    border-radius: .75rem;
+    background: #f7fbf8;
+    scrollbar-width: thin;
+    scrollbar-color: #b6d2be transparent;
+}
+
+.admin-mobile-sort-headings table {
+    border-collapse: separate;
+    border-spacing: .25rem 0;
+}
+
+.admin-mobile-sort-headings th {
+    padding: 0;
+    white-space: nowrap;
+}
+
+.admin-mobile-sort-headings .admin-sort-heading {
+    min-height: 2.25rem;
+    padding: .4rem .65rem;
+    border: 1px solid #d7e7dc;
+    border-radius: .5rem;
+    background: #fff;
+    color: #315a40;
+    font-size: .75rem;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.admin-mobile-sort-headings .admin-sort-heading:hover,
+.admin-mobile-sort-headings .admin-sort-heading[data-sort-direction="ascending"],
+.admin-mobile-sort-headings .admin-sort-heading[data-sort-direction="descending"] {
+    border-color: #91bda0;
+    background: #e8f4eb;
+    color: #124c2b;
+}
+
+.admin-mobile-status-guide {
+    display: none;
+    margin-bottom: .5rem;
+    color: #486454;
+    font-size: .8125rem;
+    font-weight: 600;
+}
+
+@media (max-width: 767.98px) {
+    .admin-mobile-sort-headings,
+    .admin-mobile-status-guide {
+        display: block;
+    }
+}
+
+@media (max-width: 1199.98px) {
+    .admin-mobile-sort-headings--batch,
+    .admin-mobile-status-guide--batch {
+        display: block;
+    }
+}
+
+.admin-body.admin-compact .admin-mobile-sort-headings,
+.admin-body.admin-compact .admin-mobile-status-guide {
+    display: block;
+}
+
+@media print {
+    .admin-mobile-sort-headings,
+    .admin-status-info,
+    .admin-mobile-status-guide {
+        display: none !important;
+    }
+
+    .admin-sort-heading::after {
+        content: none;
+    }
+}

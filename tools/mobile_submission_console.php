@@ -1,6 +1,6 @@
 <?php
-require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . 'db.php';
-require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . 'mobile_submission_console_control.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/mobile_submission_console_control.php';
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);

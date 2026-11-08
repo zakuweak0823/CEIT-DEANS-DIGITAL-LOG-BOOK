@@ -63,7 +63,7 @@ function ensure_super_admin()
     ensure_admin();
     if (($_SESSION['admin_role'] ?? '') !== 'super_admin') {
         http_response_code(403);
-        exit('Super Admin access is required to manage administrator accounts.');
+        exit('Super Admin access is required.');
     }
 }
 

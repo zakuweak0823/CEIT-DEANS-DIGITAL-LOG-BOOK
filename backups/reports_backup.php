@@ -1,6 +1,6 @@
 <?php
-require_once 'auth.php';
-require_once 'db.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
 ensure_admin();
 
 $reportType = isset($_GET['report_type']) && is_string($_GET['report_type']) ? $_GET['report_type'] : '';
@@ -112,7 +112,7 @@ function reportTitle(string $type): string
     return 'Report Preview';
 }
 ?>
-<?php include 'header.php'; ?>
+<?php include __DIR__ . '/../includes/header.php'; ?>
 <style>
 .report-page .report-stat {
     position: relative;
@@ -1126,4 +1126,4 @@ document.querySelectorAll('.date-preset').forEach(function (button) {
     });
 });
 </script>
-<?php include 'footer.php'; ?>
+<?php include __DIR__ . '/../includes/footer.php'; ?>

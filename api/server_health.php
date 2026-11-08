@@ -9,7 +9,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'GET') {
     exit;
 }
 
-require_once 'db.php';
+require_once __DIR__ . '/../includes/db.php';
 
 $statement = false;
 try {

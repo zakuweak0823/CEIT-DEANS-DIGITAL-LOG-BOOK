@@ -52,9 +52,9 @@ all served from a single XAMPP folder.
 ┌───────────────────────────────────────────────────────────────────────────┐
 │                      Apache (XAMPP) on the host computer                  │
 │                                                                           │
-│  .htaccess  ─── rewrites clean URLs ───┐                                  │
+│  .htaccess  ─── rewrites public URLs ──┐                                  │
 │                                        ▼                                  │
-│  router.php (PHP built-in server only) ── resolves clean URLs             │
+│  includes/router.php ── resolves public URLs for both servers            │
 │                                        │                                  │
 │  auth.php ── session + CSRF + role    │      document_tracking.php        │
 │  db.php   ── connection + safe_query ─┼──►   batch_support.php            │
@@ -97,11 +97,11 @@ can only ever read a limited status subset from the tracker page.
 | --- | --- |
 | `includes/db.php` | Opens the MySQLi connection (`dit_logbook`, UTF-8 `utf8mb4`), defines `safe_query()`, `safe_scalar()`, phone validation, and the **database-down recovery page**. |
 | `includes/auth.php` | Starts the session with hardened cookie flags, exposes `ensure_admin()`, `ensure_super_admin()`, `verify_csrf_request()`, `csrf_token()`, `sanitize()`, `show_alert()`. |
-| `router.php` | Router used **only** by PHP's built-in server (`php -S`). Apache uses `.htaccess` instead. |
-| `.htaccess` | Apache rewrite rules for extension-free URLs and the `document-tracker` alias. |
+| `includes/router.php` | Shared dispatcher for Apache and PHP's built-in server (`php -S`). |
+| `.htaccess` | Apache access restrictions and rewrites public page and API URLs to `includes/router.php`. |
 | `includes/header.php` / `includes/footer.php` | Shared layout, sidebar, page titles, live status widgets. `header.php` reads `SCRIPT_FILENAME` (set by the router) so navigation highlighting works with clean URLs. |
-| `pages/` | Admin page and public tracker implementations. Root-level PHP shims preserve the existing browser routes and form targets. |
-| `api/` | JSON and AJAX endpoint implementations. Root-level PHP shims preserve the mobile API, activity, health-check, and message-composer URLs. |
+| `pages/` | Admin page and public tracker implementations. The router preserves existing browser routes and form targets. |
+| `api/` | JSON and AJAX endpoint implementations. The router preserves the mobile API, activity, health-check, and message-composer URLs. |
 | `includes/` | Shared PHP runtime and domain helpers, including database, authentication, tracking, reporting, SMS, and workflow support. |
 | `api/mobile-api.php` | The JSON API used by the mobile client, exposed at the existing root URL `mobile-api.php`. |
 | `pages/document_tracker.php` | Public, mobile-friendly status page (reads via `mobile-api.php`). |
@@ -114,12 +114,11 @@ can only ever read a limited status subset from the tracker page.
 | `mobile-ui/` | React/Vite mobile client + Capacitor Android project. |
 | `start-office-server.bat` → `tools/start-office-server.ps1` | Windows launcher: starts XAMPP, adds a Private-only firewall rule, prints LAN URLs. |
 
-> **Compatibility:** XAMPP still serves the project root. Thin root-level PHP
-> entrypoint shims keep existing clean routes, direct API URLs, and form
-> endpoints working; implementations live in `pages/`, `api/`, and `includes/`.
-> The shims set the project root as the working directory for legacy
-> root-relative PHP includes. This source organization improves maintainability,
-> not request throughput by itself.
+> **Compatibility:** XAMPP still serves the project root. The shared router
+> keeps existing clean routes, direct API URLs, and form endpoints working;
+> implementations live in `pages/`, `api/`, and `includes/`. External PHP
+> scripts that included root helper wrappers must use `includes/` instead.
+> This source organization improves maintainability, not request throughput.
 
 ---
 
@@ -133,27 +132,26 @@ There are two serving modes, and they must behave identically.
 GET /DIT-LOGBOOK_RETRY/incoming
         │
         ▼
-.htaccess
-  RewriteCond ... (GET/HEAD only)
-  RewriteRule ^(dashboard|...|incoming|...)/?$  $1.php  [END]
+.htaccess  ── rewrites the public route to includes/router.php
         │
         ▼
-incoming.php  (SCRIPT_NAME = /DIT-LOGBOOK_RETRY/incoming.php)
+includes/router.php  ── loads pages/incoming.php
+  (SCRIPT_NAME = /DIT-LOGBOOK_RETRY/incoming.php)
 ```
 
-1. **Canonical redirect:** if someone types `incoming.php`, `.htaccess` sends a
+1. **Canonical redirect:** if someone types `incoming.php`, the router sends a
    `302` to `/incoming` — but **only for GET/HEAD**. POSTs are never redirected,
    so form submissions keep their body.
 2. **Alias:** `document-tracker` maps to `document_tracker.php`.
 3. **Root:** `/` redirects to `dashboard`.
 
-### 3b. PHP built-in server (`php -S ... router.php`)
+### 3b. PHP built-in server (`php -S ... includes/router.php`)
 
-`router.php` mirrors the same rules in PHP:
+The same `includes/router.php` dispatches requests:
 
 1. Redirect `*.php` GET/HEAD requests to their clean path.
 2. Resolve `document-tracker` → `document_tracker.php`.
-3. Only allow an **explicit allow-list** of pages (`$adminPages` + `users`).
+3. Only dispatch an **explicit allow-list** of pages and API endpoints.
    Unknown pages return `404` — never an arbitrary PHP file.
 4. Before including the target script it rewrites
    `$_SERVER['SCRIPT_FILENAME']` and `$_SERVER['SCRIPT_NAME']`.
@@ -164,7 +162,7 @@ incoming.php  (SCRIPT_NAME = /DIT-LOGBOOK_RETRY/incoming.php)
 > this, clean URLs would highlight nothing.
 
 `... return false;` in the router lets the built-in server serve real static
-files (CSS, JS, images, and `mobile-api.php`) directly.
+files (CSS, JS, and images) directly. API URLs are dispatched by the router.
 
 ---
 
@@ -342,20 +340,19 @@ so two staff members clicking at the same moment cannot both "win".
 | --- | --- |
 | Incoming | Priority first, then oldest first (FIFO) |
 | Outgoing | `For Release` first, oldest first; then `Released`, newest first. A sort control switches to newest first |
-| Bulk papers | Priority first, then newest |
+| Bulk papers | Released batches last; within each group, priority first, then oldest open batches first |
 
 **Why FIFO:** the office queue should surface the longest-waiting item, not the
-newest. Priority is a separate flag (Faculty submissions), so it is applied as a
+newest. Priority is a separate staff-controlled flag for any submitter, so it is applied as a
 first sort key instead of changing `date_created`.
 
 ### 5.6 Priority
 
 `UPDATE documents SET is_priority = IF(is_priority=1,0,1) WHERE doc_id = ? AND
-type='Incoming' AND submitter_type='Faculty'`
+type='Incoming'`
 
-> **Why Faculty only:** the toggle is deliberately enforced in SQL, so a
-> crafted POST cannot mark a Student submission as priority. Affected rows `0`
-> produces the "Priority is available only for faculty submissions" warning.
+Staff can set priority for Student, Faculty, or Other submissions. Bulk
+priority updates also synchronize the flag on linked documents.
 
 ---
 
@@ -735,7 +732,7 @@ Trigger (outgoing "Notify client", sms.php manual send, mobile notify_client)
 send_logged_sms($conn, $recipient, $message)
   ├─ trim, normalise recipient            → length 7…15
   ├─ ensure_sms_provider_tracking_schema()
-  ├─ sms_enabled setting = 0?             → log Failed, return
+  ├─ server SMS configuration disabled?   → log Failed, return
   ├─ API token missing?                   → log Failed, return
   ├─ POST https://dashboard.philsms.com/api/v3/sms/send
   │     { recipient, sender_id, type, message }
@@ -756,9 +753,8 @@ send_logged_sms($conn, $recipient, $message)
 > `Delivered` would be a lie; writing `Pending` and telling the operator *not to
 > resend yet* prevents duplicate SMS charges.
 
-> **Why gate on `sms_enabled`:** it lets an administrator disable outbound
-> messages instantly (e.g. during a provider outage or credit exhaustion)
-> without touching credentials.
+> **Why gate on `enabled`:** a server administrator can disable outbound
+> messages without changing credentials by updating the private SMS config.
 
 Browser-side notifications are separate: activity polling, sounds, and
 top-of-screen submission alerts are per-browser preferences stored locally, not
@@ -827,7 +823,7 @@ always include every matching record**, not just the current page.
 
 ## 13. Settings and configuration flow
 
-All system-wide settings live in one key/value table:
+Portal-managed system-wide settings live in one key/value table:
 
 | `key_name` | Type | Consumed by |
 | --- | --- | --- |
@@ -838,10 +834,13 @@ All system-wide settings live in one key/value table:
 | `intake_confirmation_mode` | string | `batch_support.php` |
 | `mobile_form_labels` | JSON | `mobile_form_settings.php` |
 | `mobile_app_settings` | JSON | `mobile_app_settings.php` |
-| `philsms_api_token`, `philsms_sender_id`, `sms_enabled` | string | `sms_service.php` |
 
 Writes use `INSERT … ON DUPLICATE KEY UPDATE` so a missing row is created on
 first save.
+
+SMS configuration instead uses a private server-side file, with environment
+variables supported as a fallback; see the README for migration and setup.
+SMTP delivery is not implemented.
 
 **Two kinds of preference — don't mix them up:**
 
@@ -920,7 +919,7 @@ Several entry points call **idempotent** migration helpers on every request:
 | Public data | Tracker returns an allow-listed field set | `mobile-api.php` |
 | Tokens | 32 random bytes, SHA-256 digests for API tokens | `document_tracking.php`, API |
 | Destructive actions | Confirm dialog / two text phrases | UI, CMD log |
-| Routing | Explicit allow-list, no arbitrary includes | `router.php`, `.htaccess` |
+| Routing | Explicit allow-list, no arbitrary includes | `includes/router.php`, `.htaccess` |
 | Files | `database/.htaccess` blocks direct SQL access | `database/` |
 | Network | Firewall rule Private-only | `start-office-server.ps1` |
 | Caching | `Cache-Control: no-store` on live endpoints | API, health |
@@ -977,7 +976,7 @@ This is the section to read before debugging anything.
 
 | # | Situation | Workaround in the code | Why it is needed |
 | --- | --- | --- | --- |
-| 1 | Clean URLs without a framework | `.htaccess` for Apache, `router.php` for `php -S` | The app must run both from XAMPP and from the built-in server |
+| 1 | Clean URLs without a framework | `.htaccess` for Apache, `includes/router.php` for `php -S` | The app must run both from XAMPP and from the built-in server |
 | 2 | Active sidebar link with clean URLs | Router rewrites `SCRIPT_FILENAME` | `header.php` keys navigation off the real script name |
 | 3 | Folder rename without code edits | Link base built from `dirname(SCRIPT_NAME)` / `HTTP_HOST` | The project may live at any `htdocs/<name>` |
 | 4 | Phone camera needs HTTPS | `npm run dev:lan` generates a host CA + IP-matched cert | Browsers refuse `getUserMedia()` on plain HTTP |
@@ -1104,7 +1103,7 @@ Staff      batch_papers.php               DB
 | **Reference** | Human-facing `DIT-000123`, derived from `doc_id` |
 | **SLA / overdue** | Configurable day thresholds per direction and for loans |
 | **Prepare for Release** | Incoming → Outgoing transition |
-| **Priority** | Faculty-only submission flag that floats to the top of a list |
+| **Priority** | Staff-controlled submission flag, available for any submitter, that floats to the top of the default list |
 | **Safe query** | `safe_query()` — a prepared statement wrapper that always closes on failure |
 | **Recovery page** | Styled 503 page with automatic health polling |
 | **Compact Mode** | Phone-style admin layout available on any screen size |

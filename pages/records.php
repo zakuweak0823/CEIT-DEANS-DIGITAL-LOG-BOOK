@@ -1,6 +1,6 @@
 <?php
-require_once 'auth.php';
-require_once 'db.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
 ensure_admin();
 
 $search = trim($_GET['search'] ?? '');
@@ -17,7 +17,7 @@ if ($search !== '') {
 mysqli_stmt_execute($stmt);
 $result = mysqli_stmt_get_result($stmt);
 ?>
-<?php include 'header.php'; ?>
+<?php include __DIR__ . '/../includes/header.php'; ?>
 <style>
 .records-search-form {
     flex: 0 1 22rem;
@@ -86,4 +86,4 @@ $result = mysqli_stmt_get_result($stmt);
         </div>
     </div>
 </div>
-<?php include 'footer.php'; ?>
+<?php include __DIR__ . '/../includes/footer.php'; ?>

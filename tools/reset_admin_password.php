@@ -5,7 +5,7 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 
-require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/../includes/db.php';
 
 $username = trim((string)($argv[1] ?? ''));
 if ($username === '') {

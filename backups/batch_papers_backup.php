@@ -1,8 +1,8 @@
 <?php
-require_once 'auth.php';
-require_once 'db.php';
-require_once 'batch_support.php';
-require_once 'mobile_form_settings.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/batch_support.php';
+require_once __DIR__ . '/../includes/mobile_form_settings.php';
 ensure_admin();
 
 $mobileFormLabels = get_mobile_form_labels($conn);
@@ -626,7 +626,7 @@ if (!$setupError) {
 }
 
 ?>
-<?php include 'header.php'; ?>
+<?php include __DIR__ . '/../includes/header.php'; ?>
 <?php
 $isEmbeddedBatchAction = ($_GET['embed'] ?? '') === '1';
 $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
@@ -1803,4 +1803,4 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 </script>
-<?php include 'footer.php'; ?>
+<?php include __DIR__ . '/../includes/footer.php'; ?>

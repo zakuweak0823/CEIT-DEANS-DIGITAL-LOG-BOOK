@@ -1,6 +1,6 @@
 <?php
-require_once 'auth.php';
-require_once 'db.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
 ensure_admin();
 
 $conn->query('ALTER TABLE borrowed_items ADD COLUMN IF NOT EXISTS borrower_phone VARCHAR(20) DEFAULT NULL');
@@ -163,7 +163,7 @@ if ($stmt !== false) {
     mysqli_stmt_close($stmt);
 }
 ?>
-<?php include 'header.php'; ?>
+<?php include __DIR__ . '/../includes/header.php'; ?>
 <div class="row g-4">
     <div class="col-12">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3">
@@ -213,13 +213,13 @@ if ($stmt !== false) {
                 </form>
                 <!-- Shared table styling keeps row separators without vertical cell gridlines. -->
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
+                    <table class="table table-hover align-middle mb-0" data-status-guide="borrowed">
                         <thead class="table-light">
                             <tr>
                                 <th>Item</th>
                                 <th>Category</th>
                                 <th>Borrower</th>
-                                <th>Dates</th>
+                                <th>Date borrowed</th>
                                 <th>Status</th>
                                 <th>Actions</th>
                             </tr>
@@ -238,7 +238,7 @@ if ($stmt !== false) {
                                                 <small class="text-muted"><?php echo sanitize($itemRow['borrower_phone']); ?></small>
                                             <?php endif; ?>
                                         </td>
-                                        <td class="small">
+                                        <td class="small" data-sort-value="<?php echo sanitize($itemRow['date_borrowed']); ?>">
                                             <div><span class="text-muted">Date borrowed</span> <?php echo sanitize(date('M j, Y', strtotime($itemRow['date_borrowed']))); ?></div>
                                             <?php if (!empty($itemRow['returned_date'])): ?>
                                                 <div class="text-success"><span>Returned</span> <?php echo sanitize(date('M j, Y', strtotime($itemRow['returned_date']))); ?></div>
@@ -375,22 +375,6 @@ if ($stmt !== false) {
     </div>
 </div>
 
-<script>
-function editItem(id, item, borrower, borrowerPhone, categoryId) {
-    document.getElementById('editId').value = id;
-    document.getElementById('editItem').value = item;
-    document.getElementById('editBorrower').value = borrower;
-    document.getElementById('editBorrowerPhone').value = borrowerPhone;
-    document.getElementById('editCategory').value = categoryId || '';
-    new bootstrap.Modal(document.getElementById('editModal')).show();
-}
+<script src="assets/js/page-borrowed.js?v=<?php echo (int)@filemtime(dirname(__DIR__) . '/assets/js/page-borrowed.js'); ?>"></script>
 
-document.addEventListener('DOMContentLoaded', function () {
-    const addModal = document.getElementById('borrowedForm');
-    if (addModal.dataset.openOnLoad === 'true') {
-        new bootstrap.Modal(addModal).show();
-    }
-});
-</script>
-
-<?php include 'footer.php'; ?>
+<?php include __DIR__ . '/../includes/footer.php'; ?>

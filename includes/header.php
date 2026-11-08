@@ -23,7 +23,7 @@ $pageTitles = [
     'borrowed.php' => 'Borrowed Items',
     'item_categories.php' => 'Item Categories',
     'sms.php' => 'SMS Logs',
-    'notification_settings.php' => 'Communication Settings',
+    'notification_settings.php' => 'Communication Services',
     'settings.php' => 'Settings',
     'users.php' => 'Administrator accounts',
     'reports.php' => 'Reports',
@@ -79,6 +79,7 @@ if ($adminName && isset($conn) && function_exists('safe_query')) {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <!-- The version follows the file's modified time so style changes always bypass stale browser caches. -->
     <link rel="stylesheet" href="assets/css/style.css?v=<?php echo (int)@filemtime(dirname(__DIR__) . '/assets/css/style.css'); ?>">
+    <link rel="stylesheet" href="assets/css/admin-enhancements.css?v=<?php echo (int)@filemtime(dirname(__DIR__) . '/assets/css/admin-enhancements.css'); ?>">
     <?php if ($currentPage === 'dashboard.php'): ?>
     <link rel="stylesheet" href="assets/css/dashboard.css?v=<?php echo (int)@filemtime(dirname(__DIR__) . '/assets/css/dashboard.css'); ?>">
     <?php endif; ?>
@@ -178,7 +179,6 @@ try {
             <a href="item_categories" class="sidebar-link<?php echo $sidebarActiveClass('item_categories.php'); ?>"<?php echo $currentPage === 'item_categories.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-tags me-2"></i>Item Categories</a>
             <div class="sidebar-section text-uppercase fw-semibold text-muted mt-4 mb-2">Communication</div>
             <a href="sms" class="sidebar-link<?php echo $sidebarActiveClass('sms.php'); ?>"<?php echo $currentPage === 'sms.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots me-2"></i>SMS Logs</a>
-            <a href="notification_settings" class="sidebar-link<?php echo $sidebarActiveClass('notification_settings.php'); ?>"<?php echo $currentPage === 'notification_settings.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots me-2"></i>Communication Settings</a>
             <div class="sidebar-section text-uppercase fw-semibold text-muted mt-4 mb-2">Reports</div>
             <a href="reports?report_type=All%20Reports&amp;generate=1" class="sidebar-link<?php echo $isDocumentReportActive ? ' active' : ''; ?>"<?php echo $isDocumentReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-file-earmark-text me-2"></i>All Reports</a>
             <a href="reports?report_type=Bulk%20Reports&amp;generate=1" class="sidebar-link<?php echo $isBulkReportActive ? ' active' : ''; ?>"<?php echo $isBulkReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-files me-2"></i>Bulk Reports</a>
@@ -277,7 +277,6 @@ try {
                                         <a href="borrowed"<?php echo $currentPage === 'borrowed.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-seam" aria-hidden="true"></i><span>Borrowed Items</span></a>
                     <a href="item_categories"<?php echo $currentPage === 'item_categories.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-tags" aria-hidden="true"></i><span>Categories</span></a>
                     <a href="sms"<?php echo $currentPage === 'sms.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots" aria-hidden="true"></i><span>SMS logs</span></a>
-                    <a href="notification_settings"<?php echo $currentPage === 'notification_settings.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots" aria-hidden="true"></i><span>Communication</span></a>
                     <a href="reports?report_type=All%20Reports&amp;generate=1"<?php echo $isDocumentReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-file-earmark-bar-graph" aria-hidden="true"></i><span>All Reports</span></a>
                     <a href="reports?report_type=Bulk%20Reports&amp;generate=1"<?php echo $isBulkReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-files" aria-hidden="true"></i><span>Bulk Reports</span></a>
                     <a href="settings"<?php echo $currentPage === 'settings.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-gear" aria-hidden="true"></i><span>Settings</span></a>
@@ -309,7 +308,6 @@ try {
                     <a href="item_categories" class="sidebar-link<?php echo $currentPage === 'item_categories.php' ? ' active' : ''; ?>"<?php echo $currentPage === 'item_categories.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-tags me-2"></i>Item Categories</a>
                     <div class="sidebar-section text-uppercase fw-semibold text-muted mt-4 mb-2">Communication</div>
                     <a href="sms" class="sidebar-link<?php echo $sidebarActiveClass('sms.php'); ?>"<?php echo $currentPage === 'sms.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots me-2"></i>SMS Logs</a>
-                    <a href="notification_settings" class="sidebar-link<?php echo $sidebarActiveClass('notification_settings.php'); ?>"<?php echo $currentPage === 'notification_settings.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots me-2"></i>Communication Settings</a>
                     <div class="sidebar-section text-uppercase fw-semibold text-muted mt-4 mb-2">Reports</div>
                     <a href="reports?report_type=All%20Reports&amp;generate=1" class="sidebar-link<?php echo $isDocumentReportActive ? ' active' : ''; ?>"<?php echo $isDocumentReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-file-earmark-text me-2"></i>All Reports</a>
                     <a href="reports?report_type=Bulk%20Reports&amp;generate=1" class="sidebar-link<?php echo $isBulkReportActive ? ' active' : ''; ?>"<?php echo $isBulkReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-files me-2"></i>Bulk Reports</a>

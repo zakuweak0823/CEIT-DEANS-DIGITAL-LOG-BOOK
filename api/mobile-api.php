@@ -14,14 +14,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-require_once 'db.php';
-require_once 'sms_service.php';
-require_once 'batch_support.php';
-require_once 'mobile_form_settings.php';
-require_once 'mobile_app_settings.php';
-require_once 'document_tracking.php';
-require_once 'requirements_support.php';
-require_once 'message_composer.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/sms_service.php';
+require_once __DIR__ . '/../includes/batch_support.php';
+require_once __DIR__ . '/../includes/mobile_form_settings.php';
+require_once __DIR__ . '/../includes/mobile_app_settings.php';
+require_once __DIR__ . '/../includes/document_tracking.php';
+require_once __DIR__ . '/../includes/requirements_support.php';
+require_once __DIR__ . '/../includes/message_composer.php';
+require_once __DIR__ . '/../includes/login_support.php';
 
 // Initialize incremental schema additions before serving any mobile action.
 try {
@@ -57,13 +58,31 @@ try {
     exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'document_tracker_status') {
+if ($_SERVER['REQUEST_METHOD'] === 'GET'
+    && in_array($_GET['action'] ?? '', ['document_tracker_status', 'document_tracker_session_status'], true)) {
     if (!$documentTrackingSettings['enabled']) {
         http_response_code(503);
         echo json_encode(['success' => false, 'message' => 'Document tracking is currently unavailable']);
         exit;
     }
-    $trackingToken = trim((string)($_GET['token'] ?? ''));
+    if ($_GET['action'] === 'document_tracker_session_status') {
+        if (array_key_exists('token', $_GET)) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Invalid document tracking request']);
+            exit;
+        }
+        require_once __DIR__ . '/../includes/tracker_session.php';
+        try {
+            $trackingToken = tracker_session_token($conn, 'document');
+        } catch (Throwable $error) {
+            error_log('Document tracker session verification failed: ' . $error->getMessage());
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Document tracking access could not be verified']);
+            exit;
+        }
+    } else {
+        $trackingToken = trim((string)($_GET['token'] ?? ''));
+    }
     if (preg_match('/^[a-f0-9]{64}$/', $trackingToken) !== 1) {
         http_response_code(404);
         echo json_encode(['success' => false, 'message' => 'This tracking QR code is invalid or was not issued by this office']);
@@ -232,35 +251,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $input['action'] ?? '';
 
     if ($action === 'login') {
-        $username = trim($input['username'] ?? '');
+        $username = is_string($input['username'] ?? null) ? trim($input['username']) : '';
         $password = $input['password'] ?? '';
-        $stmt = safe_query($conn, 'SELECT user_id, password, role FROM users WHERE username = ?', 's', [$username]);
-        $user = null;
-        if ($stmt !== false) {
-            $result = mysqli_stmt_get_result($stmt);
-            $user = mysqli_fetch_assoc($result) ?: null;
-            mysqli_stmt_close($stmt);
-        }
-
-        $passwordValid = $user && in_array($user['role'], ['admin', 'super_admin'], true) && (
-            password_verify($password, $user['password']) || hash_equals($user['password'], $password)
-        );
-        if (!$passwordValid) {
-            http_response_code(401);
-            echo json_encode(['success' => false, 'message' => 'Invalid username or password']);
+        if ($username === '' || !is_string($password) || $password === '') {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Enter a username and password']);
             exit;
         }
-
-        if (!password_verify($password, $user['password'])) {
-            $passwordHash = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = safe_query($conn, 'UPDATE users SET password = ? WHERE user_id = ?', 'si', [$passwordHash, $user['user_id']]);
-            if ($stmt === false) {
-                http_response_code(500);
-                echo json_encode(['success' => false, 'message' => 'Could not secure the account password']);
-                exit;
-            }
-            mysqli_stmt_close($stmt);
+        try {
+            $login = authenticate_admin_login($conn, $username, $password);
+        } catch (Throwable $error) {
+            error_log('Mobile administrator login failed: ' . $error->getMessage());
+            http_response_code(503);
+            echo json_encode(['success' => false, 'message' => 'Sign-in is temporarily unavailable']);
+            exit;
         }
+        if ($login['status'] !== 'success') {
+            http_response_code($login['status'] === 'locked' ? 429 : 401);
+            echo json_encode(['success' => false, 'message' => $login['status'] === 'locked'
+                ? 'Too many failed sign-in attempts. Please wait 15 minutes after the fifth attempt and try again.'
+                : 'Invalid username or password']);
+            exit;
+        }
+        $user = $login['user'];
 
         // Only the raw token is returned once; the database stores its SHA-256 digest.
         $token = bin2hex(random_bytes(32));
@@ -890,32 +903,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $today = date('Y-m-d');
 $monthStart = date('Y-m-01');
 
-function fetch_scalar(mysqli $conn, string $query, string $types = '', array $params = []) {
-    $stmt = mysqli_prepare($conn, $query);
-    if ($types !== '') {
-        mysqli_stmt_bind_param($stmt, $types, ...$params);
-    }
-    mysqli_stmt_execute($stmt);
-    mysqli_stmt_bind_result($stmt, $value);
-    mysqli_stmt_fetch($stmt);
-    mysqli_stmt_close($stmt);
-    return $value ?: 0;
-}
-
-function fetch_rows(mysqli $conn, string $query, string $types = '', array $params = []) {
-    $stmt = mysqli_prepare($conn, $query);
-    if ($types !== '') {
-        mysqli_stmt_bind_param($stmt, $types, ...$params);
-    }
-    mysqli_stmt_execute($stmt);
-    $result = mysqli_stmt_get_result($stmt);
-    $rows = [];
-    while ($row = mysqli_fetch_assoc($result)) {
-        $rows[] = $row;
-    }
-    mysqli_stmt_close($stmt);
-    return $rows;
-}
+require_once __DIR__ . '/../includes/mobile_dashboard_queries.php';
 
 $dashboard = [
     'incomingToday' => fetch_scalar($conn, "SELECT COUNT(*) FROM documents WHERE type = 'Incoming' AND DATE(date_created) = ?", 's', [$today]),
@@ -960,7 +948,7 @@ $response = [
     'dashboard' => $dashboard,
     'smsSummary' => $smsSummary,
     'systemOverview' => $systemOverview,
-    'documentStatuses' => fetch_rows($conn, "SELECT status, COUNT(*) AS count FROM documents GROUP BY status ORDER BY status"),
+    'documentStatuses' => fetch_rows($conn, "SELECT status, COUNT(*) AS count FROM documents WHERE date_created >= ? AND date_created < DATE_ADD(?, INTERVAL 1 DAY) GROUP BY status ORDER BY status", 'ss', [$today, $today]),
     'recentDocuments' => fetch_rows($conn, "SELECT doc_id AS id, CONCAT('DIT-', LPAD(doc_id, 6, '0')) AS reference, date_created AS date, type, sender, submitter_name AS submitterName, recipient, client_phone AS clientPhone, subject AS details, remarks, CONCAT(sender, ' / ', recipient) AS fromTo, status, submitter_type AS submitterType, is_priority AS isPriority FROM documents ORDER BY date_created DESC LIMIT 50"),
     'recentBatches' => fetch_rows($conn, "SELECT b.batch_id AS id, b.batch_code AS batchCode, b.document_type AS documentType, b.batch_type AS batchType, b.status, b.batch_date AS batchDate, b.sender_type AS senderType, b.submitter_name AS submitterName, b.recipient, b.recipient_contact_type AS recipientContactType, b.remarks, b.paper_count AS paperCount, b.document_pages AS documentPages, b.received_paper_count AS receivedPaperCount, b.intake_expected_count AS intakeExpectedCount, b.received_at AS receivedAt, b.is_priority AS isPriority FROM document_batches b ORDER BY b.is_priority DESC, b.batch_date DESC, b.batch_id DESC LIMIT 20"),
     'borrowedItems' => fetch_rows($conn, "SELECT item_id AS id, item_name AS item, borrower, DATE(date_borrowed) AS borrowed, DATE(returned_date) AS returned, CASE WHEN status = 'Returned' THEN 'Returned' ELSE 'Borrowed' END AS status FROM borrowed_items ORDER BY date_borrowed DESC LIMIT 5"),

@@ -1,9 +1,9 @@
 <?php
-require_once 'auth.php';
-require_once 'db.php';
-require_once 'batch_support.php';
-require_once 'mobile_form_settings.php';
-require_once 'sla_support.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/batch_support.php';
+require_once __DIR__ . '/../includes/mobile_form_settings.php';
+require_once __DIR__ . '/../includes/sla_support.php';
 ensure_admin();
 
 $mobileFormLabels = get_mobile_form_labels($conn);
@@ -90,9 +90,7 @@ function render_batch_status_form(array $batch, array $settings, bool $fullWidth
                 <?php if ($blocked): ?>
                     disabled title="Confirm receipt using Scan CEIT QR before moving this bulk submission to For Release."
                 <?php else: ?>
-                    data-confirm-title="<?php echo $isForRelease ? 'Mark bulk submission as Released?' : 'Move bulk submission to For Release?'; ?>"
-                    data-confirm-message="<?php echo $isForRelease ? 'This will mark the bulk submission and its linked documents as Released.' : 'This will move the bulk submission and its linked documents to For Release.'; ?>"
-                    data-confirm-button="<?php echo $isForRelease ? 'Released' : 'For Release'; ?>"
+                    data-status-details="<?php echo $isForRelease ? 'Released' : 'For Release'; ?>"
                 <?php endif; ?>
             <?php endif; ?>>
             <i class="bi <?php echo $isForRelease ? 'bi-check2-circle' : 'bi-box-arrow-up-right'; ?> me-1" aria-hidden="true"></i>
@@ -437,7 +435,9 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['batch_flash'] = show_alert('Select a valid batch.', 'danger');
         } else {
             try {
+                $statusNote = status_history_note($_POST['status_note'] ?? null);
                 $conn->begin_transaction();
+                $historyMarker = status_history_marker($conn);
                 $stmt = safe_query($conn, 'SELECT status, paper_count, received_at FROM document_batches WHERE batch_id = ? FOR UPDATE', 'i', [$batchId]);
                 if ($stmt === false) {
                     throw new RuntimeException('Could not verify the bulk submission status.');
@@ -493,16 +493,8 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new RuntimeException('Could not update the bulk submission status.');
                 }
                 mysqli_stmt_close($stmt);
-                $stmt = safe_query(
-                    $conn,
-                    'UPDATE documents d INNER JOIN batch_papers p ON p.doc_id = d.doc_id SET d.status = ? WHERE p.batch_id = ?',
-                    'si',
-                    [$nextStatus, $batchId]
-                );
-                if ($stmt === false) {
-                    throw new RuntimeException('Could not update the linked document statuses.');
-                }
-                mysqli_stmt_close($stmt);
+                status_history_set_note($conn, 'batch_id', $batchId, $nextStatus, $statusNote, $historyMarker);
+                status_history_update_batch_documents($conn, $batchId, $nextStatus, $statusNote, $historyMarker);
                 $conn->commit();
                 $_SESSION['batch_flash'] = show_alert(
                     $confirmsReceipt
@@ -525,7 +517,9 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['batch_flash'] = show_alert('Select a valid status.', 'danger');
         } else {
             try {
+                $statusNote = status_history_note($_POST['status_note'] ?? null);
                 $conn->begin_transaction();
+                $historyMarker = status_history_marker($conn);
                 $stmt = safe_query($conn, 'SELECT status, received_at FROM document_batches WHERE batch_id = ? FOR UPDATE', 'i', [$batchId]);
                 if ($stmt === false) {
                     throw new RuntimeException('Could not verify the bulk submission status.');
@@ -538,21 +532,14 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!in_array($currentBatch['status'], doc_status_incoming(), true)) {
                     throw new DomainException('This bulk submission is already released and its status can no longer be changed here.');
                 }
+                if ($currentBatch['status'] === $newStatus) throw new DomainException('The bulk submission already has that status.');
                 $stmt = safe_query($conn, 'UPDATE document_batches SET status = ? WHERE batch_id = ?', 'si', [$newStatus, $batchId]);
                 if ($stmt === false) {
                     throw new RuntimeException('Could not update the bulk submission status.');
                 }
                 mysqli_stmt_close($stmt);
-                $stmt = safe_query(
-                    $conn,
-                    'UPDATE documents d INNER JOIN batch_papers p ON p.doc_id = d.doc_id SET d.status = ? WHERE p.batch_id = ?',
-                    'si',
-                    [$newStatus, $batchId]
-                );
-                if ($stmt === false) {
-                    throw new RuntimeException('Could not update the linked document statuses.');
-                }
-                mysqli_stmt_close($stmt);
+                status_history_set_note($conn, 'batch_id', $batchId, $newStatus, $statusNote, $historyMarker);
+                status_history_update_batch_documents($conn, $batchId, $newStatus, $statusNote, $historyMarker);
                 $conn->commit();
                 $_SESSION['batch_flash'] = show_alert('Status updated to ' . $newStatus . '.');
             } catch (Throwable $error) {
@@ -599,7 +586,7 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                         [$requestedPriority, $batchId]
                     );
                     if ($stmt === false) {
-                        throw new RuntimeException('Could not update the linked faculty document priority.');
+                        throw new RuntimeException('Could not update the linked document priority.');
                     }
                     mysqli_stmt_close($stmt);
                     $conn->commit();
@@ -933,7 +920,7 @@ if (!$setupError) {
 }
 
 ?>
-<?php include 'header.php'; ?>
+<?php include __DIR__ . '/../includes/header.php'; ?>
 <?php
 $isEmbeddedBatchAction = ($_GET['embed'] ?? '') === '1';
 $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
@@ -1062,10 +1049,10 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                     $submitterText = trim((string)($batch['submitter_name'] ?? ''));
                                     ?>
                                     <tr>
-                                        <td><?php echo sanitize(date('M j, Y', strtotime($batch['batch_date']))); ?></td>
+                                        <td data-sort-value="<?php echo sanitize($batch['batch_date']); ?>"><?php echo sanitize(date('M j, Y', strtotime($batch['batch_date']))); ?></td>
                                         <td class="fw-semibold"><?php echo batch_text($batch['batch_code']); ?></td>
                                         <td><?php echo batch_text($batch['batch_type']); ?></td>
-                                        <td>
+                                        <td data-sort-value="<?php echo sanitize($submitterText); ?>">
                                             <?php echo batch_text($batch['sender_type']); ?>
                                             <br><small class="text-muted">Submitted by <?php echo $submitterText !== '' ? batch_text($submitterText) : 'Name not recorded'; ?></small>
                                             <br><small class="text-muted"><?php echo $batch['recipient_contact_type'] === 'Unassigned' ? 'Recipient not provided' : batch_text($batch['recipient_contact_type']); ?><?php echo $recipientText !== '' ? ': ' . batch_text($recipientText) : ''; ?></small>
@@ -1089,7 +1076,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                                 <?php if (!empty($batch['is_overdue'])): ?><span class="badge text-bg-danger" title="Past the applicable incoming or outgoing processing time limit">Overdue</span><?php endif; ?>
                                             </div>
                                         </td>
-                                        <td><?php render_batch_priority_form($batch); ?></td>
+                                        <td data-sort-value="<?php echo (int)$batch['is_priority'] === 1 ? 'Priority' : 'Standard'; ?>"><?php render_batch_priority_form($batch); ?></td>
                                         <td class="text-center"><?php render_batch_qr_button($batch); ?></td>
                                         <td>
                                             <div class="batch-row-actions">
@@ -1257,7 +1244,10 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                     <input class="form-control mb-3" type="number" name="status_received_count" id="statusReceivedCount" min="0" max="9999" inputmode="numeric" required>
                     <label class="form-label fw-semibold" for="statusIntakeNotes">Count difference / condition note</label>
                     <textarea class="form-control" name="status_intake_notes" id="statusIntakeNotes" rows="3" maxlength="1000" placeholder="Required if the received count differs"></textarea>
-                    <p class="form-text mb-0">The receipt and status change are saved together. If the count differs, the note appears on the submitter's receipt.</p>
+                    <p class="form-text">The receipt and status change are saved together. If the count differs, the note appears on the submitter's receipt.</p>
+                    <label class="form-label fw-semibold" for="batchReleaseTrackingNote">Tracking details</label>
+                    <textarea class="form-control" name="status_note" id="batchReleaseTrackingNote" rows="2" maxlength="255" required placeholder="Explain what happens next"></textarea>
+                    <p class="form-text mb-0">Visible to anyone with the tracking link; do not include confidential information.</p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -1376,6 +1366,7 @@ document.addEventListener('DOMContentLoaded', function () {
         releaseCount.value = trigger.dataset.paperCount || '';
         releaseCount.dataset.expectedCount = trigger.dataset.paperCount || '';
         releaseNotes.value = '';
+        document.getElementById('batchReleaseTrackingNote').value = '';
         document.getElementById('confirmBatchReleaseSummary').textContent =
             `${trigger.dataset.batchCode || 'Batch'} · ${trigger.dataset.paperCount || '0'} documents expected`;
         releaseNotes.setCustomValidity('');
@@ -1927,4 +1918,4 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 </script>
-<?php include 'footer.php'; ?>
+<?php include __DIR__ . '/../includes/footer.php'; ?>

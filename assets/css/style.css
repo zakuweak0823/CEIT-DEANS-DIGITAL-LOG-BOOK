@@ -5408,12 +5408,13 @@ body.login-page {
 body.login-page::before {
     position: fixed;
     z-index: -1;
-    inset: -1.5%;
+    inset: -4%;
     background-image:
         linear-gradient(112deg, rgba(8, 34, 23, 0.68), rgba(13, 52, 35, 0.45) 52%, rgba(8, 31, 22, 0.6)),
-        url("../images/bgphoto.jpg");
+        url("../images/bgphoto.png");
     background-position: center;
     background-size: cover;
+    filter: blur(4px);
     content: "";
     animation: login-backdrop-drift 32s ease-in-out infinite alternate;
     will-change: transform;
@@ -5482,13 +5483,19 @@ body.login-page .login-card-brand {
 }
 
 body.login-page .login-card-logo {
-    box-shadow: 0 0 0 5px rgba(35, 101, 63, 0.08), 0 5px 16px rgba(17, 69, 40, 0.12);
-    transition: transform 220ms ease, box-shadow 220ms ease;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    transition: transform 220ms ease;
 }
 
 body.login-page .login-card-brand:hover .login-card-logo {
-    transform: rotate(-5deg) scale(1.04);
-    box-shadow: 0 0 0 6px rgba(35, 101, 63, 0.1), 0 7px 20px rgba(17, 69, 40, 0.17);
+    transform: scale(1.04);
+}
+
+body.login-page .login-panel h1 {
+    font-size: 1.45rem;
 }
 
 body.login-page .login-heading {

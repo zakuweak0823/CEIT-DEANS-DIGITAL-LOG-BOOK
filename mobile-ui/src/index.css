@@ -57,7 +57,7 @@ body::before {
   position: fixed;
   z-index: -1;
   inset: 0;
-  background-image: linear-gradient(rgb(236 253 245 / 42%), rgb(236 253 245 / 42%)), url('./bgphoto.jpg');
+  background-image: linear-gradient(rgb(236 253 245 / 42%), rgb(236 253 245 / 42%)), url('./assets/images/bgphoto.jpg');
   background-position: center;
   background-repeat: no-repeat;
   background-size: 100% 100%, cover;
@@ -123,7 +123,6 @@ body::before {
 }
 
 .mobile-theme-glass .app-header-logo {
-  border-radius: 0.9rem;
   filter: drop-shadow(0 5px 8px rgb(6 78 59 / 0.13));
   animation: glass-logo-arrive 700ms 120ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }

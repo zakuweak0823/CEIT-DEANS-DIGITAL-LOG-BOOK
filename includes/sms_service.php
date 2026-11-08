@@ -165,32 +165,64 @@ function normalize_philsms_api_token($apiToken)
     return trim((string)preg_replace('/^Bearer\s+/i', '', trim((string)$apiToken)));
 }
 
+function sms_provider_config(): array
+{
+    static $config = null;
+    if ($config !== null) {
+        return $config;
+    }
+
+    $configuredPath = getenv('SMS_CONFIG_FILE');
+    $path = $configuredPath !== false && $configuredPath !== ''
+        ? $configuredPath
+        : dirname(__DIR__) . DIRECTORY_SEPARATOR . 'config' . DIRECTORY_SEPARATOR . 'ceit-logbook-sms.ini';
+    if (($configuredPath === false || $configuredPath === '') && !is_file($path)) {
+        $legacyPath = dirname(__DIR__, 3) . DIRECTORY_SEPARATOR . 'ceit-logbook-sms.ini';
+        if (is_file($legacyPath)) $path = $legacyPath;
+    }
+    if (!is_file($path)) {
+        if ($configuredPath !== false && $configuredPath !== '') {
+            error_log('The configured SMS configuration file is missing.');
+            return $config = ['enabled' => false, 'api_token' => '', 'sender_id' => ''];
+        }
+        $enabled = getenv('SMS_ENABLED');
+        if ($enabled !== false && $enabled !== '' && $enabled !== '0' && $enabled !== '1') {
+            error_log('SMS_ENABLED must be set to 1 or 0.');
+        }
+        return $config = [
+            'enabled' => $enabled === '1',
+            'api_token' => normalize_philsms_api_token(getenv('PHILSMS_API_TOKEN') ?: ''),
+            'sender_id' => trim((string)(getenv('PHILSMS_SENDER_ID') ?: 'PhilSMS')),
+        ];
+    }
+
+    $values = parse_ini_file($path, false, INI_SCANNER_RAW);
+    if ($values === false || !isset($values['enabled'], $values['api_token'], $values['sender_id'])
+        || !in_array($values['enabled'], ['0', '1'], true)
+        || !is_string($values['api_token']) || !is_string($values['sender_id'])) {
+        error_log('The SMS configuration file is invalid. Check its syntax and required settings.');
+        return $config = ['enabled' => false, 'api_token' => '', 'sender_id' => ''];
+    }
+    return $config = [
+        'enabled' => $values['enabled'] === '1',
+        'api_token' => normalize_philsms_api_token($values['api_token']),
+        'sender_id' => trim($values['sender_id']),
+    ];
+}
+
 function get_philsms_api_token($conn)
 {
-    $stmt = safe_query($conn, "SELECT value FROM settings WHERE key_name = 'philsms_api_token' LIMIT 1");
-    if ($stmt !== false) {
-        $result = mysqli_stmt_get_result($stmt);
-        $row = $result ? mysqli_fetch_assoc($result) : null;
-        mysqli_stmt_close($stmt);
-        if ($row && trim((string)$row['value']) !== '') {
-            return normalize_philsms_api_token($row['value']);
-        }
-    }
-    return normalize_philsms_api_token(getenv('PHILSMS_API_TOKEN') ?: '');
+    return sms_provider_config()['api_token'];
 }
 
 function get_philsms_sender_id($conn)
 {
-    $stmt = safe_query($conn, "SELECT value FROM settings WHERE key_name = 'philsms_sender_id' LIMIT 1");
-    if ($stmt !== false) {
-        $result = mysqli_stmt_get_result($stmt);
-        $row = $result ? mysqli_fetch_assoc($result) : null;
-        mysqli_stmt_close($stmt);
-        if ($row && trim((string)$row['value']) !== '') {
-            return trim((string)$row['value']);
-        }
-    }
-    return trim((string)(getenv('PHILSMS_SENDER_ID') ?: 'PhilSMS'));
+    return sms_provider_config()['sender_id'];
+}
+
+function sms_delivery_enabled(): bool
+{
+    return sms_provider_config()['enabled'];
 }
 
 function normalize_philsms_recipient($recipient)
@@ -262,20 +294,24 @@ function send_logged_sms($conn, $recipient, $message, $existingSmsId = null, $lo
         return ['success' => false, 'status' => 'Failed', 'message' => 'SMS tracking could not be prepared. No message was sent.'];
     }
 
-    $smsEnabled = safe_scalar($conn, "SELECT value FROM settings WHERE key_name = 'sms_enabled' LIMIT 1");
-    if (empty($smsEnabled)) {
+    if (!sms_delivery_enabled()) {
         persist_sms_attempt($conn, $recipient, $storedMessage, 'Failed', null, $existingSmsId);
-        return ['success' => false, 'status' => 'Failed', 'message' => 'SMS delivery is disabled in Communication Settings.'];
+        return ['success' => false, 'status' => 'Failed', 'message' => 'SMS delivery is disabled in the server configuration.'];
     }
     $apiToken = get_philsms_api_token($conn);
     if ($apiToken === '') {
         persist_sms_attempt($conn, $recipient, $storedMessage, 'Failed', null, $existingSmsId);
-        return ['success' => false, 'status' => 'Failed', 'message' => 'No PhilSMS API token is configured in Communication Settings.'];
+        return ['success' => false, 'status' => 'Failed', 'message' => 'No PhilSMS API token is configured on the server.'];
+    }
+    $senderId = get_philsms_sender_id($conn);
+    if ($senderId === '' || strlen($senderId) > 11) {
+        persist_sms_attempt($conn, $recipient, $storedMessage, 'Failed', null, $existingSmsId);
+        return ['success' => false, 'status' => 'Failed', 'message' => 'The configured PhilSMS sender ID is invalid.'];
     }
 
     $apiResult = philsms_api_request('POST', $apiToken, [
         'recipient' => $recipient,
-        'sender_id' => get_philsms_sender_id($conn),
+        'sender_id' => $senderId,
         'type' => preg_match('/[^\x00-\x7F]/', $message) ? 'unicode' : 'plain',
         'message' => $message,
     ]);

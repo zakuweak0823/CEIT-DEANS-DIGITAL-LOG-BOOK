@@ -1,8 +1,11 @@
 <?php
-require_once 'db.php';
-require_once 'document_tracking.php';
+require_once __DIR__ . '/../includes/tracker_session.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/document_tracking.php';
 
 header('X-Robots-Tag: noindex, nofollow');
+header('Cache-Control: no-store');
+header('Referrer-Policy: no-referrer');
 $storageReady = true;
 $trackerEnabled = false;
 try {
@@ -14,7 +17,14 @@ try {
     http_response_code(500);
     $storageReady = false;
 }
-$trackingToken = trim((string)($_GET['token'] ?? ''));
+try {
+    $trackingToken = $storageReady && $trackerEnabled ? tracker_session_token($conn, 'document') : '';
+} catch (Throwable $error) {
+    error_log('Document tracker access failed: ' . $error->getMessage());
+    http_response_code(500);
+    $storageReady = false;
+    $trackingToken = '';
+}
 $apiPath = trim(str_replace('\\', '/', dirname((string)($_SERVER['SCRIPT_NAME'] ?? '/'))), '/.');
 $apiUrl = ($apiPath === '' ? '' : '/' . $apiPath) . '/mobile-api.php';
 ?>
@@ -22,6 +32,17 @@ $apiUrl = ($apiPath === '' ? '' : '/' . $apiPath) . '/mobile-api.php';
 <html lang="en">
 <head>
     <meta charset="utf-8">
+    <script>
+        const trackerUrl = new URL(window.location.href);
+        const trackerHasSelection = trackerUrl.searchParams.has('record') || trackerUrl.searchParams.has('invalid') || trackerUrl.searchParams.has('token');
+        const trackerServerRecord = <?php echo json_encode(preg_match('/^[a-f0-9]{64}$/', $trackingToken) === 1 ? ($_GET['record'] ?? null) : null, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+        const trackerPreviousState = window.history.state && typeof window.history.state === 'object' ? window.history.state : {};
+        const trackerRecordId = trackerHasSelection ? trackerServerRecord : trackerPreviousState.trackerDocumentRecord;
+        trackerUrl.searchParams.delete('token');
+        trackerUrl.searchParams.delete('record');
+        trackerUrl.searchParams.delete('invalid');
+        window.history.replaceState({ ...trackerPreviousState, trackerDocumentRecord: trackerRecordId || null }, '', trackerUrl);
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#064e3b">
     <meta name="robots" content="noindex,nofollow">
@@ -131,10 +152,9 @@ $apiUrl = ($apiPath === '' ? '' : '/' . $apiPath) . '/mobile-api.php';
                 <div class="notice" role="alert"><p>Tracking is temporarily unavailable. Please try again later or contact the office.</p></div>
             <?php elseif (!$trackerEnabled): ?>
                 <div class="notice" role="status"><p>Document tracking is currently turned off by the office.</p></div>
-            <?php elseif (preg_match('/^[a-f0-9]{64}$/', $trackingToken) !== 1): ?>
-                <div class="notice" role="alert"><p>This tracking code is invalid. Scan the QR code issued by the CEIT Dean's Office.</p></div>
             <?php else: ?>
                 <section id="trackerNotice" class="notice" role="status" aria-live="polite"><p>Checking your tracking code…</p></section>
+                <noscript><div class="notice" role="alert">JavaScript is required to view document tracking. Enable it and scan the QR code again.</div></noscript>
                 <section id="trackerRecord" hidden>
                     <h2 class="record-title" id="recordSubject"></h2>
                     <dl class="receipt-details">
@@ -171,10 +191,9 @@ $apiUrl = ($apiPath === '' ? '' : '/' . $apiPath) . '/mobile-api.php';
         </div>
     </article>
 </main>
-<?php if ($storageReady && $trackerEnabled && preg_match('/^[a-f0-9]{64}$/', $trackingToken) === 1): ?>
+<?php if ($storageReady && $trackerEnabled): ?>
 <script>
 const trackerApi = <?php echo json_encode($apiUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
-const trackerToken = <?php echo json_encode($trackingToken, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 const notice = document.getElementById('trackerNotice');
 const recordPanel = document.getElementById('trackerRecord');
 
@@ -212,9 +231,14 @@ function renderHistory(events) {
 
 async function refreshDocumentStatus() {
     notice.hidden = false;
+    if (typeof trackerRecordId !== 'string' || !/^[1-9]\d*$/.test(trackerRecordId)) {
+        recordPanel.hidden = true;
+        notice.textContent = 'This tracking code is invalid or unavailable. Scan the QR code issued by the CEIT Dean’s Office.';
+        return;
+    }
     notice.textContent = 'Checking your tracking code…';
     try {
-        const response = await fetch(`${trackerApi}?action=document_tracker_status&token=${encodeURIComponent(trackerToken)}`, { cache: 'no-store' });
+        const response = await fetch(`${trackerApi}?action=document_tracker_session_status&record=${encodeURIComponent(trackerRecordId)}`, { cache: 'no-store' });
         const result = await response.json();
         if (!response.ok || !result.success) throw new Error(result.message || 'This tracking code could not be verified.');
         const record = result.record || {};

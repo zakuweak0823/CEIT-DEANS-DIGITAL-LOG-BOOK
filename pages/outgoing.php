@@ -1,11 +1,11 @@
 <?php
-require_once 'auth.php';
-require_once 'db.php';
-require_once 'sms_service.php';
-require_once 'mobile_form_settings.php';
-require_once 'document_tracking.php';
-require_once 'sla_support.php';
-require_once 'message_composer.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/sms_service.php';
+require_once __DIR__ . '/../includes/mobile_form_settings.php';
+require_once __DIR__ . '/../includes/document_tracking.php';
+require_once __DIR__ . '/../includes/sla_support.php';
+require_once __DIR__ . '/../includes/message_composer.php';
 ensure_admin();
 
 $mobileFormLabels = get_mobile_form_labels($conn);
@@ -158,16 +158,25 @@ if (isset($_POST['issue_tracking_qr'])) {
     if ($id <= 0 || !in_array($status, $validStatusFilters, true)) {
         $message = show_alert('Invalid release status change.', 'danger');
     } else {
-        // Restrict changes to outgoing documents and report no-op retries.
-        $stmt = safe_query($conn, "UPDATE documents SET status = ? WHERE doc_id = ? AND type = 'Outgoing' AND status <> ?", 'sis', [$status, $id, $status]);
-        if ($stmt === false) {
-            $message = show_alert('Could not update the document release status.', 'danger');
-        } else {
+        try {
+            $note = status_history_note($_POST['status_note'] ?? null);
+            $conn->begin_transaction();
+            $historyMarker = status_history_marker($conn);
+            $stmt = safe_query($conn, "UPDATE documents SET status = ? WHERE doc_id = ? AND type = 'Outgoing' AND status <> ?", 'sis', [$status, $id, $status]);
+            if ($stmt === false) throw new RuntimeException('Could not update document status.');
             $updated = mysqli_stmt_affected_rows($stmt);
             mysqli_stmt_close($stmt);
+            if ($updated === 1) status_history_set_note($conn, 'doc_id', $id, $status, $note, $historyMarker);
+            $conn->commit();
             $message = $updated === 1
                 ? show_alert('Document status updated to ' . $status . '.')
                 : show_alert('Document was not found or already has that status.', 'warning');
+        } catch (DomainException $error) {
+            $message = show_alert($error->getMessage(), 'danger');
+        } catch (Throwable $error) {
+            $conn->rollback();
+            error_log('Outgoing status update failed: ' . $error->getMessage());
+            $message = show_alert('Could not update the document status and tracking details.', 'danger');
         }
     }
 } elseif (isset($_POST['send_client_sms'])) {
@@ -293,7 +302,7 @@ if ($stmt !== false) {
     mysqli_stmt_close($stmt);
 }
 ?>
-<?php include 'header.php'; ?>
+<?php include __DIR__ . '/../includes/header.php'; ?>
 <div class="row g-4">
     <div class="col-12">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3">
@@ -334,24 +343,17 @@ if ($stmt !== false) {
         <div class="card shadow-sm">
             <div class="card-body">
                 <form method="GET" class="row g-2 mb-3">
-                    <div class="col-12 col-md-5">
+                    <div class="col-12 col-md-6">
                         <label class="visually-hidden" for="outgoingSearch">Search outgoing documents</label>
                         <input type="search" id="outgoingSearch" name="search" class="form-control" placeholder="Search by subject, name, or recipient" value="<?php echo sanitize($search); ?>">
                     </div>
-                    <div class="col-12 col-md-3">
+                    <div class="col-12 col-md-4">
                         <label class="visually-hidden" for="outgoingStatusFilter">Filter by status</label>
                         <select class="form-select" id="outgoingStatusFilter" name="status">
                             <option value="">All statuses</option>
                             <?php foreach ($validStatusFilters as $filterOption): ?>
                                 <option value="<?php echo sanitize($filterOption); ?>" <?php echo $statusFilter === $filterOption ? 'selected' : ''; ?>><?php echo sanitize($filterOption); ?></option>
                             <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="col-12 col-md-2">
-                        <label class="visually-hidden" for="outgoingOrderFilter">Sort order</label>
-                        <select class="form-select" id="outgoingOrderFilter" name="order">
-                            <option value="oldest" <?php echo $orderFilter === 'oldest' ? 'selected' : ''; ?>>Oldest first</option>
-                            <option value="newest" <?php echo $orderFilter === 'newest' ? 'selected' : ''; ?>>Newest first</option>
                         </select>
                     </div>
                     <div class="col-12 col-md-2 d-grid">
@@ -372,7 +374,7 @@ if ($stmt !== false) {
                                 <th scope="col">Submitted by</th>
                                 <th scope="col">Recipient</th>
                                 <th scope="col">Subject</th>
-                                <th scope="col">Contact number</th>
+                                <th scope="col" data-sort-disabled>Contact number</th>
                                 <th scope="col">Status</th>
                                 <th scope="col">Priority</th>
                                 <th scope="col">Actions</th>
@@ -396,7 +398,7 @@ if ($stmt !== false) {
                                     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE);
                                     ?>
                                     <tr>
-                                        <td data-label="Date"><?php echo sanitize(date('M j, Y', strtotime($document['date_created']))); ?><div class="small text-muted"><?php echo sanitize(date('g:i A', strtotime($document['date_created']))); ?></div></td>
+                                        <td data-label="Date" data-sort-value="<?php echo sanitize($document['date_created']); ?>"><?php echo sanitize(date('M j, Y', strtotime($document['date_created']))); ?><div class="small text-muted"><?php echo sanitize(date('g:i A', strtotime($document['date_created']))); ?></div></td>
                                         <td data-label="Reference"><code><?php echo sanitize($documentReference); ?></code></td>
                                         <td data-label="Tracking QR">
                                             <?php if (!$documentTrackingSettings['enabled']): ?>
@@ -597,115 +599,6 @@ if ($stmt !== false) {
 </div>
 
 <script src="assets/js/qr-tools.bundle.js"></script>
-<script>
-function editDocument(data) {
-    document.getElementById('editId').value = data.id;
-    document.getElementById('editClientPhone').value = data.clientPhone || '';
-    document.getElementById('editSubject').value = data.subject || '';
-    document.getElementById('editRemarks').value = data.remarks || '';
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('editModal')).show();
-}
+<script src="assets/js/page-outgoing.js?v=<?php echo (int)@filemtime(dirname(__DIR__) . '/assets/js/page-outgoing.js'); ?>"></script>
 
-function showDocumentTrackingQr(trackerUrl, reference) {
-    const canvas = document.getElementById('documentTrackingQrCanvas');
-    const error = document.getElementById('documentTrackingQrError');
-    const link = document.getElementById('documentTrackingQrLink');
-    const download = document.getElementById('downloadDocumentTrackingQr');
-    document.getElementById('documentTrackingQrReference').textContent = reference;
-    link.href = trackerUrl;
-    link.title = 'Open the tracking page in a new tab';
-    error.hidden = true;
-
-    // Clear any QR left over from a previously opened document.
-    const context = canvas.getContext('2d');
-    if (context) {
-        context.clearRect(0, 0, canvas.width, canvas.height);
-    }
-
-    download.classList.add('disabled');
-    download.setAttribute('aria-disabled', 'true');
-    download.removeAttribute('href');
-    download.download = reference.toLowerCase() + '-tracking-qr.png';
-
-    if (!window.QRCode || typeof window.QRCode.toCanvas !== 'function') {
-        error.textContent = 'The QR generator could not be loaded. Refresh the page and try again.';
-        error.hidden = false;
-    } else {
-        window.QRCode.toCanvas(canvas, trackerUrl, { width: 480, margin: 2, errorCorrectionLevel: 'H', color: { dark: '#064e3b', light: '#ffffff' } }, function (generationError) {
-            if (generationError) {
-                if (context) {
-                    context.clearRect(0, 0, canvas.width, canvas.height);
-                }
-                error.textContent = 'Could not generate the document tracking QR code.';
-                error.hidden = false;
-                return;
-            }
-            download.href = canvas.toDataURL('image/png');
-            download.classList.remove('disabled');
-            download.setAttribute('aria-disabled', 'false');
-        });
-    }
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('documentTrackingQrModal')).show();
-}
-
-// Row buttons carry their data in attributes, so one handler covers every row.
-document.addEventListener('click', function (event) {
-    const editButton = event.target.closest('.js-edit-document');
-    if (editButton) {
-        let data = null;
-        try {
-            data = JSON.parse(editButton.dataset.document || '{}');
-        } catch (error) {
-            return;
-        }
-        editDocument(data);
-        return;
-    }
-    const qrButton = event.target.closest('.js-show-tracking-qr');
-    if (qrButton) {
-        showDocumentTrackingQr(qrButton.dataset.trackerUrl, qrButton.dataset.reference);
-    }
-});
-
-document.addEventListener('DOMContentLoaded', function () {
-    const confirmModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('releaseSmsConfirmModal'));
-    const smsForm = document.getElementById('releaseSmsForm');
-    const smsSubmit = document.getElementById('releaseSmsSubmit');
-    const validPhonePattern = /^[0-9]{11}$/;
-
-    document.querySelectorAll('.js-send-release-sms').forEach(function (button) {
-        button.addEventListener('click', function () {
-            const status = button.dataset.documentStatus;
-            const phone = button.dataset.documentPhone.trim();
-            const hasValidPhone = validPhonePattern.test(phone);
-
-            document.getElementById('releaseSmsDocumentId').value = button.dataset.documentId;
-            document.getElementById('releaseSmsSubject').textContent = button.dataset.documentSubject;
-            document.getElementById('releaseSmsRecipient').textContent = button.dataset.documentRecipient;
-            document.getElementById('releaseSmsPhone').textContent = phone || 'Not provided';
-            document.getElementById('releaseSmsDescription').textContent = status === 'For Release'
-                ? 'This will notify the recipient that their document is ready to claim.'
-                : 'This will notify the recipient that their document has been released.';
-            document.getElementById('releaseSmsMissingPhone').hidden = hasValidPhone;
-            smsSubmit.disabled = !hasValidPhone;
-            confirmModal.show();
-        });
-    });
-
-    // Prevent a double click from sending the same SMS twice. The disabled button
-    // is not included in the POST, so submit via the form's own name/value pair.
-    smsForm.addEventListener('submit', function () {
-        window.setTimeout(function () {
-            smsSubmit.disabled = true;
-            smsSubmit.textContent = 'Sending…';
-        }, 0);
-    });
-
-    const outcomeModal = document.getElementById('releaseSmsOutcomeModal');
-    if (outcomeModal) {
-        bootstrap.Modal.getOrCreateInstance(outcomeModal).show();
-    }
-});
-</script>
-
-<?php include 'footer.php'; ?>
+<?php include __DIR__ . '/../includes/footer.php'; ?>

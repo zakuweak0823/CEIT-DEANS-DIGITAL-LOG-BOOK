@@ -1,7 +1,7 @@
 <?php
-require_once 'auth.php';
-require_once 'db.php';
-require_once 'password_reset_support.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/password_reset_support.php';
 
 if (!empty($_SESSION['admin'])) {
     header('Location: dashboard');
@@ -88,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 $step = is_array($pending) ? 'reset' : 'request';
 ?>
-<?php include 'header.php'; ?>
+<?php include __DIR__ . '/../includes/header.php'; ?>
 <section class="login-shell" aria-labelledby="recoveryTitle">
     <div class="login-panel">
         <div class="login-form-wrap">
@@ -180,4 +180,4 @@ $step = is_array($pending) ? 'reset' : 'request';
         </div>
     </div>
 </section>
-<?php include 'footer.php'; ?>
+<?php include __DIR__ . '/../includes/footer.php'; ?>

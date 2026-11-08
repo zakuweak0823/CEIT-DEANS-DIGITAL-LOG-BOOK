@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import officeLogoUrl from './office-logo.png';
-import confirmToneUrl from './confirm-tone.wav';
-import swipeToneUrl from './swipe.mp3';
+import officeLogoUrl from './assets/images/office-logo.png';
+import confirmToneUrl from './assets/audio/confirm-tone.wav';
+import swipeToneUrl from './assets/audio/swipe.mp3';
 import jsQR from 'jsqr';
 import QRCode from 'qrcode';
+import DocumentStatusPanel from './components/DocumentStatusPanel.jsx';
+import { API_ENDPOINT, getBatchTrackerBaseUrl, readApiResponse, verifyOfficeTrackerQr } from './services/tracker.js';
+import { canAdvanceStatuses, neutralBadgeClass, statusClasses, statusLabel } from './domain/documentStatus.js';
+import { contactNumberDigits, isValidContactNumber, parseDocumentPages, todayLocalDate } from './utils/records.js';
 import {
   BiArchiveIn,
   BiBook,
@@ -26,10 +30,6 @@ const sections = [
   { key: 'reports', label: 'Reports', icon: BiFile },
 ];
 
-const API_ENDPOINT = import.meta.env.DEV
-  ? '/api/mobile-api.php'
-  : import.meta.env.VITE_API_ENDPOINT
-    || `http://10.0.2.2${import.meta.env.VITE_PROJECT_PATH}/mobile-api.php`;
 const MOBILE_REFRESH_INTERVAL_MS = 15_000;
 
 const playConfirmTone = () => {
@@ -46,38 +46,6 @@ const playSwipeTone = () => {
   audio.play().catch((error) => {
     console.warn('Pull-to-refresh tone could not be played:', error);
   });
-};
-
-const canAdvanceStatuses = ['Received', 'In Review', 'Forwarded', 'Approved', 'For Release'];
-
-const statusClasses = {
-  'For Release': 'border border-teal-200 bg-teal-100 text-teal-800',
-  Released: 'border border-green-200 bg-green-100 text-green-800',
-  Received: 'border border-lime-200 bg-lime-100 text-emerald-900',
-  'In Review': 'border border-yellow-300 bg-yellow-100 text-slate-800',
-  Forwarded: 'border border-orange-200 bg-orange-100 text-orange-800',
-  Incomplete: 'border border-rose-200 bg-rose-100 text-rose-700',
-  'On Hold': 'border border-slate-300 bg-slate-100 text-slate-700',
-  Approved: 'border border-sky-200 bg-sky-100 text-sky-800',
-  Cancelled: 'border border-slate-300 bg-slate-100 text-slate-600',
-  Pending: 'border border-yellow-300 bg-yellow-100 text-slate-800',
-  Queued: 'border border-yellow-300 bg-yellow-100 text-slate-800',
-  Borrowed: 'border border-yellow-300 bg-yellow-100 text-slate-800',
-  'Not Returned': 'border border-rose-200 bg-rose-100 text-rose-700',
-  Returned: 'border border-green-200 bg-green-100 text-green-800',
-  Delivered: 'border border-green-200 bg-green-100 text-green-800',
-  Sent: 'border border-green-200 bg-green-100 text-green-800',
-  Failed: 'border border-rose-200 bg-rose-100 text-rose-700',
-};
-const neutralBadgeClass = 'border border-slate-200 bg-slate-100 text-slate-700';
-const mobilePendingStatuses = ['Received', 'In Review', 'Forwarded', 'Incomplete', 'On Hold', 'Approved'];
-const mobileClosedStatuses = ['Returned', 'Cancelled'];
-// The mobile app shows only three document states; borrowed items keep their own Borrowed/Returned.
-const statusLabel = (status, type = 'Document') => {
-  if (type === 'Borrowed') return status;
-  if (mobilePendingStatuses.includes(status)) return 'Pending';
-  if (mobileClosedStatuses.includes(status)) return 'Released';
-  return status;
 };
 
 const defaultFormLabels = {
@@ -110,96 +78,6 @@ const sectionTitleClass = 'text-left text-lg font-semibold text-emerald-950';
 const emptyStateClass = 'rounded-2xl border border-emerald-200 bg-white p-5 text-left text-sm text-slate-600 shadow-sm';
 const badgeClass = 'inline-flex shrink-0 cursor-default select-none items-center rounded-full px-2.5 py-1 text-xs font-semibold';
 const cardActionClass = 'mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-emerald-800 bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-800 active:scale-[0.98] focus:outline-none focus:ring-4 focus:ring-emerald-300 disabled:cursor-wait disabled:opacity-60 sm:w-auto';
-const parseDocumentPages = (value) => {
-  if (Array.isArray(value)) return value;
-  try {
-    const parsed = JSON.parse(value || '[]');
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
-
-const todayLocalDate = () => {
-  const date = new Date();
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-};
-const isValidContactNumber = (value) => /^[0-9]{11}$/.test(value);
-const contactNumberDigits = (value) => value.replace(/\D/g, '').slice(0, 11);
-const readApiResponse = async (response) => {
-  try {
-    return await response.json();
-  } catch {
-    throw new Error('The office server returned an unreadable response. If you submitted a change, check the records before retrying.');
-  }
-};
-
-const verifyOfficeTrackerQr = async (payload, trackerBaseUrl, batchTrackerBaseUrl) => {
-  let scannedUrl;
-  let trackerUrl;
-  let trackerType;
-  try {
-    scannedUrl = new URL(payload);
-  } catch {
-    throw new Error('This QR code is not a valid office tracker link.');
-  }
-  if (!['http:', 'https:'].includes(scannedUrl.protocol) || scannedUrl.username || scannedUrl.password) {
-    throw new Error('This QR code must be an office-issued HTTP or HTTPS tracker link.');
-  }
-  const routeName = scannedUrl.pathname.split('/').filter(Boolean).pop()?.replace(/\.php$/i, '').toLowerCase();
-  if (['document-tracker', 'document_tracker'].includes(routeName)) {
-    trackerUrl = trackerBaseUrl ? new URL(trackerBaseUrl) : null;
-    trackerType = 'document';
-  } else if (routeName === 'batch_tracker') {
-    trackerUrl = batchTrackerBaseUrl ? new URL(batchTrackerBaseUrl) : null;
-    trackerType = 'batch';
-  } else {
-    throw new Error('This QR code was not issued by the CEIT Dean’s Office document or bulk submission tracker.');
-  }
-  if (!trackerUrl) {
-    throw new Error('The office tracker URL is not configured. Contact the office to update its tracker settings.');
-  }
-  if (
-    scannedUrl.hash !== ''
-    || Array.from(scannedUrl.searchParams.keys()).length !== 1
-  ) {
-    throw new Error('This QR code was not issued by the CEIT Dean’s Office tracker.');
-  }
-  const token = scannedUrl.searchParams.get('token') || '';
-  if (!/^[a-f0-9]{64}$/.test(token)) {
-    throw new Error('This QR code does not contain a valid office tracking code.');
-  }
-  const verificationUrl = new URL(API_ENDPOINT, window.location.href);
-  verificationUrl.search = new URLSearchParams({
-    action: trackerType === 'batch' ? 'batch_tracker_status' : 'document_tracker_status',
-    token,
-  }).toString();
-  const response = await fetch(verificationUrl, { cache: 'no-store' });
-  const result = await readApiResponse(response);
-  if (!response.ok || !result.success) {
-    throw new Error(result.message || 'This tracking QR code could not be verified by the office.');
-  }
-
-  const activeTrackerUrl = new URL(trackerUrl);
-  if (window.location.port === '5173' && import.meta.env.VITE_PROJECT_PATH) {
-    activeTrackerUrl.pathname = `${import.meta.env.VITE_PROJECT_PATH}/${trackerType === 'batch' ? 'batch_tracker' : 'document-tracker'}`;
-    activeTrackerUrl.host = window.location.host;
-    activeTrackerUrl.protocol = window.location.protocol;
-  }
-  activeTrackerUrl.search = new URLSearchParams({ token, return: `${window.location.origin}${window.location.pathname}` }).toString();
-  return activeTrackerUrl;
-};
-
-const getBatchTrackerBaseUrl = (configuredBaseUrl = '') => {
-  if (window.location.port === '5173' && import.meta.env.VITE_PROJECT_PATH) {
-    return new URL(`${import.meta.env.VITE_PROJECT_PATH}/batch_tracker`, window.location.origin);
-  }
-  if (configuredBaseUrl) return new URL(configuredBaseUrl);
-  const apiUrl = new URL(API_ENDPOINT, window.location.href);
-  apiUrl.pathname = apiUrl.pathname.replace(/mobile-api\.php$/i, 'batch_tracker');
-  apiUrl.search = '';
-  return apiUrl;
-};
 
 function App() {
   const [selectedSection, setSelectedSection] = useState('home');
@@ -282,21 +160,6 @@ function App() {
   const [reportFilters, setReportFilters] = useState(reportForm);
 
   const showActionFeedback = (feedback) => setActionFeedback(feedback);
-
-  const incrementDocumentStatusCount = (status, amount = 1) => {
-    setApiData((current) => {
-      if (!current) return current;
-      const currentStatuses = current.documentStatuses || [];
-      const existing = currentStatuses.find((item) => item.status === status);
-      return {
-        ...current,
-        documentStatuses: [
-          ...currentStatuses.filter((item) => item.status !== status),
-          { status, count: Number(existing?.count || 0) + amount },
-        ].sort((left, right) => left.status.localeCompare(right.status)),
-      };
-    });
-  };
 
   const documentStatusCounts = useMemo(() => {
     const counts = new Map([['Pending', 0], ['For Release', 0], ['Released', 0]]);
@@ -757,7 +620,7 @@ function App() {
           { id: result.id, date: submissionDate, type: 'Incoming', from: formLabels.senderEnabled ? incomingForm.from : '', subject: incomingForm.subject, status: incomingStatus },
           ...prev,
         ]);
-        incrementDocumentStatusCount(incomingStatus);
+        refreshRequestRef.current?.();
         setIncomingForm({ date: submissionDate, from: 'Student', submitterName: '', subject: '', clientPhone: '' });
         closePopup(() => {
           setActiveForm(null);
@@ -806,8 +669,7 @@ function App() {
 
       setIncomingItems((items) => items.filter((record) => record.id !== item.id));
       setOutgoingItems((items) => [{ id: item.id, date: item.date, to: result.recipient, subject: item.subject, clientPhone: item.clientPhone, status: 'For Release' }, ...items]);
-      incrementDocumentStatusCount(item.status || 'Received', -1);
-      incrementDocumentStatusCount('For Release');
+      refreshRequestRef.current?.();
       setReleaseDocumentId(null);
       showActionFeedback({ title: 'Document prepared for release', description: 'The document was moved to Outgoing documents and is now marked For Release.', tone: 'success' });
     } catch (error) {
@@ -831,8 +693,7 @@ function App() {
       const result = await readApiResponse(response);
       if (!response.ok || !result.success) throw new Error(result.message || 'Document status could not be changed');
       setOutgoingItems((items) => items.map((record) => record.id === item.id ? { ...record, status } : record));
-      incrementDocumentStatusCount(item.status, -1);
-      incrementDocumentStatusCount(status);
+      refreshRequestRef.current?.();
       showActionFeedback({
         title: 'Document status updated',
         description: `The document is now marked ${status}.`,
@@ -1651,7 +1512,7 @@ function App() {
       <div className="min-h-screen min-h-[100svh] overflow-x-clip text-emerald-950" aria-busy="true">
         <main className="mx-auto flex min-h-screen min-h-[100svh] max-w-md flex-col items-center justify-center px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))] text-center" aria-label="Loading office logbook">
           <div className="flex w-full flex-col items-center rounded-3xl border border-emerald-200 bg-white/95 px-6 py-8 shadow-lg shadow-emerald-950/10 backdrop-blur-sm">
-            <img src={officeLogoUrl} alt="" className="welcome-logo rounded-2xl bg-white p-1.5 ring-1 ring-emerald-200" />
+            <img src={officeLogoUrl} alt="" className="welcome-logo" />
             <p className="mt-6 text-[11px] font-semibold uppercase tracking-wider text-emerald-700">CEIT Digital Logbook</p>
             <h1 className="mt-1 text-xl font-bold text-emerald-950">Connecting to the office logbook</h1>
             <p className="mt-2 text-sm leading-relaxed text-emerald-800">Loading the latest document records.</p>
@@ -1727,19 +1588,7 @@ function App() {
               </div>
             )}
             {apiData && (
-              <section className="welcome-status-panel mx-auto mb-3 w-full max-w-5xl rounded-2xl border border-emerald-200 bg-white p-3 shadow-sm sm:mb-4 sm:p-4" aria-labelledby="document-statuses-title">
-                <h2 id="document-statuses-title" className="welcome-status-heading mb-2 text-center text-sm font-bold text-emerald-950 sm:text-base">Document Status</h2>
-                <div className="welcome-status-grid grid gap-2">
-                  {documentStatusCounts.map((item) => (
-                    <div key={item.status} data-status={item.status} className="status-tile flex min-h-14 items-center justify-between gap-2 rounded-xl px-3 py-2">
-                      <span className="status-tile-label min-w-0 break-words text-xs font-semibold sm:text-sm">{item.status}</span>
-                      <span className="status-tile-count inline-flex min-w-8 shrink-0 items-center justify-center rounded-full px-2 py-1 text-sm font-bold">
-                        {Number(item.count) || 0}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </section>
+              <DocumentStatusPanel counts={documentStatusCounts} />
             )}
             <section className="welcome-card mx-auto grid w-full max-w-5xl items-stretch gap-3 rounded-3xl border border-emerald-200 bg-white p-3 shadow-sm sm:gap-4 sm:p-5 lg:p-6" aria-label="Office logbook home">
               <div className="welcome-hero flex flex-col items-center justify-center rounded-2xl bg-emerald-50/70 p-5 text-center sm:p-8">

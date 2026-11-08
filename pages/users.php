@@ -1,7 +1,7 @@
 <?php
-require_once 'auth.php';
-require_once 'db.php';
-require_once 'password_reset_support.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/password_reset_support.php';
 ensure_super_admin();
 ensure_password_reset_schema($conn);
 
@@ -209,7 +209,7 @@ $reopenAdd = $_SERVER['REQUEST_METHOD'] === 'POST'
     && (string)($_POST['action'] ?? '') === 'create_admin'
     && $noticeType !== 'success';
 ?>
-<?php include 'header.php'; ?>
+<?php include __DIR__ . '/../includes/header.php'; ?>
 <div class="row g-4 admin-accounts-page">
     <div class="col-12">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-2">
@@ -246,7 +246,7 @@ $reopenAdd = $_SERVER['REQUEST_METHOD'] === 'POST'
         <?php if (!$smsRecoveryReady): ?>
             <div class="alert alert-warning d-flex align-items-start gap-2 mt-3 mb-0" role="note">
                 <i class="bi bi-exclamation-triangle-fill mt-1" aria-hidden="true"></i>
-                <span>SMS recovery is switched off because SMS is not set up. Turn on SMS and add a PhilSMS token in <a href="notification_settings">Communication Settings</a> so recovery codes can be sent.</span>
+                <span>SMS recovery is switched off because SMS is not set up. Ask the server administrator to enable SMS and configure the PhilSMS token so recovery codes can be sent.</span>
             </div>
         <?php endif; ?>
     </div>
@@ -565,4 +565,4 @@ document.addEventListener('DOMContentLoaded', function () {
     <?php endif; ?>
 });
 </script>
-<?php include 'footer.php'; ?>
+<?php include __DIR__ . '/../includes/footer.php'; ?>

@@ -1,11 +1,11 @@
 <?php
-require_once 'auth.php';
-require_once 'db.php';
-require_once 'mobile_form_settings.php';
-require_once 'mobile_app_settings.php';
-require_once 'batch_support.php';
-require_once 'document_tracking.php';
-require_once 'sla_support.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/mobile_form_settings.php';
+require_once __DIR__ . '/../includes/mobile_app_settings.php';
+require_once __DIR__ . '/../includes/batch_support.php';
+require_once __DIR__ . '/../includes/document_tracking.php';
+require_once __DIR__ . '/../includes/sla_support.php';
 ensure_admin();
 
 if (isset($_GET['download_network_repair']) && $_GET['download_network_repair'] === '1') {
@@ -258,7 +258,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
     . '/' . rawurlencode($localCaCertificateName);
 ?>
 
-<?php include 'header.php'; ?>
+<?php include __DIR__ . '/../includes/header.php'; ?>
 <div class="row gy-4">
     <div class="col-12">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3">
@@ -842,4 +842,4 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
     }
 }());
 </script>
-<?php include 'footer.php'; ?>
+<?php include __DIR__ . '/../includes/footer.php'; ?>

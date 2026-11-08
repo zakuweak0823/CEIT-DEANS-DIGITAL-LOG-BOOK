@@ -1,6 +1,6 @@
 <?php
-require_once 'auth.php';
-require_once 'db.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
 ensure_admin();
 
 // Make the database connection available explicitly for static analysis and queries.
@@ -49,7 +49,7 @@ if ($stmt !== false) {
 }
 ?>
 
-<?php include 'header.php'; ?>
+<?php include __DIR__ . '/../includes/header.php'; ?>
 <div class="row gy-4">
     <div class="col-12">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3">
@@ -113,13 +113,6 @@ if ($stmt !== false) {
         </div>
     </div>
 </div>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const addModal = document.getElementById('addCategoryModal');
-    if (addModal.dataset.openOnLoad === 'true') {
-        new bootstrap.Modal(addModal).show();
-    }
-});
-</script>
+<script src="assets/js/page-item-categories.js?v=<?php echo (int)@filemtime(dirname(__DIR__) . '/assets/js/page-item-categories.js'); ?>"></script>
 
-<?php include 'footer.php'; ?>
+<?php include __DIR__ . '/../includes/footer.php'; ?>

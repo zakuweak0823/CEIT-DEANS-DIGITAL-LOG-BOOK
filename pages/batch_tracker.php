@@ -1,9 +1,12 @@
 <?php
-require_once 'auth.php';
-require_once 'db.php';
-require_once 'batch_support.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/batch_support.php';
+require_once __DIR__ . '/../includes/tracker_session.php';
 
 header('X-Robots-Tag: noindex, nofollow');
+header('Cache-Control: no-store');
+header('Referrer-Policy: no-referrer');
 $storageError = false;
 try {
     ensure_batch_storage($conn);
@@ -12,7 +15,16 @@ try {
     http_response_code(500);
     $storageError = true;
 }
-$trackingToken = trim($_GET['token'] ?? '');
+$trackingToken = '';
+if (!$storageError) {
+    try {
+        $trackingToken = tracker_session_token($conn, 'batch');
+    } catch (Throwable $error) {
+        error_log('Batch tracker access failed: ' . $error->getMessage());
+        http_response_code(500);
+        $storageError = true;
+    }
+}
 $batch = null;
 
 // The opaque token is the public capability; expose only aggregate batch details, never paper records.
@@ -53,6 +65,13 @@ if (!$storageError && preg_match('/^[a-f0-9]{64}$/', $trackingToken)) {
 <html lang="en">
 <head>
     <meta charset="utf-8">
+    <script>
+        if (new URL(window.location.href).searchParams.has('token')) {
+            const cleanUrl = new URL(window.location.href);
+            cleanUrl.searchParams.delete('token');
+            window.history.replaceState(window.history.state, '', cleanUrl);
+        }
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <?php if ($batch !== null && $batch['receivedAt'] === null): ?><meta http-equiv="refresh" content="60"><?php endif; ?>
     <title><?php echo $batch !== null && $batch['receivedAt'] !== null ? 'Batch Receipt' : 'Batch Paper Tracker'; ?> | CEIT Dean's Office</title>

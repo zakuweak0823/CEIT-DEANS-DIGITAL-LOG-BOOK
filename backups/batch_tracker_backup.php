@@ -1,7 +1,7 @@
 <?php
-require_once 'auth.php';
-require_once 'db.php';
-require_once 'batch_support.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/batch_support.php';
 
 header('X-Robots-Tag: noindex, nofollow');
 $storageError = false;

@@ -97,7 +97,7 @@ function doc_status_page(string $status): string
 }
 
 /**
- * Clickable status badge: the badge itself opens a menu of statuses and one click saves the change.
+ * Clickable status badge: the badge opens a menu and the selected change requires tracking details.
  * $hidden holds the extra POST fields (record id); $actionName is the POST flag the page's handler checks.
  */
 function render_status_menu(string $current, array $options, array $hidden, string $actionName, string $label): void
@@ -133,6 +133,65 @@ function render_status_menu(string $current, array $options, array $hidden, stri
         </div>
     </form>
     <?php
+}
+
+/** Attach public tracking details to the status event created by the current transaction. */
+function status_history_marker($conn): int
+{
+    $result = $conn->query('SELECT COALESCE(MAX(event_id), 0) AS marker FROM document_events');
+    if ($result === false) throw new RuntimeException('Could not read status history.');
+    $row = $result->fetch_assoc();
+    $result->free();
+    return (int)$row['marker'];
+}
+
+function status_history_set_note($conn, string $column, int $id, string $status, string $note, int $marker): void
+{
+    if (!in_array($column, ['doc_id', 'batch_id'], true)) {
+        throw new InvalidArgumentException('Invalid status history target.');
+    }
+    $stmt = safe_query($conn, "SELECT event_id FROM document_events WHERE $column = ? AND kind = 'status' AND status = ? AND event_id > ? ORDER BY event_id DESC LIMIT 1 FOR UPDATE", 'isi', [$id, $status, $marker]);
+    if ($stmt === false) throw new RuntimeException('Could not find status history event.');
+    $result = mysqli_stmt_get_result($stmt);
+    $event = $result ? mysqli_fetch_assoc($result) : null;
+    mysqli_stmt_close($stmt);
+    if (!$event) throw new RuntimeException('Status history event was not created.');
+    $stmt = safe_query($conn, 'UPDATE document_events SET note = ? WHERE event_id = ?', 'si', [$note, $event['event_id']]);
+    if ($stmt === false) {
+        throw new RuntimeException('Could not save status history details.');
+    }
+    mysqli_stmt_close($stmt);
+}
+
+/** Update linked documents and annotate only the status events created by this change. */
+function status_history_update_batch_documents($conn, int $batchId, string $status, string $note, int $marker): void
+{
+    $stmt = safe_query($conn, 'SELECT d.doc_id FROM documents d INNER JOIN batch_papers p ON p.doc_id = d.doc_id WHERE p.batch_id = ? AND d.status <> ? FOR UPDATE', 'is', [$batchId, $status]);
+    if ($stmt === false) throw new RuntimeException('Could not load linked document statuses.');
+    $result = mysqli_stmt_get_result($stmt);
+    if ($result === false) {
+        mysqli_stmt_close($stmt);
+        throw new RuntimeException('Could not read linked document statuses.');
+    }
+    $ids = array_column(mysqli_fetch_all($result, MYSQLI_ASSOC), 'doc_id');
+    mysqli_stmt_close($stmt);
+    $stmt = safe_query($conn, 'UPDATE documents d INNER JOIN batch_papers p ON p.doc_id = d.doc_id SET d.status = ? WHERE p.batch_id = ?', 'si', [$status, $batchId]);
+    if ($stmt === false) throw new RuntimeException('Could not update linked document statuses.');
+    mysqli_stmt_close($stmt);
+    foreach ($ids as $id) status_history_set_note($conn, 'doc_id', (int)$id, $status, $note, $marker);
+}
+
+/** Validate text that will be visible to anyone holding the tracking link. */
+function status_history_note($input): string
+{
+    if (!is_string($input)) {
+        throw new DomainException('Enter the tracking details for this status change.');
+    }
+    $note = trim($input);
+    if ($note === '' || mb_strlen($note, 'UTF-8') > 255) {
+        throw new DomainException('Enter tracking details of up to 255 characters.');
+    }
+    return $note;
 }
 
 /** Colors for charts (dashboard). */

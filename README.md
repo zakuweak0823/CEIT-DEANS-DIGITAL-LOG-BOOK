@@ -113,15 +113,15 @@ the sections below and in the [Windows setup guide](docs/WINDOWS-SETUP.md).
 | Area | Capabilities |
 | --- | --- |
 | **Dashboard** | Review activity summaries, daily counts, pending incoming work, document and borrowed item analytics, and recent records. The Overdue records panel counts only Incoming and Outgoing documents that stay open longer than the time limits set under Settings; click an Incoming or Outgoing tile to open a pop-out listing just those overdue documents, each with a **Review** button. Borrowed items are not counted as overdue. Small ⓘ guides explain the processing-time and SMS charts. |
-| **Incoming documents** | Record the submitter's name and submitter type separately; optionally note the submitting department or office; issue office-verified QR tracking codes; search, filter by status, and sort records; and prepare documents for release. Only Pending documents are listed here, because a released document moves to Outgoing. Records are listed oldest first (first in, first out), with Priority documents on top. |
-| **Outgoing documents** | Track outgoing records and release status, manage each document directly, and send client notifications. For Release documents are listed first, oldest first, so the longest-waiting document is handled first; a sort control switches to newest first. |
+| **Incoming documents** | Record the submitter's name and submitter type separately; optionally note the submitting department or office; issue office-verified QR tracking codes; search, filter by status, and sort records; and prepare documents for release. Staff can mark any submitter's document as Priority. By default, Priority documents appear first, then oldest first. |
+| **Outgoing documents** | Track outgoing records and release status, manage each document directly, and send client notifications. For Release documents are listed first, oldest first, so the longest-waiting document is handled first; select a column heading to change the order. |
 | **Bulk Documents** | Register bulk submissions, associate document-level records, separate Priority from Standard submissions, scan office QR codes, record received counts, and follow release status. |
-| **Borrowed Items** | Manage item categories, borrowers, and return status. |
-| **Records and reports** | Search logbook records; generate Incoming, Outgoing, Borrowed Items, SMS Logs, or All Reports; filter results by text/status; print a formal portrait document or export a formatted Excel workbook. |
-| **SMS and notifications** | Configure SMS and email, send client updates, review delivery logs, and choose browser alerts and sounds. New-submission alerts appear in a neat top-of-screen notification. |
+| **Borrowed Items** | Manage item categories, borrowers, and return status; sort the list by item, category, borrower, date, or status. |
+| **Records and reports** | Search logbook records; generate Incoming, Outgoing, Borrowed Items, SMS Logs, or All Reports; filter and sort results; print a formal portrait document or export a formatted Excel workbook. |
+| **SMS and notifications** | Send client updates, review delivery logs, and choose browser alerts and sounds. SMS provider configuration is server-only; email delivery is not implemented. New-submission alerts appear in a neat top-of-screen notification. |
 | **Admin Assistant** | Get privacy-friendly workflow guidance from a clickable side-peeking launcher and links to admin tools. Optional form assistance previews changes and requires approval before filling fields; it never submits forms. Toggle it in Settings. |
 | **Mobile app** | Submit documents with a required submitter name and a clearly labeled Student/Faculty submitter type, receive a reference and status-tracking QR, scan office-issued codes, and access office logbook features. Admin settings control optional form fields and public kiosk access. |
-| **Statuses and history** | Change status from the clickable badge on Incoming, Outgoing, and Bulk pages. Every change is recorded automatically and shown as a timeline on the tracker. Marking a document **Incomplete** opens a requirements checklist and an optional generated SMS preview; the mobile app simplifies document statuses to Pending, For Release, and Released. |
+| **Statuses and history** | Change status from the clickable badge on Incoming, Outgoing, and Bulk pages. Staff add a brief description of the action or destination, which appears in the tracking timeline. Anyone with the tracking link can read it, so do not include confidential information. Marking a document **Incomplete** uses its requirements checklist as the tracking details and offers an optional SMS preview; the mobile app simplifies document statuses to Pending, For Release, and Released. |
 | **Document tracker** | A separate, mobile-friendly public page shows only the status tied to an office-issued, unguessable QR token. Its API URL respects the project's folder path, including when installed under XAMPP `htdocs`. |
 
 ### Incoming submission fields
@@ -153,6 +153,9 @@ the sections below and in the [Windows setup guide](docs/WINDOWS-SETUP.md).
 - Incoming, Outgoing, Quick Submit, Borrowed Items, SMS Logs, Records, and
   other admin tables share a consistent green-header and alternating-row
   treatment. Tables adapt to touch-friendly cards on narrow screens.
+- Select a sortable column heading to sort ascending, select it again for
+  descending, and select it a third time to restore the default order.
+  Card layouts provide the same headings above the records.
 - Incoming and Outgoing keep priority separate from row actions. Quick Submit
   includes a **Manage** link to the specific record in the appropriate
   Incoming or Outgoing list.
@@ -350,13 +353,22 @@ secure channel, such as in person.
    account is signed out everywhere, including the mobile app, and a notice
    SMS confirms the change.
 
-SMS recovery needs two things: SMS is enabled with a PhilSMS token in
-**Communication Settings**, and the account has a recovery phone. A Super Admin
+After five consecutive failed password sign-in attempts, the account cannot
+sign in for 15 minutes. The cooldown applies across the admin portal and mobile
+API, including other browsers and devices. A successful sign-in clears earlier
+failures; password recovery remains available during the cooldown.
+
+SMS recovery requires that SMS and the PhilSMS token are configured on the
+server, and the account has a recovery phone. A Super Admin
 adds or changes it under **Administrator accounts → Recovery phone** (or while
 creating the account). The page gives the same reply for unknown accounts,
 accounts without a phone and valid accounts, requests are limited (one code a
 minute, 3 an hour per username, 10 an hour per device), and codes never
 appear in the SMS logs.
+
+The mobile home screen's **Today's Document Status** counts documents created
+on the current office-server date, grouped by their latest status. Counts reset
+at midnight on the server; existing documents and their statuses are unchanged.
 
 **No recovery phone, or SMS is unavailable:** ask a Super Admin to reset it.
 They open **Administrator accounts**, select **Reset password**, enter a new
@@ -384,15 +396,86 @@ browser, or turn on **Compact Mode** from the administrator dropdown.
 Compact Mode switches the entire admin portal to a mobile-style layout with
 four primary shortcuts and a bottom **More** menu for the remaining admin
 sections, stacked content, card-based record lists, and a full-width
-workspace—even on a desktop. Open **Communication Settings** to
-configure system-wide SMS and email delivery. Mobile logbook access is managed
+workspace—even on a desktop. Provider configuration is server-only; see
+[Server-side communication configuration](#server-side-communication-configuration).
+Mobile logbook access is managed
 separately under **Admin Settings**. It is enabled by default only when no
 access preference has been saved; turn it off for public or shared networks.
 When enabled, anyone who can reach the server can view and change logbook
 records through the mobile app. Activity
 preferences are saved in the current browser; desktop alerts are optional
-and require browser permission. Provider credentials belong in the application
-settings or server environment—not in Git-tracked files or database exports.
+and require browser permission. Do not commit credentials to Git or share
+unprotected database exports.
+
+#### Database backup and recovery
+
+A Super Admin can open **Admin Settings → Backup and recovery → Download
+database backup**. The download includes the database schema, records, account
+data, and database triggers, routines and events. It does not include project
+files, uploads, the private SMS configuration file, certificates, or other
+server configuration; back those up separately. Backups are manual, not
+automatic. Store copies securely outside the web root, restrict access, and
+test recovery periodically. The server requires XAMPP's `mysqldump`, PHP
+`proc_open`, sufficient database privileges, and InnoDB tables. Temporary dump
+files are created in the PHP process's temporary directory and removed when
+the request finishes; restrict access to that directory.
+
+To recover, stop application access and take a separate current backup first.
+Have the server administrator create a **new empty database** in phpMyAdmin,
+select it, and import the downloaded SQL file. Verify the records and test the
+application against the restored database before switching production over.
+Restoring over the existing database can overwrite current records. Configure
+the database connection in `includes/db.php` when switching databases; after
+restoring an older backup, reset administrator passwords and revoke mobile
+sessions if needed because old account and session data may have been restored.
+
+#### Server-side communication configuration
+
+The portal cannot configure PhilSMS, SMTP, or enable SMS. For the standard
+XAMPP installation at `C:\xampp\htdocs\DIT-LOGBOOK_RETRY`:
+
+1. Copy `config\sms.example.ini` to `config\ceit-logbook-sms.ini` if the private
+   file does not exist. Do not edit the example with real credentials.
+2. Open the copy in a text editor. Set `enabled = 1`, put the PhilSMS token
+   between the quotes after `api_token`, and set the approved `sender_id`
+   (maximum 11 characters). Keep `enabled = 0` to disable SMS and SMS
+   password recovery.
+3. Save it, then use SMS Logs to send a test message to a number you control.
+   The application reads the file on each request; an Apache restart is not
+   normally required. SMS messages may incur charges.
+
+Restrict the private file to trusted server administrators and the account
+running PHP. It is ignored by Git; do not force-add it or include it in a public
+archive. Because `config` is inside the web root, Apache must enable
+`.htaccess` overrides and `mod_rewrite`: both the root rules and
+`config/.htaccess` block direct access. The included PHP router blocks it too.
+Verify that requesting the file over HTTP is denied before adding a token.
+For other servers, configure and verify an equivalent denial, or set the server
+process's `SMS_CONFIG_FILE` to an absolute path outside all web roots. If that
+explicit path is missing or the file is invalid, SMS fails closed.
+
+`SMS_CONFIG_FILE` takes precedence; otherwise the file in `config` is used.
+If it does not exist, the former `C:\xampp\ceit-logbook-sms.ini` location
+(two directories above the project root) is used when present for compatibility.
+The private file takes precedence over the existing `SMS_ENABLED`,
+`PHILSMS_API_TOKEN`, and `PHILSMS_SENDER_ID` environment variables. If no
+default file exists and `SMS_CONFIG_FILE` is unset, those variables remain
+supported for existing deployments. Configure PhilSMS before SMS and SMS
+password recovery can work; old provider settings in the database are not read.
+This file configures PhilSMS only: other providers require code integration.
+
+After securely configuring and testing delivery, remove obsolete settings
+(`philsms_api_token`, `philsms_sender_id`, `sms_enabled`, `email_enabled`,
+`email_host`, `email_port`, `email_username`, `email_password`, `email_from`)
+from the `settings` table using an authorized database administrator. Protect
+or remove old database exports and backups separately; deleting database rows
+does not remove their copies. Rotate any credentials that may have been exposed.
+Apache and the included PHP router block HTTP access to SQL dumps and `.env`
+files, but other server configurations need equivalent protections.
+
+SMTP email delivery is not implemented in the application; the former SMTP
+form stored settings but did not send email. No SMTP credentials need to be
+configured until an email delivery implementation is added.
 
 Use the **Shared form labels** section in Admin Settings to rename sender,
 recipient, document type, contact number, and remarks fields across supported
@@ -507,6 +590,15 @@ open the mobile app and use its QR scanner instead. QR tracking can be disabled
 in the same Admin Settings section; disabling it blocks existing QR links as
 well as new ones.
 
+After a document tracker opens, both its token and record number are removed
+from the address bar. The record selection is kept in that browser tab's
+history, and the server checks its session grant on every status refresh.
+The clean address alone cannot open a record in another tab or browser; use
+the original QR code. Batch tracker addresses still show a session-bound
+record number. The original link still contains the token, which
+may appear in server logs or browser developer tools, so use HTTPS and protect
+the link, server logs, and shared devices.
+
 If the browser still reports an untrusted connection, confirm the CA is
 installed and fully trusted, and that the certificate matches the address
 being used. A public CA certificate is not a private key, but the matching
@@ -596,6 +688,9 @@ another server, set `VITE_API_ENDPOINT` at build time to the complete
 │   ├── css/                          # Admin stylesheets
 │   ├── images/                       # Logos and other web images
 │   └── js/                           # Browser-ready JavaScript bundles
+├── backups/                          # Historical page copies, not public routes
+├── config/
+│   └── sms.example.ini               # Non-secret SMS configuration template
 ├── database/
 │   ├── schema.sql                    # Fresh-install schema and initial Super Admin seed
 │   ├── dummy_data.sql                # Optional sample data (import after schema.sql)
@@ -606,23 +701,51 @@ another server, set `VITE_API_ENDPOINT` at build time to the complete
 │   ├── SECURITY.md                   # Security model and deployment checklist
 │   ├── WINDOWS-SETUP.md              # Windows setup and computer transfer
 │   └── Patch V1.00.md                # Project patch history
-├── includes/                         # Shared PHP runtime, layout, and domain helpers
+├── includes/                         # Router, shared PHP runtime, layout, and domain helpers
 ├── pages/                            # Admin and tracker page implementations
 ├── api/                              # JSON and AJAX endpoint implementations
 ├── tools/
+│   ├── qrcode-browser-entry.js       # Source entry for the browser QR bundle
 │   ├── start-office-server.ps1       # XAMPP startup and network helper
 │   ├── mobile_submission_console.php
 │   └── start_mobile_submission_log.bat
 ├── start-office-server.bat           # Double-click Windows launcher
-├── *.php                              # Root entrypoint shims; preserve existing URLs
 └── mobile-ui/
-    ├── src/                         # React/Vite mobile client
+    ├── src/
+    │   ├── assets/                  # Mobile image and audio assets
+    │   ├── components/              # Reusable mobile UI components
+    │   ├── domain/                  # Mobile status presentation rules
+    │   ├── services/                # Mobile API and tracker helpers
+    │   └── utils/                   # Shared mobile formatting and validation
     ├── android/                     # Capacitor Android project
     └── expo-wrapper/                # Optional Expo wrapper with separate dependencies
 ```
 
-The small root PHP entrypoint shims preserve XAMPP's existing clean routes,
+The shared `includes/router.php` dispatches public page and API URLs to their
+implementations under `pages/` and `api/`. Pages, API handlers, CLI tools and
+historical copies load shared dependencies directly from `includes/`. Apache
+and the included PHP router deny
+direct web access to those implementation directories and to `backups/`,
+`config/`, `database/`, and `tools/`; local imports and command-line tools
+continue to work. Other web-server configurations must enforce equivalent
+restrictions. Database backups belong outside the web root; a private SMS
+config inside `config/` relies on the server access restrictions described above.
+
+The root `package.json` and lockfile provide dependencies for browser bundle
+development; `mobile-ui/` has its own separate package configuration. The
+deployed QR bundle is `assets/js/qr-tools.bundle.js`; its source entry is
+`tools/qrcode-browser-entry.js`. `backups/` contains historical
+page copies, not database recovery backups. Installed dependencies, mobile
+build output, local SQL exports, and the private SMS configuration are ignored
+by Git and should not be published.
+
+Apache's `.htaccess` and `includes/router.php` preserve the existing clean routes,
 mobile API URLs, and form endpoints while implementations are grouped by role.
+Opening a known page file such as `pages/login.php` redirects the browser to
+its public URL, `login`; direct access to implementation folders remains blocked.
+External PHP scripts that previously included root helper wrappers must instead
+include the corresponding file in `includes/`. Servers other than Apache or
+the PHP development server need equivalent routing and access restrictions.
 `includes/` contains shared PHP code, `pages/` contains page implementations,
 and `api/` contains JSON/AJAX handlers. Keep the whole project folder intact
 when copying it to another XAMPP `htdocs` directory; the launcher detects its
@@ -803,7 +926,7 @@ hosting setup:
 | I forgot my admin password | Use **Forgot your password?** on the login page to get an SMS code on your recovery phone. No recovery phone: ask a Super Admin to reset it under **Administrator accounts**. Super Admin without one: the server owner runs `php tools/reset_admin_password.php <username>`. See [Administrator accounts and password recovery](#administrator-accounts-and-password-recovery). |
 | The Show password button does nothing | Hard-refresh the login page (Ctrl+F5) to clear cached scripts and styles, and confirm JavaScript is enabled in the browser. |
 | Sign-in is rejected after a password reset | Existing sessions are signed out when a password changes. Sign in again with the new password. |
-| SMS sending fails | Check cURL, Communication Settings, provider credentials, and provider account status. |
+| SMS sending fails | Check cURL, the private SMS configuration file or server environment, the PHP error log, and provider account status. |
 | Android build cannot find a device | Open the Android project in Android Studio, install the required SDK components, and start an emulator or connect a device. |
 
 ---

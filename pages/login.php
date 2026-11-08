@@ -1,6 +1,7 @@
 <?php
-require_once 'auth.php';
-require_once 'db.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/login_support.php';
 verify_csrf_request();
 
 if (!empty($_SESSION['admin'])) {
@@ -13,69 +14,43 @@ $username = '';
 $notice = (string)($_SESSION['login_notice'] ?? '');
 unset($_SESSION['login_notice']);
 if (isset($_POST['login'])) {
-    $username = trim($_POST['username'] ?? '');
+    $username = is_string($_POST['username'] ?? null) ? trim($_POST['username']) : '';
     $password = $_POST['password'] ?? '';
 
-    if ($username === '' || $password === '') {
+    if ($username === '' || !is_string($password) || $password === '') {
         $error = 'Please enter both username and password.';
     } else {
-        $stmt = mysqli_prepare($conn, "SELECT password, role FROM users WHERE username = ?");
-        if ($stmt === false) {
-            $error = 'Unable to prepare login query.';
-        } else {
-            mysqli_stmt_bind_param($stmt, 's', $username);
-            mysqli_stmt_execute($stmt);
-            mysqli_stmt_store_result($stmt);
-
-            if (mysqli_stmt_num_rows($stmt) === 1) {
-                $hash = '';
-                $role = '';
-                mysqli_stmt_bind_result($stmt, $hash, $role);
-                mysqli_stmt_fetch($stmt);
-
-                // Successful login regenerates the session ID to prevent fixation.
-                if ($hash !== '' && in_array($role, ['admin', 'super_admin'], true) && password_verify($password, $hash)) {
-                    session_regenerate_id(true);
-                    $_SESSION['admin'] = $username;
-                    $_SESSION['admin_role'] = $role;
-                    $_SESSION['admin_password_hash'] = $hash;
-                    $_SESSION['admin_login_arrival'] = true;
-                    header('Location: dashboard');
-                    exit;
-                }
-
-                // Upgrade legacy plaintext credentials on successful use; new logins use hashes.
-                if ($password === $hash && in_array($role, ['admin', 'super_admin'], true)) {
-                    $newHash = password_hash($password, PASSWORD_DEFAULT);
-                    $update = mysqli_prepare($conn, "UPDATE users SET password = ? WHERE username = ?");
-                    if ($update !== false) {
-                        mysqli_stmt_bind_param($update, 'ss', $newHash, $username);
-                        mysqli_stmt_execute($update);
-                        mysqli_stmt_close($update);
-                    }
-
-                    session_regenerate_id(true);
-                    $_SESSION['admin'] = $username;
-                    $_SESSION['admin_role'] = $role;
-                    $_SESSION['admin_password_hash'] = $newHash;
-                    $_SESSION['admin_login_arrival'] = true;
-                    header('Location: dashboard');
-                    exit;
-                }
+        try {
+            $login = authenticate_admin_login($conn, $username, $password);
+            if ($login['status'] === 'success') {
+                session_regenerate_id(true);
+                $_SESSION['admin'] = $login['user']['username'];
+                $_SESSION['admin_role'] = $login['user']['role'];
+                $_SESSION['admin_password_hash'] = $login['user']['password'];
+                $_SESSION['admin_login_arrival'] = true;
+                header('Location: dashboard');
+                exit;
             }
-
-            $error = 'Invalid username or password.';
-            mysqli_stmt_close($stmt);
+            if ($login['status'] === 'locked') {
+                http_response_code(429);
+                $error = 'Too many failed sign-in attempts. Please wait 15 minutes after the fifth attempt and try again.';
+            } else {
+                $error = 'Invalid username or password.';
+            }
+        } catch (Throwable $exception) {
+            error_log('Administrator login failed: ' . $exception->getMessage());
+            http_response_code(503);
+            $error = 'Sign-in is temporarily unavailable. Please try again later.';
         }
     }
 }
 ?>
-<?php include 'header.php'; ?>
+<?php include __DIR__ . '/../includes/header.php'; ?>
 <section class="login-shell" aria-labelledby="loginTitle">
     <div class="login-panel">
         <div class="login-form-wrap">
             <div class="login-card-brand">
-                <img src="assets/images/CVSU.jpeg" alt="" class="login-card-logo">
+                <img src="assets/images/CVSU.jpeg" alt="CVSU Logo" class="login-card-logo">
                 <span>
                     <strong>CEIT Dean's Office</strong>
                     <small>Digital Logbook</small>
@@ -125,24 +100,5 @@ if (isset($_POST['login'])) {
         </div>
     </div>
 </section>
-<script>
-document.querySelectorAll('.login-password-toggle').forEach(function (button) {
-    button.addEventListener('click', function () {
-        const input = document.getElementById(button.getAttribute('aria-controls'));
-        const icon = button.querySelector('i');
-        if (!input || !icon) {
-            console.error('The login password visibility control could not find its password field.');
-            return;
-        }
-
-        const showPassword = input.type === 'password';
-        input.type = showPassword ? 'text' : 'password';
-        button.setAttribute('aria-label', showPassword ? 'Hide password' : 'Show password');
-        button.setAttribute('title', showPassword ? 'Hide password' : 'Show password');
-        button.setAttribute('aria-pressed', String(showPassword));
-        icon.classList.toggle('bi-eye', !showPassword);
-        icon.classList.toggle('bi-eye-slash', showPassword);
-    });
-});
-</script>
-<?php include 'footer.php'; ?>
+<script src="assets/js/page-login.js?v=<?php echo (int)@filemtime(dirname(__DIR__) . '/assets/js/page-login.js'); ?>"></script>
+<?php include __DIR__ . '/../includes/footer.php'; ?>

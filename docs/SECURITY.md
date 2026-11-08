@@ -40,9 +40,21 @@ control for the mobile API or admin portal.
   `password_verify()`. The legacy seeded plaintext password is upgraded to a
   hash when it is successfully used; it remains unsafe until changed. New
   administrator and reset passwords must be at least 8 characters.
+- **Sign-in cooldown:** five consecutive failed password attempts lock an
+  administrator account for 15 minutes across the portal and mobile API.
+  Successful sign-in clears the failure count; password recovery remains
+  available during the cooldown.
 - **Database access:** the shared query helper uses MySQLi prepared
   statements for bound values. Dynamic SQL identifiers still require
   allow-listing because placeholders only bind values.
+- **Provider credentials:** the PhilSMS token and sender configuration are
+  supplied through a private server-side file or process environment, not the
+  portal or database. Prefer a file outside all web roots. When using the
+  project `config/` directory, restrict file permissions and verify HTTP denial
+  on every server; the repository's Apache rules and PHP router block access.
+  Existing database settings and backups may still contain old credentials;
+  protect and clean them separately, and rotate any exposed credentials.
+  SMTP delivery is not implemented.
 - **Output encoding:** HTML-facing values are escaped with UTF-8 HTML entity
   encoding at output. Keep this encoding at the presentation boundary and
   apply context-appropriate encoding for JavaScript, URLs, and other formats.

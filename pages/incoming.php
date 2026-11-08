@@ -1,12 +1,12 @@
 <?php
-require_once 'auth.php';
-require_once 'db.php';
-require_once 'mobile_form_settings.php';
-require_once 'document_tracking.php';
-require_once 'sla_support.php';
-require_once 'message_composer.php';
-require_once 'requirements_support.php';
-require_once 'sms_service.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/mobile_form_settings.php';
+require_once __DIR__ . '/../includes/document_tracking.php';
+require_once __DIR__ . '/../includes/sla_support.php';
+require_once __DIR__ . '/../includes/message_composer.php';
+require_once __DIR__ . '/../includes/requirements_support.php';
+require_once __DIR__ . '/../includes/sms_service.php';
 ensure_admin();
 
 $mobileFormLabels = get_mobile_form_labels($conn);
@@ -208,14 +208,23 @@ if (isset($_POST['prepare_release'])) {
         $message = show_alert('Invalid document selected.', 'danger');
         $setReleaseOutcome('Could not prepare document', 'The selected document ID is invalid. Refresh the page and try again.', 'danger');
     } else {
-        $stmt = safe_query($conn, "SELECT sender, submitter_name, recipient, status FROM documents WHERE doc_id = ? AND type = 'Incoming'", 'i', [$id]);
+        try {
+            $releaseNote = status_history_note($_POST['status_note'] ?? null);
+        } catch (DomainException $error) {
+            $releaseNote = null;
+            $message = show_alert($error->getMessage(), 'danger');
+            $setReleaseOutcome('Tracking details required', $error->getMessage(), 'danger');
+        }
+        $stmt = $releaseNote === null ? false : safe_query($conn, "SELECT sender, submitter_name, recipient, status FROM documents WHERE doc_id = ? AND type = 'Incoming'", 'i', [$id]);
         $releaseDocument = null;
         if ($stmt !== false) {
             $result = mysqli_stmt_get_result($stmt);
             $releaseDocument = $result ? (mysqli_fetch_assoc($result) ?: null) : null;
             mysqli_stmt_close($stmt);
         }
-        if (!$releaseDocument) {
+        if ($releaseNote === null) {
+            // The validation message has already been set.
+        } elseif (!$releaseDocument) {
             $message = show_alert('This incoming document was not found or has already been moved.', 'danger');
             $setReleaseOutcome('Document not found', 'This incoming document may have already been moved. Refresh the list and check Outgoing Documents.', 'danger');
         } elseif (!in_array($releaseDocument['status'], doc_status_can_prepare_release(), true)) {
@@ -232,15 +241,27 @@ if (isset($_POST['prepare_release'])) {
             $outgoingRecipient = trim((string)$releaseDocument['sender']) !== ''
                 ? $releaseDocument['sender']
                 : trim((string)($releaseDocument['submitter_name'] ?? ''));
-            $stmt = safe_query($conn, "UPDATE documents SET type = 'Outgoing', status = 'For Release', sender = ?, recipient = ? WHERE doc_id = ? AND type = 'Incoming' AND status IN (" . doc_status_sql_in(doc_status_can_prepare_release()) . ")", 'ssi', [$outgoingSender, $outgoingRecipient, $id]);
-            if ($stmt === false || mysqli_stmt_affected_rows($stmt) !== 1) {
-                if ($stmt !== false) mysqli_stmt_close($stmt);
-                $message = show_alert('The document could not be prepared. Refresh the page and try again.', 'danger');
-                $setReleaseOutcome('Could not prepare document', 'The document may have changed while you were working. Refresh the page and check its status before trying again.', 'danger');
-            } else {
-                mysqli_stmt_close($stmt);
-                $message = show_alert('Document moved to Outgoing as For Release.');
-                $setReleaseOutcome('Document prepared for release', 'The document is now in Outgoing with status “For Release”. Its previous recipient is used as the outgoing sender, or Dean’s Office if no recipient was saved. The original sender becomes the recipient, or the submitter’s name if no department or office was saved.', 'success');
+            try {
+                $conn->begin_transaction();
+                $historyMarker = status_history_marker($conn);
+                $stmt = safe_query($conn, "UPDATE documents SET type = 'Outgoing', status = 'For Release', sender = ?, recipient = ? WHERE doc_id = ? AND type = 'Incoming' AND status IN (" . doc_status_sql_in(doc_status_can_prepare_release()) . ")", 'ssi', [$outgoingSender, $outgoingRecipient, $id]);
+                if ($stmt === false || mysqli_stmt_affected_rows($stmt) !== 1) {
+                    if ($stmt !== false) mysqli_stmt_close($stmt);
+                    $conn->rollback();
+                    $message = show_alert('The document could not be prepared. Refresh the page and try again.', 'danger');
+                    $setReleaseOutcome('Could not prepare document', 'The document may have changed while you were working. Refresh the page and check its status before trying again.', 'danger');
+                } else {
+                    mysqli_stmt_close($stmt);
+                    status_history_set_note($conn, 'doc_id', $id, DOC_STATUS_FOR_RELEASE, $releaseNote, $historyMarker);
+                    $conn->commit();
+                    $message = show_alert('Document moved to Outgoing as For Release.');
+                    $setReleaseOutcome('Document prepared for release', 'The document is now in Outgoing with status “For Release”. Its previous recipient is used as the outgoing sender, or Dean’s Office if no recipient was saved. The original sender becomes the recipient, or the submitter’s name if no department or office was saved.', 'success');
+                }
+            } catch (Throwable $error) {
+                $conn->rollback();
+                error_log('Prepare release tracking update failed: ' . $error->getMessage());
+                $message = show_alert('Could not save the release status and tracking details.', 'danger');
+                $setReleaseOutcome('Could not prepare document', 'The status and tracking details could not be saved.', 'danger');
             }
         }
     }
@@ -253,16 +274,25 @@ if (isset($_POST['change_status'])) {
     if ($id <= 0 || !in_array($newStatus, doc_status_incoming(), true)) {
         $message = show_alert('Choose a valid status for the selected document.', 'danger');
     } else {
-        // Only incoming items can change here; releasing stays a separate action with its own checks.
-        $stmt = safe_query($conn, "UPDATE documents SET status = ? WHERE doc_id = ? AND type = 'Incoming' AND status <> ?", 'sis', [$newStatus, $id, $newStatus]);
-        if ($stmt === false) {
-            $message = show_alert('Could not update the document status.', 'danger');
-        } else {
+        try {
+            $note = status_history_note($_POST['status_note'] ?? null);
+            $conn->begin_transaction();
+            $historyMarker = status_history_marker($conn);
+            $stmt = safe_query($conn, "UPDATE documents SET status = ? WHERE doc_id = ? AND type = 'Incoming' AND status <> ?", 'sis', [$newStatus, $id, $newStatus]);
+            if ($stmt === false) throw new RuntimeException('Could not update document status.');
             $changed = mysqli_stmt_affected_rows($stmt) === 1;
             mysqli_stmt_close($stmt);
+            if ($changed) status_history_set_note($conn, 'doc_id', $id, $newStatus, $note, $historyMarker);
+            $conn->commit();
             $message = $changed
                 ? show_alert('Status updated to ' . $newStatus . '.')
                 : show_alert('The document was not found or already has that status.', 'warning');
+        } catch (DomainException $error) {
+            $message = show_alert($error->getMessage(), 'danger');
+        } catch (Throwable $error) {
+            $conn->rollback();
+            error_log('Incoming status update failed: ' . $error->getMessage());
+            $message = show_alert('Could not update the document status and tracking details.', 'danger');
         }
     }
 }
@@ -351,13 +381,13 @@ if (isset($_POST['update_requirements'])) {
 if (isset($_POST['toggle_priority'])) {
     $shouldRedirect = true;
     $id = $postId('priority_doc_id');
-    $stmt = safe_query($conn, "UPDATE documents SET is_priority = IF(is_priority = 1, 0, 1) WHERE doc_id = ? AND type = 'Incoming' AND submitter_type = 'Faculty'", 'i', [$id]);
+    $stmt = safe_query($conn, "UPDATE documents SET is_priority = IF(is_priority = 1, 0, 1) WHERE doc_id = ? AND type = 'Incoming'", 'i', [$id]);
     if ($stmt !== false) {
         $updated = mysqli_stmt_affected_rows($stmt);
         mysqli_stmt_close($stmt);
         $message = $updated > 0
-            ? show_alert('Faculty submission priority updated.')
-            : show_alert('Priority is available only for faculty submissions.', 'warning');
+            ? show_alert('Submission priority updated.')
+            : show_alert('The incoming submission could not be found.', 'warning');
     } else {
         $message = show_alert('Could not update submission priority.', 'danger');
     }
@@ -442,7 +472,7 @@ foreach ($documents as $listedDocument) {
     $documentRequirements[(int)$listedDocument['doc_id']] = requirements_list($conn, (int)$listedDocument['doc_id']);
 }
 ?>
-<?php include 'header.php'; ?>
+<?php include __DIR__ . '/../includes/header.php'; ?>
 <div class="row g-4">
     <div class="col-12">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3">
@@ -497,24 +527,17 @@ foreach ($documents as $listedDocument) {
                 </nav>
                 <form method="GET" class="row g-2 mb-3">
                     <?php if ($submitterFilter !== 'All'): ?><input type="hidden" name="submitter" value="<?php echo sanitize($submitterFilter); ?>"><?php endif; ?>
-                    <div class="col-12 col-md-5">
+                    <div class="col-12 col-md-6">
                         <label class="visually-hidden" for="incomingSearch">Search incoming documents</label>
                         <input type="search" id="incomingSearch" name="search" class="form-control" placeholder="Search by name, subject, office, or remarks" value="<?php echo sanitize($search); ?>">
                     </div>
-                    <div class="col-12 col-md-3">
+                    <div class="col-12 col-md-4">
                         <label class="visually-hidden" for="incomingStatusFilter">Filter by status</label>
                         <select class="form-select" id="incomingStatusFilter" name="status">
                             <option value="">All statuses</option>
                             <?php foreach ($validStatusFilters as $filterOption): ?>
                                 <option value="<?php echo sanitize($filterOption); ?>" <?php echo $statusFilter === $filterOption ? 'selected' : ''; ?>><?php echo sanitize($filterOption); ?></option>
                             <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="col-12 col-md-2">
-                        <label class="visually-hidden" for="incomingOrderFilter">Sort order</label>
-                        <select class="form-select" id="incomingOrderFilter" name="order">
-                            <option value="oldest" <?php echo $orderFilter === 'oldest' ? 'selected' : ''; ?>>Oldest first</option>
-                            <option value="newest" <?php echo $orderFilter === 'newest' ? 'selected' : ''; ?>>Newest first</option>
                         </select>
                     </div>
                     <div class="col-12 col-md-2 d-grid">
@@ -535,7 +558,7 @@ foreach ($documents as $listedDocument) {
                                 <th scope="col">Tracking QR</th>
                                 <th scope="col">Subject</th>
                                 <th scope="col">Recipient</th>
-                                <th scope="col">Contact number</th>
+                                <th scope="col" data-sort-disabled>Contact number</th>
                                 <th scope="col">Status</th>
                                 <th scope="col">Priority</th>
                                 <th scope="col">Actions</th>
@@ -561,8 +584,8 @@ foreach ($documents as $listedDocument) {
                                     ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE);
                                     ?>
                                     <tr>
-                                        <td data-label="Date"><?php echo sanitize(date('M j, Y', strtotime($document['date_created']))); ?><div class="small text-muted"><?php echo sanitize(date('g:i A', strtotime($document['date_created']))); ?></div></td>
-                                        <td data-label="Submitted by">
+                                        <td data-label="Date" data-sort-value="<?php echo sanitize($document['date_created']); ?>"><?php echo sanitize(date('M j, Y', strtotime($document['date_created']))); ?><div class="small text-muted"><?php echo sanitize(date('g:i A', strtotime($document['date_created']))); ?></div></td>
+                                        <td data-label="Submitted by" data-sort-value="<?php echo sanitize($documentSubmitterName); ?>">
                                             <div class="table-cell-badges">
                                                 <span class="badge text-bg-light border"><?php echo sanitize($document['submitter_type']); ?></span>
                                             </div>
@@ -614,7 +637,6 @@ foreach ($documents as $listedDocument) {
                                             </div>
                                         </td>
                                         <td data-label="Priority">
-                                            <?php if ($document['submitter_type'] === 'Faculty'): ?>
                                                 <form method="POST" class="document-priority-control">
                                                     <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                                                     <input type="hidden" name="priority_doc_id" value="<?php echo (int)$document['doc_id']; ?>">
@@ -622,9 +644,6 @@ foreach ($documents as $listedDocument) {
                                                         <i class="bi bi-star<?php echo (int)$document['is_priority'] === 1 ? '-fill' : ''; ?> me-1" aria-hidden="true"></i><?php echo (int)$document['is_priority'] === 1 ? 'Priority' : 'Standard'; ?>
                                                     </button>
                                                 </form>
-                                            <?php else: ?>
-                                                <span class="badge rounded-pill text-bg-light border">Standard</span>
-                                            <?php endif; ?>
                                         </td>
                                         <td data-label="Actions">
                                             <div class="table-actions document-row-actions">
@@ -879,6 +898,9 @@ foreach ($documents as $listedDocument) {
                 <div class="alert alert-warning mb-0" role="note">
                     The outgoing record will use the current recipient as its sender and the current sender as its recipient. Please confirm these details before continuing.
                 </div>
+                <label for="prepareReleaseNote" class="form-label fw-semibold mt-3">Tracking details</label>
+                <textarea id="prepareReleaseNote" name="status_note" form="prepareReleaseForm" class="form-control" rows="2" maxlength="255" required placeholder="Explain what happens next"></textarea>
+                <div class="form-text">Visible to anyone with the tracking link; do not include confidential information.</div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -1130,6 +1152,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.js-prepare-release').forEach(function (button) {
         button.addEventListener('click', function () {
             document.getElementById('prepareReleaseId').value = button.dataset.documentId;
+            document.getElementById('prepareReleaseNote').value = '';
             document.getElementById('prepareReleaseSubject').textContent = button.dataset.documentSubject;
             document.getElementById('prepareReleaseSender').textContent = button.dataset.documentSender;
             document.getElementById('prepareReleaseRecipient').textContent = button.dataset.documentRecipient;
@@ -1151,4 +1174,4 @@ document.addEventListener('DOMContentLoaded', function () {
 
 </script>
 
-<?php include 'footer.php'; ?>
+<?php include __DIR__ . '/../includes/footer.php'; ?>

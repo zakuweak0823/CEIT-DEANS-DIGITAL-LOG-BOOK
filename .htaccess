@@ -1,14 +1,18 @@
 Options -MultiViews
 RewriteEngine On
 
-# Redirect browser page requests to extension-free URLs; leave POST submissions unchanged.
-RewriteCond %{THE_REQUEST} \s/+[^\s?]*/?(dashboard|quick_document|incoming|outgoing|batch_papers|batch_tracker|document_tracker|borrowed|item_categories|sms|notification_settings|settings|reports|records|login|forgot_password|users|logout)\.php(?:[?\s]) [NC]
-RewriteCond %{REQUEST_METHOD} ^(?:GET|HEAD)$
-RewriteRule ^document_tracker\.php$ document-tracker [R=302,L]
-RewriteRule ^(dashboard|quick_document|incoming|outgoing|batch_papers|batch_tracker|borrowed|item_categories|sms|notification_settings|settings|reports|records|login|forgot_password|users|logout)\.php$ $1 [R=302,L]
-RewriteRule ^(?:pages|api|includes)(?:/|$) - [F,END]
-RewriteRule ^document-tracker/?$ document_tracker.php [END]
+<FilesMatch "(?i)(^\.env(?:\..*)?$|^ceit-logbook-sms\.ini$|\.(?:sql|sql\.gz|dump)$)">
+    Require all denied
+</FilesMatch>
 
-# Serve clean page URLs from their existing PHP files without changing the browser URL.
+# Redirect known page-file navigations through the router without exposing the folder.
+RewriteCond %{REQUEST_METHOD} ^(?:GET|HEAD)$
+RewriteRule ^pages/(?:dashboard|quick_document|incoming|outgoing|batch_papers|batch_tracker|document_tracker|borrowed|item_categories|sms|notification_settings|credentials|settings|reports|records|login|forgot_password|users|logout)\.php$ includes/router.php [END,NC]
+
+RewriteRule ^(?:pages|api|includes|backups|config|database|tools)(?:/|$) - [F,END,NC]
+
+# Route only known public URLs through the shared dispatcher.
 RewriteRule ^$ dashboard [R=302,L]
-RewriteRule ^(dashboard|quick_document|incoming|outgoing|batch_papers|batch_tracker|borrowed|item_categories|sms|notification_settings|settings|reports|records|login|forgot_password|users|logout)/?$ $1.php [END]
+RewriteRule ^(?:dashboard|quick_document|incoming|outgoing|batch_papers|batch_tracker|borrowed|item_categories|sms|notification_settings|credentials|settings|reports|records|login|forgot_password|users|logout)(?:\.php)?/?$ includes/router.php [END]
+RewriteRule ^(?:document-tracker/?|document_tracker\.php|dashboard_old\.php)$ includes/router.php [END]
+RewriteRule ^(?:admin_document_activity|backup_download|compose_message|mobile-api|server_health)\.php$ includes/router.php [END]

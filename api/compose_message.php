@@ -1,9 +1,9 @@
 <?php
 // Returns a generated SMS for the staff preview. Read-only: nothing is saved or sent here.
-require_once 'auth.php';
-require_once 'db.php';
-require_once 'document_tracking.php';
-require_once 'message_composer.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/document_tracking.php';
+require_once __DIR__ . '/../includes/message_composer.php';
 ensure_admin();
 
 header('Content-Type: application/json; charset=utf-8');
@@ -30,7 +30,7 @@ $context['status'] = $status;
 $context['event'] = $event;
 $context['variant'] = $variant;
 if ($items !== null) {
-    require_once 'requirements_support.php';
+    require_once __DIR__ . '/../includes/requirements_support.php';
     $context['items'] = requirements_clean_labels($items);
 }
 $text = compose_sms_message($context);

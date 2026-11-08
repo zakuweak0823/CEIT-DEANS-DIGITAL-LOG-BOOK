@@ -1,9 +1,9 @@
 <?php
-require_once 'auth.php';
-require_once 'db.php';
-require_once 'mobile_form_settings.php';
-require_once 'document_tracking.php';
-require_once 'sla_support.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/mobile_form_settings.php';
+require_once __DIR__ . '/../includes/document_tracking.php';
+require_once __DIR__ . '/../includes/sla_support.php';
 ensure_admin();
 
 $mobileFormLabels = get_mobile_form_labels($conn);
@@ -246,7 +246,7 @@ if ($orderFilter === 'newest') {
     });
 }
 ?>
-<?php include 'header.php'; ?>
+<?php include __DIR__ . '/../includes/header.php'; ?>
 <div class="row g-4">
     <div class="col-12">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3">
@@ -698,4 +698,4 @@ document.addEventListener('DOMContentLoaded', function () {
 
 </script>
 
-<?php include 'footer.php'; ?>
+<?php include __DIR__ . '/../includes/footer.php'; ?>

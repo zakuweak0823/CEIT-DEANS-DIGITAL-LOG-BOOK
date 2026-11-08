@@ -1,7 +1,7 @@
 <?php
-require_once 'auth.php';
-require_once 'db.php';
-require_once 'sms_service.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/sms_service.php';
 ensure_admin();
 
 $message = '';
@@ -243,7 +243,7 @@ $smsStatusInfo = static function (array $log): array {
     return ['group' => 'other', 'class' => 'admin-status-neutral', 'icon' => 'bi-question-circle', 'hint' => 'Unrecognized status', 'urgent' => false];
 };
 ?>
-<?php include 'header.php'; ?>
+<?php include __DIR__ . '/../includes/header.php'; ?>
 <div class="row g-4">
     <div class="col-12">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3">
@@ -251,8 +251,8 @@ $smsStatusInfo = static function (array $log): array {
                 <h2 class="mb-1 text-primary">SMS Management</h2>
                 <p class="text-muted mb-0">Send SMS notifications and view message logs.</p>
             </div>
-            <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#smsForm">
-                <i class="bi bi-chat-dots"></i> Send SMS
+            <button class="btn btn-outline-primary d-inline-flex align-items-center gap-2" type="button" data-bs-toggle="modal" data-bs-target="#smsForm">
+                <i class="bi bi-chat-dots" aria-hidden="true"></i><span>Send SMS</span>
             </button>
         </div>
     </div>
@@ -300,7 +300,7 @@ $smsStatusInfo = static function (array $log): array {
                                 <?php foreach ($smsLogs as $log): ?>
                                     <?php $info = $smsStatusInfo($log); ?>
                                     <tr class="sms-row-<?php echo $info['group']; ?><?php echo $info['urgent'] ? ' is-urgent' : ''; ?>">
-                                        <td class="text-nowrap"><?php echo sanitize(date('M j, Y', strtotime($log['date_sent']))); ?><div class="small text-muted"><?php echo sanitize(date('g:i A', strtotime($log['date_sent']))); ?></div></td>
+                                        <td class="text-nowrap" data-sort-value="<?php echo sanitize($log['date_sent']); ?>"><?php echo sanitize(date('M j, Y', strtotime($log['date_sent']))); ?><div class="small text-muted"><?php echo sanitize(date('g:i A', strtotime($log['date_sent']))); ?></div></td>
                                         <td><?php echo sanitize($log['recipient']); ?></td>
                                         <td title="<?php echo sanitize($log['message']); ?>"><?php echo sanitize(mb_substr($log['message'], 0, 50)) . (mb_strlen($log['message']) > 50 ? '...' : ''); ?></td>
                                         <td>
@@ -436,124 +436,5 @@ $smsStatusInfo = static function (array $log): array {
         </div>
     <?php endif; ?>
 </div>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const smsForm = document.getElementById('smsSendForm');
-    const composeFields = document.getElementById('smsComposeFields');
-    const composeFooter = document.getElementById('smsComposeFooter');
-    const reviewPanel = document.getElementById('smsSendReview');
-    const reviewFooter = document.getElementById('smsSendReviewFooter');
-    const reviewRecipient = document.getElementById('smsReviewRecipient');
-    const reviewMessage = document.getElementById('smsReviewMessage');
-    const reviewButton = document.getElementById('smsReviewConfirm');
-    let smsSubmitter = null;
-
-    const showSmsReview = function () {
-        const recipientInput = document.getElementById('recipient');
-        const messageInput = document.getElementById('sms_message');
-        if (!smsForm || !composeFields || !composeFooter || !reviewPanel || !reviewFooter || !recipientInput || !messageInput) return;
-        reviewRecipient.textContent = recipientInput.value.trim();
-        reviewMessage.textContent = messageInput.value.trim();
-        composeFields.classList.add('d-none');
-        composeFooter.classList.add('d-none');
-        reviewPanel.classList.remove('d-none');
-        reviewFooter.classList.remove('d-none');
-    };
-
-    const hideSmsReview = function () {
-        if (!composeFields || !composeFooter || !reviewPanel || !reviewFooter) return;
-        composeFields.classList.remove('d-none');
-        composeFooter.classList.remove('d-none');
-        reviewPanel.classList.add('d-none');
-        reviewFooter.classList.add('d-none');
-        smsSubmitter = null;
-        if (reviewButton) {
-            reviewButton.disabled = false;
-            reviewButton.innerHTML = '<i class="bi bi-send me-1" aria-hidden="true"></i>Confirm and send';
-        }
-    };
-
-    if (smsForm) {
-        smsForm.addEventListener('submit', function (event) {
-            if (smsForm.dataset.confirmed === 'true') {
-                delete smsForm.dataset.confirmed;
-                return;
-            }
-            event.preventDefault();
-            smsSubmitter = event.submitter;
-            showSmsReview();
-        });
-    }
-
-    document.getElementById('smsReviewBack')?.addEventListener('click', hideSmsReview);
-    reviewButton?.addEventListener('click', function () {
-        if (!smsForm || !smsForm.reportValidity()) return;
-        reviewButton.disabled = true;
-        reviewButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Sending…';
-        smsForm.dataset.confirmed = 'true';
-        let sendField = smsForm.querySelector('input[name="send"][type="hidden"]');
-        if (!sendField) {
-            sendField = document.createElement('input');
-            sendField.type = 'hidden';
-            sendField.name = 'send';
-            sendField.value = '1';
-            smsForm.appendChild(sendField);
-        }
-        if (smsSubmitter && smsSubmitter.name === 'send') {
-            smsForm.requestSubmit(smsSubmitter);
-        } else {
-            smsForm.requestSubmit();
-        }
-    });
-
-    const actionConfirmElement = document.getElementById('smsActionConfirmModal');
-    const actionConfirmModal = actionConfirmElement ? new bootstrap.Modal(actionConfirmElement) : null;
-    const actionConfirmHeading = document.getElementById('smsActionConfirmHeading');
-    const actionConfirmMessage = document.getElementById('smsActionConfirmMessage');
-    const actionConfirmSubmit = document.getElementById('smsActionConfirmSubmit');
-    let pendingSmsForm = null;
-    let pendingSmsSubmitter = null;
-
-    document.querySelectorAll('form.sms-confirm-form').forEach(function (form) {
-        form.addEventListener('submit', function (event) {
-            if (form.dataset.confirmed === 'true') {
-                delete form.dataset.confirmed;
-                return;
-            }
-            event.preventDefault();
-            pendingSmsForm = form;
-            pendingSmsSubmitter = event.submitter;
-            actionConfirmHeading.textContent = form.dataset.confirmTitle || 'Confirm action';
-            actionConfirmMessage.textContent = form.dataset.confirmMessage || 'Continue with this SMS action?';
-            actionConfirmSubmit.textContent = form.dataset.confirmButton || 'Continue';
-            actionConfirmSubmit.disabled = false;
-            actionConfirmModal.show();
-        });
-    });
-
-    actionConfirmSubmit?.addEventListener('click', function () {
-        if (!pendingSmsForm) return;
-        const form = pendingSmsForm;
-        const submitter = pendingSmsSubmitter;
-        pendingSmsForm = null;
-        pendingSmsSubmitter = null;
-        actionConfirmSubmit.disabled = true;
-        actionConfirmSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Working…';
-        actionConfirmElement.addEventListener('hidden.bs.modal', function () {
-            form.dataset.confirmed = 'true';
-            if (submitter) {
-                form.requestSubmit(submitter);
-            } else {
-                form.requestSubmit();
-            }
-        }, { once: true });
-        actionConfirmModal.hide();
-    });
-
-    const outcomeModal = document.getElementById('smsOutcomeModal');
-    if (outcomeModal) {
-        new bootstrap.Modal(outcomeModal).show();
-    }
-});
-</script>
-<?php include 'footer.php'; ?>
+<script src="assets/js/page-sms.js?v=<?php echo (int)@filemtime(dirname(__DIR__) . '/assets/js/page-sms.js'); ?>"></script>
+<?php include __DIR__ . '/../includes/footer.php'; ?>

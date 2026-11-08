@@ -1,8 +1,8 @@
 <?php
-require_once 'auth.php';
-require_once 'db.php';
-require_once 'batch_support.php';
-require_once 'print_report_support.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/batch_support.php';
+require_once __DIR__ . '/../includes/print_report_support.php';
 ensure_admin();
 
 $reportType = isset($_GET['report_type']) && is_string($_GET['report_type']) ? $_GET['report_type'] : '';
@@ -184,7 +184,7 @@ if ($hiddenSelectors) {
 $printColumnCss = implode("\n    ", $printColumnRules);
 $showPrintHeader = $reportGenerated && ($printSettings['letterhead'] || $printSettings['title'] || $printSettings['period']);
 ?>
-<?php include 'header.php'; ?>
+<?php include __DIR__ . '/../includes/header.php'; ?>
 <style>
 .report-page .report-stat {
     position: relative;
@@ -960,7 +960,7 @@ $showPrintHeader = $reportGenerated && ($printSettings['letterhead'] || $printSe
                                     <th>Date and time</th>
                                     <th>Sender</th>
                                     <th>Role</th>
-                                    <th>Contact</th>
+                                    <th data-sort-disabled>Contact</th>
                                     <th>Recipient</th>
                                     <th>Subject</th>
                                     <th>Status</th>
@@ -1196,6 +1196,10 @@ function filterReportRows() {
 }
 reportSearch.addEventListener('input', filterReportRows);
 statusFilter.addEventListener('change', filterReportRows);
+reportTable.addEventListener('admin-table-sort', function () {
+    reportRows.splice(0, reportRows.length, ...Array.from(reportTable.querySelectorAll('tbody tr[data-status]')));
+    filterReportRows();
+});
 filterReportRows();
 
 document.getElementById('exportExcel').addEventListener('click', function () {
@@ -1260,4 +1264,4 @@ document.querySelectorAll('.date-preset').forEach(function (button) {
     });
 });
 </script>
-<?php include 'footer.php'; ?>
+<?php include __DIR__ . '/../includes/footer.php'; ?>

@@ -10,6 +10,14 @@ CREATE TABLE IF NOT EXISTS users (
 );
 ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_phone VARCHAR(20) DEFAULT NULL;
 
+CREATE TABLE IF NOT EXISTS login_cooldowns (
+    user_id INT NOT NULL PRIMARY KEY,
+    failures TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    locked_until DATETIME DEFAULT NULL,
+    CONSTRAINT fk_login_cooldowns_user FOREIGN KEY (user_id)
+        REFERENCES users(user_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS mobile_api_tokens (
     token_id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,

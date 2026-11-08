@@ -1,8 +1,8 @@
 <?php
-require_once 'auth.php';
-require_once 'db.php';
-require_once 'mobile_submission_console_control.php';
-require_once 'sla_support.php';
+require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/mobile_submission_console_control.php';
+require_once __DIR__ . '/../includes/sla_support.php';
 ensure_admin();
 
 if (($_GET['mobile_console'] ?? '') === '1') {
@@ -179,7 +179,7 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
 };
 ?>
 
-<?php include 'header.php'; ?>
+<?php include __DIR__ . '/../includes/header.php'; ?>
 <div class="dashboard-page dashboard-redesign">
     <header class="dashboard-page-heading">
         <div>
@@ -589,4 +589,4 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<?php include 'footer.php'; ?>
+<?php include __DIR__ . '/../includes/footer.php'; ?>

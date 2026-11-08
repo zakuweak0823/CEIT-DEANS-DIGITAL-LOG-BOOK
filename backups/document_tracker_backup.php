@@ -1,6 +1,6 @@
 <?php
-require_once 'db.php';
-require_once 'document_tracking.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/document_tracking.php';
 
 header('X-Robots-Tag: noindex, nofollow');
 $storageReady = true;
