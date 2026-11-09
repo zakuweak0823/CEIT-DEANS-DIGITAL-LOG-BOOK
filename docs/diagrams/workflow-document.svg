@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 900" role="img" aria-labelledby="title desc">
+  <title id="title">Individual document processing workflow</title>
+  <desc id="desc">Incoming documents are reviewed, incomplete requirements can be resolved, and eligible records move to outgoing release.</desc>
+  <defs>
+    <style>
+      text{font-family:Arial,Helvetica,sans-serif;fill:#173b2d}.title{font-size:29px;font-weight:700}.sub{font-size:14px;fill:#536b60}.head{font-size:16px;font-weight:700}.small{font-size:12px;fill:#536b60}.state{fill:#fff;stroke:#397851;stroke-width:2}.decision{fill:#fff8e9;stroke:#c18a2d;stroke-width:2}.arrow{fill:none;stroke:#426b53;stroke-width:2.4;marker-end:url(#arrow)}.alt{fill:none;stroke:#9b6b27;stroke-width:2;marker-end:url(#arrow)}
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#426b53"/></marker>
+  </defs>
+  <rect width="1500" height="900" fill="#f3f8f4"/>
+  <text x="42" y="52" class="title">Individual Document Workflow</text>
+  <text x="42" y="79" class="sub">A single document record moves from intake to release; status and history stay attached to that record.</text>
+
+  <rect x="35" y="120" width="1430" height="455" rx="22" fill="#eaf4ed" stroke="#77a488"/>
+  <text x="65" y="155" class="head">Incoming</text>
+  <rect x="65" y="205" width="175" height="74" rx="16" class="state"/><text x="152" y="235" text-anchor="middle" class="head">Submit / record</text><text x="152" y="258" text-anchor="middle" class="small">Generate reference</text>
+  <rect x="295" y="205" width="180" height="74" rx="16" class="state"/><text x="385" y="235" text-anchor="middle" class="head">Received</text><text x="385" y="258" text-anchor="middle" class="small">Initial status</text>
+  <rect x="530" y="205" width="210" height="74" rx="16" class="state"/><text x="635" y="235" text-anchor="middle" class="head">Office review</text><text x="635" y="258" text-anchor="middle" class="small">Staff updates details/status</text>
+  <path d="M240 242 H285 M475 242 H520 M740 242 H765" class="arrow"/>
+  <polygon points="850,205 925,242 850,279 775,242" class="decision"/><text x="850" y="238" text-anchor="middle" class="small">Missing</text><text x="850" y="254" text-anchor="middle" class="small">requirements?</text>
+  <rect x="1010" y="180" width="190" height="74" rx="16" fill="#fff1e9" stroke="#c47b58" stroke-width="2"/><text x="1105" y="210" text-anchor="middle" class="head">Incomplete</text><text x="1105" y="233" text-anchor="middle" class="small">Wait for needed items</text>
+  <path d="M925 242 H1000" class="alt"/><text x="952" y="229" class="small">Yes</text>
+
+  <polygon points="1280,175 1355,212 1280,249 1205,212" class="decision"/><text x="1280" y="208" text-anchor="middle" class="small">All items</text><text x="1280" y="224" text-anchor="middle" class="small">received?</text>
+  <path d="M1200 217 H1205" class="arrow"/>
+  <path d="M1280 249 V300 H1200 V264" class="alt"/><text x="1290" y="278" class="small">No: wait / notify</text>
+  <path d="M1355 212 H1430 V170 H385 V195" class="alt"/><text x="1370" y="201" class="small">Yes</text>
+
+  <rect x="70" y="370" width="360" height="88" rx="16" fill="#fff" stroke="#8bb99b" stroke-width="1.6"/>
+  <text x="250" y="400" text-anchor="middle" class="head">Other Incoming outcomes</text>
+  <text x="250" y="425" text-anchor="middle" class="small">Incomplete · On Hold · Returned · Cancelled</text>
+  <text x="250" y="445" text-anchor="middle" class="small">These do not qualify for release.</text>
+  <path d="M850 279 V340 H635 V360" class="arrow"/><text x="862" y="316" class="small">No</text>
+  <rect x="500" y="370" width="350" height="88" rx="16" class="state"/>
+  <text x="675" y="400" text-anchor="middle" class="head">Eligible Incoming states</text>
+  <text x="675" y="425" text-anchor="middle" class="small">Received · In Review · Forwarded · Approved</text>
+  <text x="675" y="445" text-anchor="middle" class="small">Only these can be prepared for release.</text>
+  <rect x="990" y="378" width="230" height="74" rx="16" class="state"/><text x="1105" y="408" text-anchor="middle" class="head">Prepare for Release</text><text x="1105" y="431" text-anchor="middle" class="small">Required tracking note</text>
+  <path d="M850 414 H980" class="arrow"/>
+
+  <rect x="35" y="610" width="1430" height="190" rx="22" fill="#e7eef9" stroke="#7d94b7"/>
+  <text x="65" y="646" class="head">Outgoing</text>
+  <rect x="245" y="685" width="240" height="72" rx="16" class="state"/><text x="365" y="715" text-anchor="middle" class="head">For Release</text><text x="365" y="738" text-anchor="middle" class="small">Notify client / tracker available</text>
+  <rect x="635" y="685" width="240" height="72" rx="16" class="state"/><text x="755" y="715" text-anchor="middle" class="head">Released</text><text x="755" y="738" text-anchor="middle" class="small">Document handed to client</text>
+  <path d="M1105 452 V600 H365 V675 M485 721 H625" class="arrow"/>
+  <rect x="1030" y="685" width="230" height="72" rx="16" fill="#fff1e9" stroke="#c47b58" stroke-width="2"/><text x="1145" y="715" text-anchor="middle" class="head">Returned / Cancelled</text><text x="1145" y="738" text-anchor="middle" class="small">Closed without release</text>
+  <path d="M755 685 V660 H1145 V675" class="alt"/>
+  <path d="M365 685 V665 H1145 V675" class="alt"/>
+  <text x="65" y="835" class="small">Preparing for release changes the same record from Incoming to Outgoing. Status changes create history entries.</text>
+  <text x="65" y="857" class="small">Public QR tracking is read-only. Priority and SLA age affect queue visibility; neither is a document status.</text>
+</svg>

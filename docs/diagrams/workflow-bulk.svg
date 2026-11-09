@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 900" role="img" aria-labelledby="title desc">
+  <title id="title">Bulk submission and intake workflow</title>
+  <desc id="desc">Staff register a batch, scan its QR, explicitly confirm a received count under one of two configured modes, then advance batch and linked record statuses.</desc>
+  <defs>
+    <style>
+      text{font-family:Arial,Helvetica,sans-serif;fill:#173b2d}.title{font-size:29px;font-weight:700}.sub{font-size:14px;fill:#536b60}.head{font-size:16px;font-weight:700}.label{font-size:14px}.small{font-size:12px;fill:#536b60}.box{fill:#fff;stroke:#397851;stroke-width:2}.decision{fill:#fff8e9;stroke:#c18a2d;stroke-width:2}.receipt{fill:#e7eef9;stroke:#5879a7;stroke-width:2}.locked{fill:#fff1e9;stroke:#c47b58;stroke-width:2}.arrow{fill:none;stroke:#426b53;stroke-width:2.4;marker-end:url(#arrow)}.alt{fill:none;stroke:#9b6b27;stroke-width:2;marker-end:url(#arrow)}
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#426b53"/></marker>
+  </defs>
+  <rect width="1500" height="900" fill="#f3f8f4"/>
+  <text x="42" y="52" class="title">Bulk Submission and Intake Workflow</text>
+  <text x="42" y="79" class="sub">QR scanning retrieves the batch; only an explicit staff confirmation records the intake receipt.</text>
+
+  <rect x="45" y="140" width="225" height="82" rx="16" class="box"/><text x="157" y="173" text-anchor="middle" class="head">Register batch</text><text x="157" y="197" text-anchor="middle" class="small">Code, token, paper count</text>
+  <rect x="345" y="140" width="210" height="82" rx="16" class="box"/><text x="450" y="173" text-anchor="middle" class="head">Received</text><text x="450" y="197" text-anchor="middle" class="small">Initial batch status</text>
+  <rect x="630" y="140" width="225" height="82" rx="16" class="receipt"/><text x="742" y="173" text-anchor="middle" class="head">Scan CEIT batch QR</text><text x="742" y="197" text-anchor="middle" class="small">Read-only batch lookup</text>
+  <polygon points="1000,135 1080,180 1000,225 920,180" class="decision"/><text x="1000" y="175" text-anchor="middle" class="small">Intake mode?</text><text x="1000" y="192" text-anchor="middle" class="small">Configured in Settings</text>
+  <path d="M270 181 H335 M555 181 H620 M855 181 H910" class="arrow"/>
+
+  <rect x="1110" y="115" width="330" height="90" rx="16" class="receipt"/><text x="1275" y="150" text-anchor="middle" class="head">Confirm before release</text><text x="1275" y="175" text-anchor="middle" class="small">Separate explicit confirmation step</text>
+  <path d="M1080 180 H1100" class="arrow"/><text x="1083" y="165" class="small">before</text>
+  <rect x="1110" y="250" width="330" height="90" rx="16" class="receipt"/><text x="1275" y="285" text-anchor="middle" class="head">Confirm with release</text><text x="1275" y="310" text-anchor="middle" class="small">Count and status change in one action</text>
+  <path d="M1000 225 V295 H1100" class="arrow"/><text x="1013" y="249" class="small">with</text>
+
+  <rect x="900" y="410" width="390" height="105" rx="16" class="box"/><text x="1095" y="444" text-anchor="middle" class="head">Count documents and record receipt</text><text x="1095" y="470" text-anchor="middle" class="small">Received count, expected count, time, staff</text><text x="1095" y="492" text-anchor="middle" class="small">Mismatch requires a note (0–9,999 documents)</text>
+  <path d="M1440 160 H1450 V390 H1095 V400" class="arrow"/>
+  <path d="M1275 340 V462 H1280" class="arrow"/>
+  <polygon points="1095,570 1180,615 1095,660 1010,615" class="decision"/><text x="1095" y="610" text-anchor="middle" class="small">Count equals</text><text x="1095" y="627" text-anchor="middle" class="small">expected?</text>
+  <path d="M1095 515 V560" class="arrow"/>
+  <path d="M1010 615 H930 V462 H890" class="alt"/><text x="935" y="603" class="small">No note?</text>
+  <text x="1195" y="604" class="small">A note is required</text><text x="1195" y="621" class="small">if counts differ.</text>
+  <rect x="400" y="570" width="340" height="92" rx="16" class="box"/><text x="570" y="605" text-anchor="middle" class="head">Receipt confirmed once</text><text x="570" y="630" text-anchor="middle" class="small">In before-release mode, status remains Received</text>
+  <path d="M1010 615 H750" class="arrow"/>
+
+  <rect x="400" y="735" width="340" height="82" rx="16" class="box"/><text x="570" y="768" text-anchor="middle" class="head">For Release</text><text x="570" y="792" text-anchor="middle" class="small">With-release: same action; otherwise advance after receipt</text>
+  <rect x="900" y="735" width="340" height="82" rx="16" class="box"/><text x="1070" y="768" text-anchor="middle" class="head">Released</text><text x="1070" y="792" text-anchor="middle" class="small">Batch and linked document statuses sync</text>
+  <path d="M570 662 V725 M740 776 H890" class="arrow"/>
+  <rect x="45" y="720" width="285" height="95" rx="16" class="locked"/><text x="187" y="755" text-anchor="middle" class="head">After receipt</text><text x="187" y="780" text-anchor="middle" class="small">Expected count and papers are locked;</text><text x="187" y="800" text-anchor="middle" class="small">confirmed batch cannot be deleted.</text>
+  <path d="M400 615 H350 V765 H340" class="alt"/>
+  <text x="45" y="860" class="small">Status advancement is transactional; invalid counts and stale updates are rejected, and an existing receipt cannot be overwritten.</text>
+</svg>

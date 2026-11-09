@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 900" role="img" aria-labelledby="title desc">
+  <title id="title">Digital Logbook System use-case diagram</title>
+  <desc id="desc">Staff use office logbook functions. Administrators inherit staff functions and also manage accounts, audit logs, settings, and backups. The system can send notifications through an external SMS service.</desc>
+  <defs>
+    <style>
+      text{font-family:Arial,Helvetica,sans-serif;fill:#12376b}.heading{font-size:28px;font-weight:700}.actor-label{font-size:15px;font-weight:700}.use-label{font-size:13px;font-weight:600}.note{font-size:12px;fill:#435b78}.boundary{fill:#fff;stroke:#174c91;stroke-width:3}.use{fill:#eaf8ff;stroke:#168fc5;stroke-width:2}.association{fill:none;stroke:#3469ae;stroke-width:2}.inherit{fill:none;stroke:#3469ae;stroke-width:2}
+    </style>
+  </defs>
+  <rect width="1500" height="900" fill="#fff"/>
+
+  <rect x="190" y="35" width="1040" height="820" rx="12" class="boundary"/>
+  <text x="710" y="78" text-anchor="middle" class="heading">Digital Logbook System</text>
+
+  <g aria-label="Staff actor" stroke="#12376b" stroke-width="4" fill="none" stroke-linecap="round">
+    <circle cx="92" cy="370" r="13"/>
+    <path d="M92 384 V438 M92 398 L64 421 M92 398 L120 421 M92 438 L68 472 M92 438 L116 472"/>
+  </g>
+  <text x="92" y="500" text-anchor="middle" class="actor-label">Office Staff /</text>
+  <text x="92" y="519" text-anchor="middle" class="actor-label">Authorized User</text>
+
+  <g aria-label="Administrator actor" stroke="#12376b" stroke-width="4" fill="none" stroke-linecap="round">
+    <circle cx="1390" cy="315" r="13"/>
+    <path d="M1390 329 V383 M1390 343 L1362 366 M1390 343 L1418 366 M1390 383 L1366 417 M1390 383 L1414 417"/>
+  </g>
+  <text x="1390" y="445" text-anchor="middle" class="actor-label">Administrator</text>
+
+  <g aria-label="SMS service actor" stroke="#12376b" stroke-width="4" fill="none" stroke-linecap="round">
+    <circle cx="1390" cy="675" r="13"/>
+    <path d="M1390 689 V733 M1390 700 L1369 716 M1390 700 L1411 716 M1390 733 L1372 758 M1390 733 L1408 758"/>
+  </g>
+  <text x="1390" y="786" text-anchor="middle" class="actor-label">SMS API Service</text>
+  <text x="1390" y="805" text-anchor="middle" class="note">(PhilSMS)</text>
+
+  <g class="association">
+    <path d="M120 405 L275 165 M120 405 L275 265 M120 405 L275 365 M120 405 L275 465 M120 405 L275 565 M120 405 L275 665"/>
+    <path d="M1362 365 L1145 295 M1362 365 L1145 395 M1362 365 L1145 495 M1362 365 L1145 595"/>
+    <path d="M1200 665 L1367 700"/>
+  </g>
+
+  <ellipse cx="430" cy="165" rx="155" ry="38" class="use"/>
+  <text x="430" y="170" text-anchor="middle" class="use-label">Log In / Log Out</text>
+  <ellipse cx="430" cy="265" rx="155" ry="42" class="use"/>
+  <text x="430" y="260" text-anchor="middle" class="use-label">Manage Incoming and</text><text x="430" y="278" text-anchor="middle" class="use-label">Outgoing Documents</text>
+  <ellipse cx="430" cy="365" rx="155" ry="42" class="use"/>
+  <text x="430" y="360" text-anchor="middle" class="use-label">Manage Bulk Submissions</text><text x="430" y="378" text-anchor="middle" class="use-label">and Confirm Intake</text>
+  <ellipse cx="430" cy="465" rx="155" ry="42" class="use"/>
+  <text x="430" y="460" text-anchor="middle" class="use-label">Manage Borrowed Items</text><text x="430" y="478" text-anchor="middle" class="use-label">(Borrow / Return)</text>
+  <ellipse cx="430" cy="565" rx="155" ry="42" class="use"/>
+  <text x="430" y="560" text-anchor="middle" class="use-label">View Dashboard and</text><text x="430" y="578" text-anchor="middle" class="use-label">Generate Reports</text>
+  <ellipse cx="430" cy="665" rx="155" ry="42" class="use"/>
+  <text x="430" y="660" text-anchor="middle" class="use-label">Monitor Status and</text><text x="430" y="678" text-anchor="middle" class="use-label">Review SMS Logs</text>
+
+  <ellipse cx="990" cy="295" rx="155" ry="42" class="use"/>
+  <text x="990" y="290" text-anchor="middle" class="use-label">Manage Staff Accounts</text><text x="990" y="308" text-anchor="middle" class="use-label">(Admin Only)</text>
+  <ellipse cx="990" cy="395" rx="155" ry="42" class="use"/>
+  <text x="990" y="390" text-anchor="middle" class="use-label">Review Audit Logs</text><text x="990" y="408" text-anchor="middle" class="use-label">(Admin Only)</text>
+  <ellipse cx="990" cy="495" rx="155" ry="42" class="use"/>
+  <text x="990" y="490" text-anchor="middle" class="use-label">Configure System and</text><text x="990" y="508" text-anchor="middle" class="use-label">Notification Settings</text>
+  <ellipse cx="990" cy="595" rx="155" ry="42" class="use"/>
+  <text x="990" y="590" text-anchor="middle" class="use-label">Download Database</text><text x="990" y="608" text-anchor="middle" class="use-label">Backup (Admin Only)</text>
+
+  <ellipse cx="990" cy="715" rx="210" ry="43" class="use"/>
+  <text x="990" y="710" text-anchor="middle" class="use-label">Send SMS Notification</text>
+  <text x="990" y="729" text-anchor="middle" class="note">(release updates and other configured alerts)</text>
+  <path d="M1200 715 H1325 V700 H1367" class="association"/>
+
+  <rect x="255" y="755" width="765" height="65" rx="8" fill="#f3f7fc" stroke="#99afcc"/>
+  <text x="275" y="780" class="note">Admin has all Staff capabilities, plus the Admin-only functions shown.</text>
+  <text x="275" y="801" class="note">Portal access requires sign-in; mobile/kiosk and public tracking are shown in the companion diagram.</text>
+</svg>

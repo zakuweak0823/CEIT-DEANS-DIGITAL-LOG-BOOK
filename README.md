@@ -25,6 +25,8 @@
 
 - [Overview](#overview)
 - [System flow and how it works](docs/SYSTEM-FLOW.md)
+- [Capstone use-case model](docs/CAPSTONE-USE-CASES.md)
+- [Capstone diagram pack](docs/CAPSTONE-DIAGRAMS.md)
 - [Highlights](#highlights)
 - [Start here](#start-here)
 - [Quick start](#quick-start)
@@ -58,6 +60,8 @@ PHP API and MySQL database.
 | Goal | Start with |
 | --- | --- |
 | Understand how the system works end to end | [System flow and how it works](docs/SYSTEM-FLOW.md) |
+| Prepare a capstone use-case model | [Capstone use-case model](docs/CAPSTONE-USE-CASES.md) |
+| View capstone system, ERD, use-case, and workflow diagrams | [Capstone diagram pack](docs/CAPSTONE-DIAGRAMS.md) |
 | Set up the admin portal on Windows | [Windows setup guide](docs/WINDOWS-SETUP.md) |
 | Start the local/LAN server | Double-click [`start-office-server.bat`](start-office-server.bat) from the project folder inside XAMPP's `htdocs`. |
 | Move the app and records to another computer | [Transfer instructions](docs/WINDOWS-SETUP.md#move-the-application-and-database) |

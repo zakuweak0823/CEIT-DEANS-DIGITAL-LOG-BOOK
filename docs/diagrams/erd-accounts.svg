@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 850" role="img" aria-labelledby="title desc">
+  <title id="title">Account and security entity relationship diagram</title>
+  <desc id="desc">User account table and its related mobile tokens, password recovery tables, login cooldown table, audit log, and migration history.</desc>
+  <defs>
+    <style>
+      text{font-family:Arial,Helvetica,sans-serif;fill:#173b2d}.title{font-size:29px;font-weight:700}.sub{font-size:14px;fill:#536b60}.name{font-size:16px;font-weight:700}.field{font-size:13px}.note{font-size:12px;fill:#536b60}.entity{fill:#fff;stroke:#526f9b;stroke-width:1.6}.bar{fill:#e2eafa}.line{fill:none;stroke:#506b95;stroke-width:2}.logical{fill:none;stroke:#84928a;stroke-width:1.8;stroke-dasharray:6 5}
+    </style>
+  </defs>
+  <rect width="1400" height="850" fill="#f4f6fb"/>
+  <text x="40" y="48" class="title">Entity Relationship Diagram — Accounts and Security</text>
+  <text x="40" y="73" class="sub">The audit log records actor names as text; it is not joined to an account by a foreign key.</text>
+
+  <path d="M470 230 H530 V150 H600 M530 230 V350 H600 M530 350 V560 H600 M530 560 V735 H600 M870 150 H950 M870 350 H950" class="line"/>
+  <path d="M870 230 H1000 V570 H950" class="logical"/>
+  <text x="490" y="212" class="note">1 to many</text>
+  <text x="880" y="134" class="note">1 to 0..1</text>
+  <text x="890" y="333" class="note">1 to many / optional user</text>
+  <text x="890" y="550" class="note">actor text only</text>
+
+  <g transform="translate(70 310)">
+    <rect width="400" height="220" rx="14" class="entity"/><path d="M0 14a14 14 0 0 1 14-14h372a14 14 0 0 1 14 14v42H0z" class="bar"/>
+    <text x="20" y="35" class="name">users</text>
+    <text x="20" y="82" class="field">PK user_id</text><text x="20" y="108" class="field">UQ username, password hash, role</text><text x="20" y="134" class="field">first_name, middle_name, surname</text><text x="20" y="160" class="field">UQ nullable email</text><text x="20" y="186" class="field">recovery_phone</text><text x="20" y="212" class="field">Account data used by portal and mobile API</text>
+  </g>
+
+  <g transform="translate(600 80)">
+    <rect width="270" height="145" rx="12" class="entity"/><path d="M0 12a12 12 0 0 1 12-12h246a12 12 0 0 1 12 12v36H0z" class="bar"/>
+    <text x="16" y="31" class="name">mobile_api_tokens</text><text x="16" y="72" class="field">PK token_id</text><text x="16" y="95" class="field">FK user_id, UQ token_hash</text><text x="16" y="118" class="field">expires_at, created_at</text>
+  </g>
+  <g transform="translate(600 280)">
+    <rect width="270" height="145" rx="12" class="entity"/><path d="M0 12a12 12 0 0 1 12-12h246a12 12 0 0 1 12 12v36H0z" class="bar"/>
+    <text x="16" y="31" class="name">password_reset_links</text><text x="16" y="72" class="field">PK token_id; FK user_id</text><text x="16" y="95" class="field">UQ token_hash, purpose</text><text x="16" y="118" class="field">expires_at, used_at</text>
+  </g>
+  <g transform="translate(600 490)">
+    <rect width="270" height="145" rx="12" class="entity"/><path d="M0 12a12 12 0 0 1 12-12h246a12 12 0 0 1 12 12v36H0z" class="bar"/>
+    <text x="16" y="31" class="name">password_resets</text><text x="16" y="72" class="field">PK reset_id; nullable FK user_id</text><text x="16" y="95" class="field">username_key, request_ip</text><text x="16" y="118" class="field">code hash/salt, attempts, expiry</text>
+  </g>
+  <g transform="translate(600 700)">
+    <rect width="270" height="110" rx="12" class="entity"/><path d="M0 12a12 12 0 0 1 12-12h246a12 12 0 0 1 12 12v36H0z" class="bar"/>
+    <text x="16" y="31" class="name">login_cooldowns</text><text x="16" y="72" class="field">PK + FK user_id</text><text x="16" y="95" class="field">failures, locked_until</text>
+  </g>
+
+  <g transform="translate(950 80)">
+    <rect width="330" height="145" rx="12" class="entity"/><path d="M0 12a12 12 0 0 1 12-12h306a12 12 0 0 1 12 12v36H0z" class="bar"/>
+    <text x="16" y="31" class="name">audit_logs</text><text x="16" y="72" class="field">PK audit_id</text><text x="16" y="95" class="field">actor, action, target, details</text><text x="16" y="118" class="field">ip_address, created_at</text>
+  </g>
+  <g transform="translate(950 300)">
+    <rect width="330" height="145" rx="12" class="entity"/><path d="M0 12a12 12 0 0 1 12-12h306a12 12 0 0 1 12 12v36H0z" class="bar"/>
+    <text x="16" y="31" class="name">app_schema_migrations</text><text x="16" y="72" class="field">PK version</text><text x="16" y="95" class="field">applied_at</text><text x="16" y="118" class="field">Tracks one-time schema/data migrations</text>
+  </g>
+  <rect x="950" y="520" width="330" height="130" rx="14" fill="#fff" stroke="#84928a" stroke-dasharray="6 5"/>
+  <text x="970" y="552" class="name">Audit actor linkage</text><text x="970" y="584" class="field">actor stores a username/name snapshot.</text><text x="970" y="610" class="field">No users.user_id foreign key exists.</text>
+  <text x="70" y="595" class="note">Solid lines = enforced foreign keys; nullable user_id permits a reset request without a matching account.</text>
+  <path d="M70 650 H170" class="line"/><text x="185" y="655" class="field">Foreign key</text><path d="M320 650 H420" class="logical"/><text x="435" y="655" class="field">Informational / textual association</text>
+</svg>

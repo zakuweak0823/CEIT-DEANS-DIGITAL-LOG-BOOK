@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 1020" role="img" aria-labelledby="title desc">
+  <title id="title">Logbook records entity relationship diagram</title>
+  <desc id="desc">Business data tables for documents, batches, paper links, requirements, tracking events, mobile submissions, borrowed items, categories, SMS, and settings.</desc>
+  <defs>
+    <style>
+      text{font-family:Arial,Helvetica,sans-serif;fill:#173b2d}.title{font-size:29px;font-weight:700}.sub{font-size:14px;fill:#536b60}.name{font-size:16px;font-weight:700}.field{font-size:12px}.note{font-size:12px;fill:#536b60}.entity{fill:#fff;stroke:#417952;stroke-width:1.6}.bar{fill:#dcefe2}.line{fill:none;stroke:#426b53;stroke-width:2}.logical{fill:none;stroke:#84928a;stroke-width:1.8;stroke-dasharray:6 5}
+    </style>
+  </defs>
+  <rect width="1500" height="1020" fill="#f3f8f4"/>
+  <text x="40" y="48" class="title">Entity Relationship Diagram — Logbook Records</text>
+  <text x="40" y="73" class="sub">Primary keys (PK), foreign keys (FK), and application-level references from the current schema.</text>
+
+  <path d="M330 185 H450 M600 315 V385 M750 190 H900 M750 445 H900 M1050 435 H1170 M330 450 H450 M330 720 H450 M1050 205 H1170" class="line"/>
+  <path d="M330 220 H390 V510 H450 M330 240 H410 V690 H450 M750 220 H825 V510 H900" class="logical"/>
+  <text x="350" y="176" class="note">1 to 0..1</text>
+  <text x="610" y="352" class="note">1 to many</text>
+  <text x="755" y="177" class="note">batch paper</text>
+  <text x="760" y="432" class="note">batch paper</text>
+  <text x="1060" y="422" class="note">category</text>
+  <text x="334" y="500" class="note">logical doc_id</text>
+  <text x="334" y="680" class="note">logical doc_id</text>
+  <text x="760" y="500" class="note">logical batch_id</text>
+  <text x="1060" y="192" class="note">independent log</text>
+
+  <g transform="translate(40 105)">
+    <rect width="290" height="200" rx="12" class="entity"/><path d="M0 12a12 12 0 0 1 12-12h266a12 12 0 0 1 12 12v35H0z" class="bar"/>
+    <text x="16" y="30" class="name">documents</text>
+    <text x="16" y="69" class="field">PK doc_id</text><text x="16" y="91" class="field">type, status, sender, recipient</text><text x="16" y="113" class="field">subject, remarks, submitter_name</text><text x="16" y="135" class="field">client_phone, submitter_type</text><text x="16" y="157" class="field">tracking_token, local_reference</text><text x="16" y="179" class="field">university_reference, date_created</text>
+  </g>
+  <g transform="translate(450 105)">
+    <rect width="300" height="210" rx="12" class="entity"/><path d="M0 12a12 12 0 0 1 12-12h276a12 12 0 0 1 12 12v35H0z" class="bar"/>
+    <text x="16" y="30" class="name">document_batches</text>
+    <text x="16" y="69" class="field">PK batch_id; UQ batch_code</text><text x="16" y="91" class="field">document_type, batch_type, status</text><text x="16" y="113" class="field">submitter_name, sender, recipient</text><text x="16" y="135" class="field">tracking_token, document_pages</text><text x="16" y="157" class="field">paper_count, is_priority</text><text x="16" y="179" class="field">intake counts, notes, received_at/by</text><text x="16" y="201" class="field">batch_date, created_at</text>
+  </g>
+  <g transform="translate(900 105)">
+    <rect width="300" height="185" rx="12" class="entity"/><path d="M0 12a12 12 0 0 1 12-12h276a12 12 0 0 1 12 12v35H0z" class="bar"/>
+    <text x="16" y="30" class="name">sms_logs</text>
+    <text x="16" y="69" class="field">PK sms_id</text><text x="16" y="91" class="field">recipient, message, status</text><text x="16" y="113" class="field">provider_name, provider_message_id</text><text x="16" y="135" class="field">provider_status_checked_at</text><text x="16" y="157" class="field">date_sent</text>
+  </g>
+
+  <g transform="translate(450 385)">
+    <rect width="300" height="155" rx="12" class="entity"/><path d="M0 12a12 12 0 0 1 12-12h276a12 12 0 0 1 12 12v35H0z" class="bar"/>
+    <text x="16" y="30" class="name">batch_papers</text>
+    <text x="16" y="69" class="field">PK paper_id</text><text x="16" y="91" class="field">FK batch_id → document_batches</text><text x="16" y="113" class="field">FK + UQ doc_id → documents</text><text x="16" y="135" class="field">subject, remarks, created_at</text>
+  </g>
+  <g transform="translate(900 345)">
+    <rect width="300" height="180" rx="12" class="entity"/><path d="M0 12a12 12 0 0 1 12-12h276a12 12 0 0 1 12 12v35H0z" class="bar"/>
+    <text x="16" y="30" class="name">borrowed_items</text>
+    <text x="16" y="69" class="field">PK item_id</text><text x="16" y="91" class="field">FK nullable category_id</text><text x="16" y="113" class="field">item_name, borrower, borrower_phone</text><text x="16" y="135" class="field">status, due_date, returned_date</text><text x="16" y="157" class="field">date_borrowed</text>
+  </g>
+  <g transform="translate(1170 345)">
+    <rect width="290" height="130" rx="12" class="entity"/><path d="M0 12a12 12 0 0 1 12-12h266a12 12 0 0 1 12 12v35H0z" class="bar"/>
+    <text x="16" y="30" class="name">item_categories</text>
+    <text x="16" y="69" class="field">PK category_id</text><text x="16" y="91" class="field">UQ category_name</text><text x="16" y="113" class="field">created_at</text>
+  </g>
+
+  <g transform="translate(40 390)">
+    <rect width="290" height="150" rx="12" class="entity"/><path d="M0 12a12 12 0 0 1 12-12h266a12 12 0 0 1 12 12v35H0z" class="bar"/>
+    <text x="16" y="30" class="name">document_events</text>
+    <text x="16" y="69" class="field">PK event_id</text><text x="16" y="91" class="field">nullable doc_id / batch_id*</text><text x="16" y="113" class="field">kind, status, note, actor</text><text x="16" y="135" class="field">created_at</text>
+  </g>
+  <g transform="translate(40 620)">
+    <rect width="290" height="130" rx="12" class="entity"/><path d="M0 12a12 12 0 0 1 12-12h266a12 12 0 0 1 12 12v35H0z" class="bar"/>
+    <text x="16" y="30" class="name">document_requirements</text>
+    <text x="16" y="69" class="field">PK req_id; doc_id*</text><text x="16" y="91" class="field">label, received_at</text><text x="16" y="113" class="field">created_at</text>
+  </g>
+  <g transform="translate(450 620)">
+    <rect width="300" height="130" rx="12" class="entity"/><path d="M0 12a12 12 0 0 1 12-12h276a12 12 0 0 1 12 12v35H0z" class="bar"/>
+    <text x="16" y="30" class="name">mobile_submission_logs</text>
+    <text x="16" y="69" class="field">PK log_id; document_id*</text><text x="16" y="91" class="field">submission_type, sender, recipient</text><text x="16" y="113" class="field">subject, submitted_at</text>
+  </g>
+
+  <g transform="translate(900 630)">
+    <rect width="300" height="130" rx="12" class="entity"/><path d="M0 12a12 12 0 0 1 12-12h276a12 12 0 0 1 12 12v35H0z" class="bar"/>
+    <text x="16" y="30" class="name">settings</text>
+    <text x="16" y="69" class="field">PK setting_id</text><text x="16" y="91" class="field">UQ key_name, value</text><text x="16" y="113" class="field">created_at, updated_at</text>
+  </g>
+  <text x="40" y="810" class="note">* Application-level reference only: document_events, document_requirements, and mobile_submission_logs store IDs without declared foreign keys.</text>
+  <text x="40" y="835" class="note">Solid connectors show declared foreign keys. SMS logs and settings are independent tables; SMS records are not linked to document IDs.</text>
+  <rect x="40" y="875" width="270" height="44" rx="12" fill="#dcefe2" stroke="#417952"/><text x="175" y="903" text-anchor="middle" class="field">Business / transaction entity</text>
+  <path d="M350 897 H450" class="line"/><text x="465" y="902" class="field">Foreign-key relationship</text>
+  <path d="M700 897 H800" class="logical"/><text x="815" y="902" class="field">Logical reference (no FK constraint)</text>
+</svg>
