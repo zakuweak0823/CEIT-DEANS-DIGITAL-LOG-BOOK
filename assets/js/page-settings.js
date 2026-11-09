@@ -1,4 +1,33 @@
 (function () {
+    document.addEventListener('DOMContentLoaded', function () {
+        const infoButtons = document.querySelectorAll('[data-settings-info]');
+        if (typeof bootstrap === 'undefined' || !bootstrap.Popover) {
+            console.error('Settings information controls could not be initialized.');
+            infoButtons.forEach(function (button) {
+                const text = document.createElement('span');
+                text.className = 'small text-muted';
+                text.textContent = button.dataset.settingsInfo;
+                button.replaceWith(text);
+            });
+            return;
+        }
+        infoButtons.forEach(function (button) {
+            const popover = new bootstrap.Popover(button, {
+                container: 'body',
+                content: button.dataset.settingsInfo,
+                customClass: 'admin-status-popover',
+                placement: 'auto',
+                trigger: 'hover focus'
+            });
+            button.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') {
+                    popover.hide();
+                    button.blur();
+                }
+            });
+        });
+    });
+
     const trackerBaseUrl = document.getElementById('document_tracker_base_url');
     const useCurrentTrackerAddress = document.getElementById('useCurrentTrackerAddress');
     if (trackerBaseUrl && useCurrentTrackerAddress) {

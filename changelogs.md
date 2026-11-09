@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- Replaced Settings section descriptions and tracker address guidance with
+  accessible information controls, while keeping important warnings visible.
+- Removed the Communication services section and shortcuts from Settings.
+- Removed repeated page headings and explanatory text while retaining SMS
+  status and account-security guidance.
+- Replaced the Super Admin/Admin roles with Admin/Staff, including automatic
+  migration of existing accounts and Admin-only account, backup, and audit tools.
+- Added name-based staff account creation with generated usernames and passwords,
+  optional email setup links, and account/security audit logging.
+- Added configurable SMTP email links for initial password setup and forgotten
+  password recovery, with SMS recovery as a fallback.
+- Added system audit logs for sign-ins, account and password changes, plus
+  document and bulk status history.
+- Improved shared table alignment and made audit tables responsive from phone
+  through narrow desktop widths, keeping column headings aligned with their
+  data; simplified account and security logs to date and time, user account,
+  action, and IP address.
+- Added show/hide controls to password fields throughout the portal while
+  keeping confirmation fields masked.
 - Displayed both the date and time in Borrowed Items report timestamps.
 - Simplified the document tracker to a status page and added a dedicated
   university-reference action on outgoing and released document rows.

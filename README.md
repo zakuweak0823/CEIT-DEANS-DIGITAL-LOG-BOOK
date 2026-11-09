@@ -81,10 +81,10 @@ The shortest path to a working admin portal on a Windows computer:
    Approve the Windows firewall prompt for **Private networks** only.
 5. **Sign in** at `http://localhost/<your-folder-name>/login` with the seeded
    `admin` / `admin` account.
-6. **Change the password immediately:** open **Administrator accounts →
+6. **Change the password immediately:** open **Account management →
    Change your password** and choose a unique password of at least 8
    characters.
-7. **Create staff accounts** (optional) under **Administrator accounts** so
+7. **Create staff accounts** (optional) under **Account management** so
    each person signs in with their own credentials.
 8. **Review Settings:** disable unauthenticated mobile kiosk access unless the
    network is fully trusted (see [Security before deployment](#security-before-deployment)).
@@ -326,38 +326,52 @@ The schema seeds an initial admin account for local setup:
 The application upgrades the seeded plaintext password to a password hash
 when it is first used. Change the default password immediately after signing
 in, and never reuse it on a deployed system. On a fresh installation, use
-**Administrator accounts → Change your password**. For an existing database,
-back it up, run
+**Account management → Change your password**. Existing installations are
+automatically migrated: old `Super Admin` accounts become `Admin`, and old
+`Admin` accounts become `Staff`. If an older installation has not yet promoted
+its original `admin` account, back up the database and run
 [`database/promote_admin_to_super_admin.sql`](database/promote_admin_to_super_admin.sql)
-once, then sign in as `admin` and change its password from
-**Administrator accounts**.
+before the first request after updating; the app maps that account to the new
+`Admin` role.
 
 The login page has a **Show / Hide password** button (the eye icon inside the
 password field) so you can check what you typed before signing in. It only
 changes how the field is displayed in your browser; the password is never
 stored or sent until you press **Sign In**.
 
-#### Administrator accounts and password recovery
+#### Account management and password recovery
 
 | Role | What it can do |
 | --- | --- |
-| **Super Admin** | Everything a standard admin can do, plus open **Administrator accounts** to create, reset, and remove standard administrator accounts and change its own password. |
-| **Admin** | Use the logbook (documents, bulk documents, borrowed items, reports, settings). Cannot manage accounts. |
+| **Admin** | Use the full logbook, manage staff accounts, reset staff passwords, review system audit logs, download database backups, and change its own password. |
+| **Staff** | Use the logbook (documents, bulk documents, borrowed items, reports, settings). Cannot manage accounts or view system audit logs. |
 
-**Create a staff account:** sign in as Super Admin → **Administrator accounts**
-→ enter a username (3–100 letters, numbers, `.`, `_`, or `-`) and a password
-of at least 8 characters, confirmed twice → **Create account**. Share the initial password through a
-secure channel, such as in person.
+**Create a staff account:** sign in as Admin → **Account management** →
+**Add staff user account**. Enter a first name and surname, with an optional
+middle name. The username is generated from their initials plus surname
+(e.g. Louise Jayson Villanueva becomes `ljvillanueva`); if that username
+already exists, a number is appended starting at `01`. The system generates an
+initial password and displays it once for the Admin to share securely. An
+optional email receives a one-time password setup link when SMTP is configured.
+An optional recovery phone enables SMS recovery.
 
-**A standard admin forgot their password (self-service by SMS):**
+**Forgotten password:** enter your username on the login page. If your account
+has an email address and SMTP is configured, the system attempts to email a
+one-time password link. If email or SMTP is not configured, a recovery code can
+be sent to your saved recovery phone. If email delivery fails, ask an Admin to
+reset the password.
+Email links expire after 30 minutes for recovery and one hour for first-time
+setup; links can only be used once. SMS codes expire after 10 minutes and are
+locked after 5 wrong tries. Changing a password signs the account out of
+existing web sessions and mobile API tokens.
 
-1. On the login page they choose **Forgot your password?**, enter their
-   username, and choose **Send recovery code**.
-2. A 6-digit code is texted to the account's **recovery phone**. It expires
-   after 10 minutes, works once, and is locked after 5 wrong tries.
-3. They enter the code and a new password (8+ characters, typed twice). The
-   account is signed out everywhere, including the mobile app, and a notice
-   SMS confirms the change.
+To configure SMTP, copy [`config/smtp.example.php`](config/smtp.example.php)
+to the ignored local file `config/smtp.php` and enter the SMTP host, port,
+security mode, username, password, sender address, and the public application
+base URL. Keep that file private; the `config/` directory is blocked from web
+access and `config/smtp.php` is excluded from Git. The app falls back to SMS
+recovery when SMTP is not configured and the account has a recovery phone. If
+SMTP is configured but delivery fails, ask an Admin to reset the password.
 
 After five consecutive failed password sign-in attempts, the account cannot
 sign in for 15 minutes. The cooldown applies across the admin portal and mobile
@@ -365,9 +379,9 @@ API, including other browsers and devices. A successful sign-in clears earlier
 failures; password recovery remains available during the cooldown.
 
 SMS recovery requires that SMS and the PhilSMS token are configured on the
-server, and the account has a recovery phone. A Super Admin
-adds or changes it under **Administrator accounts → Recovery phone** (or while
-creating the account). The page gives the same reply for unknown accounts,
+server, and the account has a recovery phone. An Admin adds or changes it under
+**Account management → Recovery phone** (or while creating a staff account).
+The page gives the same reply for unknown accounts,
 accounts without a phone and valid accounts, requests are limited (one code a
 minute, 3 an hour per username, 10 an hour per device), and codes never
 appear in the SMS logs.
@@ -376,23 +390,11 @@ The mobile home screen's **Today's Document Status** counts documents created
 on the current office-server date, grouped by their latest status. Counts reset
 at midnight on the server; existing documents and their statuses are unchanged.
 
-**No recovery phone, or SMS is unavailable:** ask a Super Admin to reset it.
-They open **Administrator accounts**, select **Reset password**, enter a new
-temporary password (8+ characters) twice, and choose **Save password**, then
-share it securely. Resetting a password signs that account out of any
-existing sessions.
-
-**The Super Admin forgot their password:** a Super Admin can also use SMS
-recovery once they have saved their own recovery phone under **Administrator
-accounts → Your recovery phone** (this needs their current password). If that
-is not set up, the server owner runs
-`php tools/reset_admin_password.php <username>` from a command prompt on the
-server (it works from the command line only), or recovers it through the
-database after taking a backup. Store the Super Admin credentials in an
-approved password manager or sealed offline record so this is rarely needed.
-
-Password reset by email is intentionally not provided: admin accounts have no
-recovery email address and the system does not require SMTP to be configured.
+**No recovery email or phone, or both methods are unavailable:** ask an Admin
+to reset the staff password from **Account management → Reset password**, then
+share the new temporary password securely. The server owner can reset any
+account using `php tools/reset_admin_password.php <username>` from a command
+prompt on the server (command-line only).
 
 ### 3. Configure workspace and communication settings (optional)
 
@@ -415,7 +417,7 @@ unprotected database exports.
 
 #### Database backup and recovery
 
-A Super Admin can open **Admin Settings → Backup and recovery → Download
+An Admin can open **Admin Settings → Backup and recovery → Download
 database backup**. The download includes the database schema, records, account
 data, and database triggers, routines and events. It does not include project
 files, uploads, the private SMS configuration file, certificates, or other
@@ -720,12 +722,13 @@ another server, set `VITE_API_ENDPOINT` at build time to the complete
 │   └── js/                           # Browser-ready JavaScript bundles
 ├── backups/                          # Historical page copies, not public routes
 ├── config/
-│   └── sms.example.ini               # Non-secret SMS configuration template
+│   ├── sms.example.ini               # Non-secret SMS configuration template
+│   └── smtp.example.php              # SMTP template; local smtp.php is ignored
 ├── database/
-│   ├── schema.sql                    # Fresh-install schema and initial Super Admin seed
+│   ├── schema.sql                    # Fresh-install schema and initial Admin seed
 │   ├── dummy_data.sql                # Optional sample data (import after schema.sql)
 │   ├── generate_dummy_data.js        # Regenerates dummy_data.sql
-│   └── promote_admin_to_super_admin.sql # Existing-install role upgrade
+│   └── promote_admin_to_super_admin.sql # Legacy pre-upgrade admin promotion
 ├── docs/
 │   ├── SYSTEM-FLOW.md                # End-to-end flow, workarounds, and internals
 │   ├── SECURITY.md                   # Security model and deployment checklist
@@ -835,17 +838,17 @@ A summary of the protections built into the system, grouped by type. See the
   a hash on first successful use.
 - **Password strength:** new and reset administrator passwords must be at least
   8 characters.
-- **Role-based access control:** Super Admin and Admin roles are re-verified
-  against the database on every protected request. Account management is
-  restricted to Super Admins.
-- **Account safeguards:** a Super Admin account cannot be reset by another
-  administrator or deleted through the portal, and an administrator cannot
-  delete their own account.
-- **Guarded self-service recovery:** an administrator with a recovery phone can
-  reset a forgotten password with a one-time SMS code. Codes are hashed,
-  expire in 10 minutes, work once and lock after 5 wrong tries; requests are
-  throttled and the page never reveals whether an account exists. Without a
-  recovery phone, resets require a Super Admin or trusted server access.
+- **Role-based access control:** Admin and Staff roles are re-verified against
+  the database on every protected request. Account management, backup downloads,
+  and system audit logs are restricted to Admins.
+- **Account safeguards:** an Admin cannot be reset or deleted by another user
+  through the portal, and nobody can delete their own account.
+- **Guarded self-service recovery:** an account with a registered email can
+  reset its password using a single-use SMTP link; an account with a recovery
+  phone can receive a one-time SMS code. Recovery requests are throttled and
+  responses do not reveal whether an account exists.
+- **Audit trails:** Admins can review account/security events and database-
+  recorded document and bulk status history under **System audit logs**.
 
 ### Session security
 
@@ -913,9 +916,8 @@ A summary of the protections built into the system, grouped by type. See the
 Be aware of what is **not** included, and mitigate it with your network and
 hosting setup:
 
-- No multi-factor authentication and no automated email password resets.
-- No built-in login rate limiting or account lockout; restrict access to a
-  trusted network.
+- No multi-factor authentication. Apply strong unique credentials and restrict
+  access to a trusted network.
 - No application-set security headers such as CSP or HSTS; add them at the web
   server or reverse proxy when deploying beyond a local network.
 - The mobile kiosk mode is intentionally unauthenticated when enabled.
@@ -953,8 +955,8 @@ hosting setup:
 | Mobile app cannot reach the API | Keep Apache/MySQL running and verify the Vite proxy or `VITE_API_ENDPOINT`. On Android emulators, use `10.0.2.2` rather than `localhost`. |
 | `npm run dev:lan` says the LAN certificate files are missing | Run it as `npm run dev:lan` inside `mobile-ui`; its `predev:lan` setup creates a host-specific certificate with XAMPP OpenSSL. If setup reports OpenSSL or permission errors, verify XAMPP is above this project in `htdocs`, `apache\bin\openssl.exe` exists, and the account can write to Apache's `conf\ssl.crt` and `conf\ssl.key` folders. Then download the public CA from Admin Settings and install/trust it on the phone. |
 | Document tracker says “Failed to fetch” | Open the QR link on the same HTTPS Apache address and project-folder path used by the office. Confirm Admin Settings → Document status tracking has the correct Tracker base URL, and that Apache/PHP and MySQL are running. Do not use the Vite `:5173` URL as the tracker URL; it serves the mobile app, while the QR status API is served by Apache. |
-| I forgot my admin password | Use **Forgot your password?** on the login page to get an SMS code on your recovery phone. No recovery phone: ask a Super Admin to reset it under **Administrator accounts**. Super Admin without one: the server owner runs `php tools/reset_admin_password.php <username>`. See [Administrator accounts and password recovery](#administrator-accounts-and-password-recovery). |
-| The Show password button does nothing | Hard-refresh the login page (Ctrl+F5) to clear cached scripts and styles, and confirm JavaScript is enabled in the browser. |
+| I forgot my password | Use **Forgot your password?** to request an email link or recovery SMS. If neither is configured, ask an Admin to reset the staff password under **Account management**; the server owner can run `php tools/reset_admin_password.php <username>`. See [Account management and password recovery](#account-management-and-password-recovery). |
+| A Show password button does nothing | Hard-refresh the page (Ctrl+F5) to clear cached scripts and styles, and confirm JavaScript is enabled in the browser. Confirmation-password fields intentionally stay masked. |
 | Sign-in is rejected after a password reset | Existing sessions are signed out when a password changes. Sign in again with the new password. |
 | SMS sending fails | Check cURL, the private SMS configuration file or server environment, the PHP error log, and provider account status. |
 | Android build cannot find a device | Open the Android project in Android Studio, install the required SDK components, and start an emulator or connect a device. |

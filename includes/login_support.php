@@ -24,7 +24,7 @@ function authenticate_admin_login($conn, string $username, string $password): ar
         if ($result === false) throw new RuntimeException('Login account result could not be read.');
         $user = mysqli_fetch_assoc($result);
         mysqli_stmt_close($stmt);
-        if (!$user || !in_array($user['role'], ['admin', 'super_admin'], true)) {
+        if (!$user || !in_array($user['role'], ['admin', 'staff'], true)) {
             $conn->commit();
             return ['status' => 'invalid'];
         }

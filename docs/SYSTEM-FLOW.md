@@ -96,11 +96,16 @@ can only ever read a limited status subset from the tracker page.
 | File / folder | Role in the flow |
 | --- | --- |
 | `includes/db.php` | Opens the MySQLi connection (`dit_logbook`, UTF-8 `utf8mb4`), defines `safe_query()`, `safe_scalar()`, phone validation, and the **database-down recovery page**. |
-| `includes/auth.php` | Starts the session with hardened cookie flags, exposes `ensure_admin()`, `ensure_super_admin()`, `verify_csrf_request()`, `csrf_token()`, `sanitize()`, `show_alert()`. |
+| `includes/auth.php` | Starts the session with hardened cookie flags, exposes `ensure_admin()`, `ensure_admin_role()`, `verify_csrf_request()`, `csrf_token()`, `sanitize()`, `show_alert()`. |
+| `includes/account_support.php` | One-time role migration, staff username/password generation, and single-use password-link storage. |
+| `includes/password_reset_support.php` | SMS/email recovery request throttling, verification, and password-change helpers. |
+| `includes/email_service.php` | Reads local SMTP settings and sends account setup and password-recovery links. |
+| `includes/audit_log.php` | Records account and security events for the Admin audit view. |
 | `includes/router.php` | Shared dispatcher for Apache and PHP's built-in server (`php -S`). |
 | `.htaccess` | Apache access restrictions and rewrites public page and API URLs to `includes/router.php`. |
 | `includes/header.php` / `includes/footer.php` | Shared layout, sidebar, page titles, live status widgets. `header.php` reads `SCRIPT_FILENAME` (set by the router) so navigation highlighting works with clean URLs. |
 | `pages/` | Admin page and public tracker implementations. The router preserves existing browser routes and form targets. |
+| `pages/users.php` / `pages/audit_logs.php` | Admin-only staff account management and system audit views. |
 | `api/` | JSON and AJAX endpoint implementations. The router preserves the mobile API, activity, health-check, and message-composer URLs. |
 | `includes/` | Shared PHP runtime and domain helpers, including database, authentication, tracking, reporting, SMS, and workflow support. |
 | `api/mobile-api.php` | The JSON API used by the mobile client, exposed at the existing root URL `mobile-api.php`. |
@@ -198,14 +203,14 @@ The **seeded `admin`/`admin`** account starts as plaintext and is upgraded to a
 ensure_admin()
   ├─ no $_SESSION['admin'] → redirect to login
   ├─ re-read role + password hash from users
-  ├─ role not in (admin, super_admin) → destroy session, redirect
+  ├─ role not in (admin, staff) → destroy session, redirect
   ├─ session hash ≠ database hash  → destroy session, redirect
   ├─ refresh $_SESSION['admin_role']
   └─ verify_csrf_request()  (POST only)
 ```
 
 > **Password-bound sessions:** storing the current password hash in the session
-> means *any* password change (Super Admin reset or self-change) instantly signs
+> means *any* password change (Admin reset or self-change) instantly signs
 > that account out everywhere. There is no separate "revoke sessions" table.
 
 ### 4c. CSRF
@@ -218,11 +223,12 @@ ensure_admin()
 
 | Role | Guard | Scope |
 | --- | --- | --- |
-| `super_admin` | `ensure_super_admin()` | All pages + `users.php` |
-| `admin` | `ensure_admin()` | All pages except `users.php` |
+| `admin` | `ensure_admin_role()` | All pages + `users.php`, audit logs, and backup |
+| `staff` | `ensure_admin()` | All regular logbook pages |
 
-Extra guards in `users.php`: a Super Admin account cannot be reset/deleted via
-the portal, and nobody can delete their own account.
+Existing `super_admin` and `admin` roles are migrated to `admin` and `staff`,
+respectively. An Admin account cannot be reset/deleted through the portal, and
+nobody can delete their own account.
 
 ---
 
@@ -840,7 +846,8 @@ first save.
 
 SMS configuration instead uses a private server-side file, with environment
 variables supported as a fallback; see the README for migration and setup.
-SMTP delivery is not implemented.
+Password-link email is sent through SMTP configured in the ignored local
+`config/smtp.php` file; see the README for setup and HTTPS guidance.
 
 **Two kinds of preference — don't mix them up:**
 

@@ -25,7 +25,8 @@ $pageTitles = [
     'sms.php' => 'SMS Logs',
     'notification_settings.php' => 'Communication Services',
     'settings.php' => 'Settings',
-    'users.php' => 'Administrator accounts',
+    'users.php' => 'Account management',
+    'audit_logs.php' => 'System audit logs',
     'reports.php' => 'Reports',
     'records.php' => 'Document Records',
 ];
@@ -196,7 +197,6 @@ try {
                     <i class="bi bi-list" aria-hidden="true"></i>
                 </button>
                 <div class="topbar-title">
-                    <strong><?php echo sanitize($currentPageTitle); ?></strong>
                     <small><i class="bi bi-calendar3 me-1" aria-hidden="true"></i><?php echo sanitize($today); ?></small>
                 </div>
                 <form class="topbar-search flex-grow-1 mx-3 d-none d-md-flex" method="GET" action="records" role="search">
@@ -211,13 +211,14 @@ try {
                             <span class="admin-avatar rounded-circle d-inline-flex align-items-center justify-content-center" aria-hidden="true"><?php echo sanitize($adminInitial); ?></span>
                             <span class="admin-profile-copy">
                                 <strong><?php echo sanitize($adminName); ?></strong>
-                                <small><?php echo $adminRole === 'super_admin' ? 'Super Admin' : 'Administrator'; ?></small>
+                                <small><?php echo $adminRole === 'admin' ? 'Admin' : 'Staff'; ?></small>
                             </span>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><a class="dropdown-item<?php echo $currentPage === 'settings.php' ? ' active' : ''; ?>" href="settings"<?php echo $currentPage === 'settings.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-gear me-2" aria-hidden="true"></i>Settings</a></li>
-                            <?php if ($adminRole === 'super_admin'): ?>
-                                <li><a class="dropdown-item<?php echo $currentPage === 'users.php' ? ' active' : ''; ?>" href="users"<?php echo $currentPage === 'users.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-people me-2" aria-hidden="true"></i>Administrator accounts</a></li>
+                            <?php if ($adminRole === 'admin'): ?>
+                                <li><a class="dropdown-item<?php echo $currentPage === 'users.php' ? ' active' : ''; ?>" href="users"<?php echo $currentPage === 'users.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-people me-2" aria-hidden="true"></i>Account management</a></li>
+                                <li><a class="dropdown-item<?php echo $currentPage === 'audit_logs.php' ? ' active' : ''; ?>" href="audit_logs"<?php echo $currentPage === 'audit_logs.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-clipboard-data me-2" aria-hidden="true"></i>System audit logs</a></li>
                             <?php endif; ?>
                             <li><hr class="dropdown-divider"></li>
                             <li class="px-3 py-2 admin-mode-menu-item">
@@ -254,7 +255,7 @@ try {
                     <a href="incoming?status=Open"<?php echo $currentPage === 'incoming.php' && in_array(($_GET['status'] ?? ''), ['Open', 'Pending'], true) ? ' aria-current="page"' : ''; ?>><i class="bi bi-inbox" aria-hidden="true"></i>Open inbox<?php if ($pendingDocumentCount !== null && $pendingDocumentCount > 0): ?><span class="admin-quick-access-count"><?php echo sanitize($pendingBadge); ?></span><?php endif; ?></a>
                     <a href="quick_document"<?php echo $currentPage === 'quick_document.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-plus-circle" aria-hidden="true"></i>New record</a>
                     <a href="records"<?php echo $currentPage === 'records.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-search" aria-hidden="true"></i>Records</a>
-                    <button class="admin-quick-access-more<?php echo (in_array($currentPage, ['outgoing.php', 'batch_papers.php', 'batch_tracker.php', 'borrowed.php', 'item_categories.php', 'sms.php', 'notification_settings.php', 'reports.php', 'settings.php'], true) || ($currentPage === 'incoming.php' && ($_GET['status'] ?? '') !== 'Open')) ? ' is-current' : ''; ?>" type="button" data-bs-toggle="offcanvas" data-bs-target="#quickAccessMore" aria-controls="quickAccessMore" aria-label="Open more admin sections">
+                    <button class="admin-quick-access-more<?php echo (in_array($currentPage, ['outgoing.php', 'batch_papers.php', 'batch_tracker.php', 'borrowed.php', 'item_categories.php', 'sms.php', 'notification_settings.php', 'reports.php', 'settings.php', 'users.php', 'audit_logs.php'], true) || ($currentPage === 'incoming.php' && ($_GET['status'] ?? '') !== 'Open')) ? ' is-current' : ''; ?>" type="button" data-bs-toggle="offcanvas" data-bs-target="#quickAccessMore" aria-controls="quickAccessMore" aria-label="Open more admin sections">
                         <i class="bi bi-grid" aria-hidden="true"></i><span>More</span>
                     </button>
                 </div>
@@ -280,8 +281,9 @@ try {
                     <a href="reports?report_type=All%20Reports&amp;generate=1"<?php echo $isDocumentReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-file-earmark-bar-graph" aria-hidden="true"></i><span>All Reports</span></a>
                     <a href="reports?report_type=Bulk%20Reports&amp;generate=1"<?php echo $isBulkReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-files" aria-hidden="true"></i><span>Bulk Reports</span></a>
                     <a href="settings"<?php echo $currentPage === 'settings.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-gear" aria-hidden="true"></i><span>Settings</span></a>
-                    <?php if ($adminRole === 'super_admin'): ?>
-                        <a href="users"<?php echo $currentPage === 'users.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-people" aria-hidden="true"></i><span>Administrator accounts</span></a>
+                    <?php if ($adminRole === 'admin'): ?>
+                        <a href="users"<?php echo $currentPage === 'users.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-people" aria-hidden="true"></i><span>Account management</span></a>
+                        <a href="audit_logs"<?php echo $currentPage === 'audit_logs.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-clipboard-data" aria-hidden="true"></i><span>System audit logs</span></a>
                     <?php endif; ?>
                 </div>
             </div>

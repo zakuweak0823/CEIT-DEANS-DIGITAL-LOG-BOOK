@@ -6,14 +6,19 @@ if (PHP_SAPI !== 'cli') {
 }
 
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/password_reset_support.php';
 
 $username = trim((string)($argv[1] ?? ''));
 if ($username === '') {
     fwrite(STDERR, "Usage: php tools/reset_admin_password.php <username>\n");
     exit(1);
 }
+if (!ensure_password_reset_schema($conn)) {
+    fwrite(STDERR, "Password recovery storage could not be prepared. Nothing was changed.\n");
+    exit(1);
+}
 
-$stmt = safe_query($conn, "SELECT user_id, role FROM users WHERE username = ? AND role IN ('admin', 'super_admin') LIMIT 1", 's', [$username]);
+$stmt = safe_query($conn, "SELECT user_id, role FROM users WHERE username = ? AND role IN ('admin', 'staff') LIMIT 1", 's', [$username]);
 $user = null;
 if ($stmt !== false) {
     $result = mysqli_stmt_get_result($stmt);
@@ -40,23 +45,33 @@ if ($password !== $repeat) {
     exit(1);
 }
 
-$update = safe_query($conn, 'UPDATE users SET password = ? WHERE user_id = ?', 'si', [password_hash($password, PASSWORD_DEFAULT), (int)$user['user_id']]);
-if ($update === false) {
+try {
+    $conn->begin_transaction();
+    $update = safe_query($conn, 'UPDATE users SET password = ? WHERE user_id = ?', 'si', [password_hash($password, PASSWORD_DEFAULT), (int)$user['user_id']]);
+    if ($update === false || mysqli_stmt_affected_rows($update) !== 1) {
+        if ($update !== false) {
+            mysqli_stmt_close($update);
+        }
+        throw new RuntimeException('The password could not be saved.');
+    }
+    mysqli_stmt_close($update);
+    $tokens = safe_query($conn, 'DELETE FROM mobile_api_tokens WHERE user_id = ?', 'i', [(int)$user['user_id']]);
+    if ($tokens === false) {
+        throw new RuntimeException('Mobile sessions could not be revoked.');
+    }
+    mysqli_stmt_close($tokens);
+    password_reset_invalidate_user_requests($conn, (int)$user['user_id']);
+    $conn->commit();
+    record_audit_event($conn, 'password_reset_by_cli', $username);
+} catch (Throwable $error) {
+    try {
+        $conn->rollback();
+    } catch (Throwable $rollbackError) {
+        error_log('Command-line password reset rollback failed: ' . $rollbackError->getMessage());
+    }
+    error_log('Command-line password reset failed: ' . $error->getMessage());
     fwrite(STDERR, "The password could not be saved. See the PHP error log.\n");
     exit(1);
-}
-mysqli_stmt_close($update);
-
-// Sign the account out of every mobile device and clear any pending recovery codes.
-foreach (['DELETE FROM mobile_api_tokens WHERE user_id = ?', 'UPDATE password_resets SET used_at = NOW() WHERE user_id = ? AND used_at IS NULL'] as $cleanup) {
-    try {
-        $statement = safe_query($conn, $cleanup, 'i', [(int)$user['user_id']]);
-        if ($statement !== false) {
-            mysqli_stmt_close($statement);
-        }
-    } catch (mysqli_sql_exception $error) {
-        // The recovery table only exists after the first use of SMS recovery.
-    }
 }
 
 fwrite(STDOUT, "Password updated for \"$username\". Existing sessions are signed out.\n");

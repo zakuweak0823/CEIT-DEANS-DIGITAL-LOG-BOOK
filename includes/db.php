@@ -188,4 +188,7 @@ function contact_number_input($value) {
 function is_valid_contact_number($value): bool {
     return is_string($value) && preg_match('/^[0-9]{11}$/', $value) === 1;
 }
+
+require_once __DIR__ . '/account_support.php';
+ensure_account_schema($conn);
 ?>

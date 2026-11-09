@@ -40,7 +40,7 @@ function ensure_admin()
     $result = mysqli_stmt_get_result($stmt);
     $user = $result === false ? null : mysqli_fetch_assoc($result);
     mysqli_stmt_close($stmt);
-    if (!$user || !in_array($user['role'], ['admin', 'super_admin'], true)) {
+    if (!$user || !in_array($user['role'], ['admin', 'staff'], true)) {
         unset($_SESSION['admin'], $_SESSION['admin_role'], $_SESSION['admin_password_hash']);
         header('Location: login');
         exit;
@@ -58,12 +58,12 @@ function ensure_admin()
     verify_csrf_request();
 }
 
-function ensure_super_admin()
+function ensure_admin_role()
 {
     ensure_admin();
-    if (($_SESSION['admin_role'] ?? '') !== 'super_admin') {
+    if (($_SESSION['admin_role'] ?? '') !== 'admin') {
         http_response_code(403);
-        exit('Super Admin access is required.');
+        exit('Administrator access is required.');
     }
 }
 

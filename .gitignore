@@ -6,6 +6,7 @@ db2.sql
 *.sql.gz
 *.dump
 ceit-logbook-sms.ini
+config/smtp.php
 ceit-logbook-local-ca.crt
 
 # Nested local repositories and Expo-generated data

@@ -2,7 +2,7 @@
 $pages = [
     'dashboard', 'quick_document', 'incoming', 'outgoing', 'batch_papers',
     'batch_tracker', 'borrowed', 'item_categories', 'sms', 'notification_settings',
-    'credentials', 'settings', 'reports', 'records', 'login', 'forgot_password',
+    'credentials', 'settings', 'reports', 'records', 'audit_logs', 'login', 'forgot_password',
     'users', 'logout',
 ];
 $apiEndpoints = [

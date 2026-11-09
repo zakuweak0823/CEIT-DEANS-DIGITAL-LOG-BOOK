@@ -9,9 +9,9 @@ certification or a substitute for an independent review.
 The system has three distinct access paths:
 
 1. **Administrator portal** — PHP pages use an administrator session. Mutating
-   form requests are checked for a session CSRF token. Super Admin account
-   management is restricted by a database-verified role check; standard
-   administrators retain the existing logbook access.
+   form requests are checked for a session CSRF token. Admin account
+   management, backup downloads, and audit-log viewing are restricted by a
+   database-verified role check; Staff retain the regular logbook access.
 2. **Mobile logbook API** — Admin Settings can allow kiosk access without
    sign-in. The API supports bearer-token sign-in when kiosk access is disabled,
    but the current React/Vite mobile app has no sign-in screen and cannot use
@@ -54,7 +54,8 @@ control for the mobile API or admin portal.
   on every server; the repository's Apache rules and PHP router block access.
   Existing database settings and backups may still contain old credentials;
   protect and clean them separately, and rotate any exposed credentials.
-  SMTP delivery is not implemented.
+  Password-link email uses the ignored local `config/smtp.php`; configure it
+  from `config/smtp.example.php` and use HTTPS links outside a trusted LAN.
 - **Output encoding:** HTML-facing values are escaped with UTF-8 HTML entity
   encoding at output. Keep this encoding at the presentation boundary and
   apply context-appropriate encoding for JavaScript, URLs, and other formats.
@@ -77,11 +78,13 @@ control for the mobile API or admin portal.
 
 1. On a fresh installation, sign in with the initial local account
    (`admin` / `admin`) only for setup, then immediately set a unique, strong
-   password in **Administrator accounts**. On an existing installation,
+   password in **Account management**. Existing installs migrate old
+   `super_admin` accounts to `admin` and old `admin` accounts to `staff` on
+   first request. If the original `admin` account has not yet been promoted,
    back up the database and run
    [`database/promote_admin_to_super_admin.sql`](../database/promote_admin_to_super_admin.sql)
-   once to grant the existing `admin` account Super Admin access; then sign in
-   and immediately change its password. Do not reuse that password elsewhere.
+   before updating; then sign in and immediately change its password. Do not
+   reuse that password elsewhere.
 2. Replace the default XAMPP database account with a dedicated MySQL user and
    a strong password. Grant only the database privileges the application
    needs.
@@ -100,6 +103,9 @@ control for the mobile API or admin portal.
    screenshots, and support logs. Treat the database and its backups as
    sensitive because application settings and logbook records may contain
    confidential information.
+   SMTP credentials belong in the ignored `config/smtp.php` file, copied from
+   `config/smtp.example.php`; configure an HTTPS `app_base_url` for password
+   links when the service is reachable remotely.
 7. Configure a secure backup process for the database and test restoration.
    Store exports outside the web root and outside the Git repository, restrict
    access, and encrypt them using your organization's approved process.
@@ -111,16 +117,17 @@ control for the mobile API or admin portal.
 
 - The seeded `admin` / `admin` account is public setup information. A fresh
   installation must not be left reachable with these credentials.
-- Super Admins can create, reset, and remove standard administrator accounts.
-  Administrators with a recovery phone can also reset a forgotten password
-  themselves with a one-time SMS code (6 digits, 10 minutes, single use, locked
-  after 5 wrong tries, requests throttled, codes never stored in the SMS logs).
-  Without a recovery phone, a Super Admin must reset it. A Super Admin without
-  a recovery phone needs the server owner to run
-  `php tools/reset_admin_password.php <username>` (command line only) or use
-  database access; the app does not send password-reset email. SMS recovery is
-  only as strong as control of the recovery phone, so keep those numbers
-  accurate and use phones only the account holder controls.
+- Admins can create, reset, and remove Staff accounts. Accounts with email
+  addresses can receive single-use password links (one hour for initial setup,
+  30 minutes for recovery); SMTP must be configured. SMS remains available as
+  a fallback through a one-time code (6 digits, 10 minutes, single use, locked
+  after 5 wrong tries, throttled, and never stored in SMS logs). Without either
+  recovery method, an Admin can reset a Staff password, or the server owner
+  can run `php tools/reset_admin_password.php <username>` (command line only).
+  Protect SMTP credentials and use HTTPS links outside a trusted local network.
+- Admins can review account/security audit entries and document/bulk status
+  history. Audit data includes account names, event types, IP addresses, and
+  status details; secure access to the database and backups accordingly.
 - Mobile kiosk mode is intentionally unauthenticated. When enabled, anyone
   able to reach the configured mobile API may use its kiosk workflows. A
   firewall or trusted network boundary is essential in that mode.
@@ -133,10 +140,9 @@ control for the mobile API or admin portal.
   Settings if links should stop working.
 - The local development TLS certificate and Private-network firewall helper
   are for trusted LAN development, not public hosting.
-- The admin login does not provide multi-factor authentication or automated
-  email password resets. Apply strong unique credentials and suitable network
-  protections; consider an approved reverse proxy or identity provider before
-  broader deployment.
+- The admin login does not provide multi-factor authentication. Apply strong
+  unique credentials and suitable network protections; consider an approved
+  reverse proxy or identity provider before broader deployment.
 - `HttpOnly` and `SameSite` cookies do not replace HTTPS. Plain HTTP can expose
   session credentials and submitted data to other parties on the network.
 

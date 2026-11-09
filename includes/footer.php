@@ -57,5 +57,6 @@ $isLoginPage = $isLoginPage ?? false;
 <script src="assets/js/admin-cell-clamp.js?v=<?php echo (int)@filemtime(dirname(__DIR__) . '/assets/js/admin-cell-clamp.js'); ?>"></script>
 <script src="assets/js/admin-table-layout.js?v=<?php echo (int)@filemtime(dirname(__DIR__) . '/assets/js/admin-table-layout.js'); ?>"></script>
 <script src="assets/js/admin-workspace.js?v=<?php echo (int)@filemtime(dirname(__DIR__) . '/assets/js/admin-workspace.js'); ?>"></script>
+<script src="assets/js/password-visibility.js?v=<?php echo (int)@filemtime(dirname(__DIR__) . '/assets/js/password-visibility.js'); ?>"></script>
 </body>
 </html>

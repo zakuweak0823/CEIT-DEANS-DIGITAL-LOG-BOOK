@@ -1,6 +1,8 @@
 <?php
 // SMS one-time-code password recovery for administrator accounts.
 require_once __DIR__ . '/sms_service.php';
+require_once __DIR__ . '/email_service.php';
+require_once __DIR__ . '/account_support.php';
 
 const PASSWORD_RESET_CODE_MINUTES = 10;
 const PASSWORD_RESET_MAX_ATTEMPTS = 5;
@@ -81,7 +83,7 @@ function password_reset_issue($conn, string $username): ?array
     // Expiry is computed by the database so it always matches the NOW() used when the code is checked.
     $expiryMinutes = (int)PASSWORD_RESET_CODE_MINUTES;
 
-    $stmt = safe_query($conn, 'SELECT user_id, recovery_phone FROM users WHERE username = ? AND role IN (\'admin\', \'super_admin\') LIMIT 1', 's', [$username]);
+    $stmt = safe_query($conn, 'SELECT user_id, recovery_phone FROM users WHERE username = ? AND role IN (\'admin\', \'staff\') LIMIT 1', 's', [$username]);
     $user = null;
     if ($stmt !== false) {
         $result = mysqli_stmt_get_result($stmt);
@@ -118,6 +120,62 @@ function password_reset_issue($conn, string $username): ?array
     return ['code' => $code, 'phone' => (string)$user['recovery_phone']];
 }
 
+function password_reset_email_issue($conn, string $username): ?array
+{
+    $stmt = safe_query(
+        $conn,
+        "SELECT user_id, username, email FROM users WHERE username = ? AND role IN ('admin', 'staff') LIMIT 1",
+        's',
+        [$username]
+    );
+    if ($stmt === false) {
+        return null;
+    }
+    $result = mysqli_stmt_get_result($stmt);
+    $account = $result ? mysqli_fetch_assoc($result) : null;
+    mysqli_stmt_close($stmt);
+    if (!$account || !filter_var((string)$account['email'], FILTER_VALIDATE_EMAIL)) {
+        return null;
+    }
+    $requestLog = safe_query(
+        $conn,
+        'INSERT INTO password_resets (user_id, username_key, request_ip, expires_at) VALUES (?, ?, ?, NOW() + INTERVAL 30 MINUTE)',
+        'iss',
+        [(int)$account['user_id'], password_reset_username_key($username), password_reset_client_ip()]
+    );
+    if ($requestLog === false) {
+        error_log('Email password recovery request could not be recorded.');
+        return null;
+    }
+    mysqli_stmt_close($requestLog);
+    return [
+        'token' => password_reset_link_issue($conn, (int)$account['user_id'], 'recovery'),
+        'email' => (string)$account['email'],
+        'username' => (string)$account['username'],
+    ];
+}
+
+function password_reset_email_send($conn, array $issue, string $purpose): bool
+{
+    try {
+        $sent = logbook_send_password_link(
+            (string)$issue['email'],
+            (string)$issue['username'],
+            (string)$issue['token'],
+            $purpose
+        );
+    } catch (Throwable $error) {
+        error_log('Password recovery email could not be prepared: ' . $error->getMessage());
+        $sent = false;
+    }
+    if (!$sent) {
+        error_log('Password recovery email could not be sent.');
+    } else {
+        record_audit_event($conn, 'password_link_sent', (string)$issue['username'], $purpose);
+    }
+    return $sent;
+}
+
 function password_reset_send_code($conn, string $phone, string $code): bool
 {
     $result = send_logged_sms(
@@ -138,7 +196,7 @@ function password_reset_notify_changed($conn, string $phone): void
     send_logged_sms(
         $conn,
         $phone,
-        'CEIT Digital Logbook: your administrator password was just changed. If this was not you, contact the Super Admin immediately.',
+        'CEIT Digital Logbook: your password was just changed. If this was not you, contact your system administrator immediately.',
         null,
         '[Security] Password changed notice'
     );
@@ -149,7 +207,7 @@ function password_reset_verify($conn, string $username, string $code): ?array
 {
     $stmt = safe_query(
         $conn,
-        'SELECT r.reset_id, r.user_id, r.code_salt, r.code_hash, u.recovery_phone
+        'SELECT r.reset_id, r.user_id, r.code_salt, r.code_hash, u.recovery_phone, u.username
          FROM password_resets r JOIN users u ON u.user_id = r.user_id
          WHERE u.username = ? AND r.code_hash IS NOT NULL AND r.used_at IS NULL
            AND r.expires_at > NOW() AND r.attempts < ' . PASSWORD_RESET_MAX_ATTEMPTS . '
@@ -208,15 +266,19 @@ function password_reset_complete($conn, array $reset, string $newPassword): bool
 
         // Changing the hash already ends browser sessions; this also signs the mobile app out.
         $tokens = safe_query($conn, 'DELETE FROM mobile_api_tokens WHERE user_id = ?', 'i', [(int)$reset['user_id']]);
-        if ($tokens !== false) {
-            mysqli_stmt_close($tokens);
+        if ($tokens === false) {
+            throw new RuntimeException('Mobile sessions could not be revoked.');
         }
+        mysqli_stmt_close($tokens);
+        password_reset_invalidate_user_requests($conn, (int)$reset['user_id']);
         $conn->commit();
+        record_audit_event($conn, 'password_reset_completed', (string)$reset['username'], 'SMS verification');
         return true;
     } catch (Throwable $error) {
         try {
             $conn->rollback();
-        } catch (Throwable $ignored) {
+        } catch (Throwable $rollbackError) {
+            error_log('Password recovery rollback failed: ' . $rollbackError->getMessage());
         }
         error_log('Password recovery failed: ' . $error->getMessage());
         return false;

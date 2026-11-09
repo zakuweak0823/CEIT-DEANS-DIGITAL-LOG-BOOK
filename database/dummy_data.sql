@@ -2,11 +2,6 @@
 -- Import AFTER database/schema.sql. Safe to import into a database that already has data.
 USE dit_logbook;
 
--- Columns the app adds at runtime; added here so the import works on a fresh schema.sql database.
-ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS submitter_name VARCHAR(255) NOT NULL DEFAULT '';
-ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS document_pages TEXT DEFAULT NULL;
-ALTER TABLE sms_logs ADD COLUMN IF NOT EXISTS provider_name VARCHAR(32) NOT NULL DEFAULT 'Semaphore';
-
 -- OPTIONAL: to replace data from an earlier dummy import, remove the leading "-- " on the next line first.
 -- SET FOREIGN_KEY_CHECKS = 0; TRUNCATE TABLE batch_papers; TRUNCATE TABLE document_batches; TRUNCATE TABLE mobile_submission_logs; TRUNCATE TABLE documents; TRUNCATE TABLE borrowed_items; TRUNCATE TABLE sms_logs; SET FOREIGN_KEY_CHECKS = 1;
 

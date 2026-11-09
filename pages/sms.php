@@ -247,7 +247,7 @@ $smsStatusInfo = static function (array $log): array {
     <div class="col-12">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3">
             <div>
-                <h2 class="mb-1 text-primary">SMS Management</h2>
+                <h1 class="h2 mb-1 text-primary">SMS Logs</h1>
                 <p class="text-muted mb-0">Send SMS notifications and view message logs.</p>
             </div>
             <button class="btn btn-outline-primary d-inline-flex align-items-center gap-2" type="button" data-bs-toggle="modal" data-bs-target="#smsForm">
@@ -260,7 +260,6 @@ $smsStatusInfo = static function (array $log): array {
             <div class="card-body">
                 <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2 mb-3">
                     <div>
-                        <h5 class="card-title mb-1">SMS Logs</h5>
                         <p class="small text-muted mb-0">Pending means PhilSMS has not yet reported a final status. Refresh to check tracked messages. Older Semaphore logs are not queried through PhilSMS.</p>
                     </div>
                     <form method="POST" class="d-inline sms-confirm-form" data-admin-confirm="false" data-confirm-title="Refresh delivery statuses?" data-confirm-message="This checks eligible pending messages with PhilSMS. It will not send new SMS messages, and refreshes are limited to once per minute." data-confirm-button="Refresh statuses">
@@ -282,7 +281,7 @@ $smsStatusInfo = static function (array $log): array {
                 </nav>
                 <!-- Use the shared row-separated table skin consistently across admin lists. -->
                 <div class="table-responsive">
-                    <table class="table align-middle mb-0 sms-log-table">
+                    <table class="table align-middle mb-0 sms-log-table" aria-label="SMS logs">
                         <thead class="table-light">
                             <tr>
                                 <th scope="col">Date Sent</th>

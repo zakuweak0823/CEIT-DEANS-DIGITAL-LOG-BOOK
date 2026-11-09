@@ -270,6 +270,12 @@ $localCaCertificatePath = dirname(__DIR__) . DIRECTORY_SEPARATOR . $localCaCerti
 $settingsScriptDirectory = trim(str_replace('\\', '/', dirname((string)($_SERVER['SCRIPT_NAME'] ?? '/'))), '/.');
 $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settingsScriptDirectory)
     . '/' . rawurlencode($localCaCertificateName);
+$settingsInfo = static function (string $label, string $text): void {
+    ?>
+    <button type="button" class="admin-status-info settings-info" aria-label="<?php echo sanitize($label); ?>" data-settings-info="<?php echo sanitize($text); ?>"><i class="bi bi-info-circle" aria-hidden="true"></i></button>
+    <noscript><span class="small text-muted"><?php echo sanitize($text); ?></span></noscript>
+    <?php
+};
 ?>
 
 <?php include __DIR__ . '/../includes/header.php'; ?>
@@ -280,18 +286,14 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                 <h2 class="mb-1 text-primary">Admin Settings</h2>
                 <p class="text-muted mb-0">Personalize your workspace and control mobile logbook access.</p>
             </div>
-            <a class="btn btn-outline-primary" href="notification_settings">
-                <i class="bi bi-chat-dots me-1" aria-hidden="true"></i>Communication Services
-            </a>
         </div>
     </div>
 
-    <?php if (($_SESSION['admin_role'] ?? '') === 'super_admin'): ?>
+    <?php if (($_SESSION['admin_role'] ?? '') === 'admin'): ?>
     <div class="col-12">
         <section class="card shadow-sm" aria-labelledby="database-backup-title">
             <div class="card-header bg-white px-3 px-md-4 py-3">
-                <h5 class="mb-1 text-primary" id="database-backup-title">Backup and recovery</h5>
-                <p class="mb-0 small text-muted">Download a database backup for recovery by the server administrator.</p>
+                <h5 class="mb-0 text-primary" id="database-backup-title">Backup and recovery <?php $settingsInfo('About backup and recovery', 'Download a database backup for recovery by the server administrator.'); ?></h5>
             </div>
             <div class="card-body p-3 p-md-4">
                 <p class="text-muted">The backup contains sensitive records and account data. Save it in a secure location outside the web folder. It does not include server configuration or application files.</p>
@@ -311,8 +313,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
     <div class="col-12">
         <section class="card shadow-sm" id="mobile-access-settings" aria-labelledby="mobile-access-settings-title">
             <div class="card-header bg-white px-3 px-md-4 py-3">
-                <h5 class="mb-1 text-primary" id="mobile-access-settings-title">Mobile logbook access</h5>
-                <p class="mb-0 small text-muted">Control whether the mobile logbook can be used without an admin sign-in.</p>
+                <h5 class="mb-0 text-primary" id="mobile-access-settings-title">Mobile logbook access <?php $settingsInfo('About mobile logbook access', 'Control whether the mobile logbook can be used without an admin sign-in.'); ?></h5>
             </div>
             <div class="card-body p-3 p-md-4">
                 <?php if ($formSettingsNotice !== '' && $formSettingsNoticeScope === 'mobile-access'): ?>
@@ -339,8 +340,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
     <div class="col-12">
         <section class="card shadow-sm" id="document-tracking-settings" aria-labelledby="document-tracking-settings-title">
             <div class="card-header bg-white px-3 px-md-4 py-3">
-                <h5 class="mb-1 text-primary" id="document-tracking-settings-title">Document status tracking</h5>
-                <p class="mb-0 small text-muted">Issue QR tracking links for incoming documents and control public status lookups.</p>
+                <h5 class="mb-0 text-primary" id="document-tracking-settings-title">Document status tracking <?php $settingsInfo('About document status tracking', 'Issue QR tracking links for incoming documents and control public status lookups.'); ?></h5>
             </div>
             <div class="card-body p-3 p-md-4">
                 <?php if ($formSettingsNotice !== '' && $formSettingsNoticeScope === 'document-tracking'): ?>
@@ -353,13 +353,13 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                         <label class="form-check-label fw-semibold" for="document_tracking_enabled">Enable QR document tracking</label>
                     </div>
                     <label class="form-label fw-semibold" for="document_tracker_base_url">Tracker base URL <span class="fw-normal text-muted">(optional)</span></label>
+                    <?php $settingsInfo('About the tracker base URL', "This is the Apache address encoded into tracking QR codes, not the Vite mobile-app address. Use the office computer's reachable project URL (HTTPS if configured; otherwise HTTP only on your trusted local network), for example http://192.168.1.20/CEIT-DEANS-DIGITAL-LOG-BOOK. Do not add :5173. Leave blank to use this server's current request address."); ?>
                     <input class="form-control" type="url" name="document_tracker_base_url" id="document_tracker_base_url" maxlength="255" value="<?php echo sanitize($documentTrackingSettings['configuredBaseUrl']); ?>" placeholder="https://logbook.example.edu/CEIT-DEANS-DIGITAL-LOG-BOOK">
-                    <div class="form-text mb-3">This is the Apache address encoded into tracking QR codes, not the Vite mobile-app address. Use the office computer's reachable project URL (HTTPS if configured; otherwise HTTP only on your trusted local network), for example http://192.168.1.20/CEIT-DEANS-DIGITAL-LOG-BOOK. Do not add :5173. Leave blank to use this server's current request address.</div>
-                    <button class="btn btn-outline-secondary btn-sm mb-3" type="button" id="useCurrentTrackerAddress">
-                        <i class="bi bi-link-45deg me-1" aria-hidden="true"></i>Use this computer's current address
-                    </button>
-                    <div class="alert alert-info" role="note">
-                        Open Admin Settings using this computer's Wi-Fi address before using the button above if QR codes need to work on phones. An address containing “localhost” works only on this computer. Phone camera scanning uses the mobile app's separate HTTPS address on port 5173.
+                    <div class="mt-3 mb-3">
+                        <button class="btn btn-outline-secondary btn-sm" type="button" id="useCurrentTrackerAddress">
+                            <i class="bi bi-link-45deg me-1" aria-hidden="true"></i>Use this computer's current address
+                        </button>
+                        <?php $settingsInfo('About using this computer’s address', "Open Admin Settings using this computer's Wi-Fi address before using this button if QR codes need to work on phones. An address containing localhost works only on this computer. Phone camera scanning uses the mobile app's separate HTTPS address on port 5173."); ?>
                     </div>
                     <button class="btn btn-primary" type="submit" name="save_document_tracking_settings" value="1">
                         <i class="bi bi-check2 me-1" aria-hidden="true"></i>Save tracking settings
@@ -372,8 +372,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
     <div class="col-12">
         <section class="card shadow-sm" aria-labelledby="form-label-settings-title">
             <div class="card-header bg-white px-3 px-md-4 py-3">
-                <h5 class="mb-1 text-primary" id="form-label-settings-title">Shared form labels</h5>
-                <p class="mb-0 small text-muted">Customize the field names used by the document and bulk documents forms in the admin portal and mobile app.</p>
+                <h5 class="mb-0 text-primary" id="form-label-settings-title">Shared form labels <?php $settingsInfo('About shared form labels', 'Customize the field names used by the document and bulk documents forms in the admin portal and mobile app.'); ?></h5>
             </div>
             <div class="card-body p-3 p-md-4">
                 <?php if ($formSettingsNotice !== '' && $formSettingsNoticeScope === 'form'): ?>
@@ -418,8 +417,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
     <div class="col-12">
         <section class="card shadow-sm" aria-labelledby="mobile-app-settings-title">
             <div class="card-header bg-white px-3 px-md-4 py-3">
-                <h5 class="mb-1 text-primary" id="mobile-app-settings-title">Mobile app appearance and experience</h5>
-                <p class="mb-0 small text-muted">Configure the shared kiosk look, welcome text, and optional sounds for phones and browsers.</p>
+                <h5 class="mb-0 text-primary" id="mobile-app-settings-title">Mobile app appearance and experience <?php $settingsInfo('About mobile app appearance', 'Configure the shared kiosk look, welcome text, and optional sounds for phones and browsers.'); ?></h5>
             </div>
             <div class="card-body p-3 p-md-4">
                 <?php if ($formSettingsNotice !== '' && $formSettingsNoticeScope === 'mobile-app'): ?>
@@ -476,8 +474,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
     <div class="col-12">
         <section class="card shadow-sm" id="sla-settings" aria-labelledby="sla-settings-title">
             <div class="card-header bg-white px-3 px-md-4 py-3">
-                <h5 class="mb-1 text-primary" id="sla-settings-title">Time limits for records</h5>
-                <p class="mb-0 small text-muted">Set how many days a record may stay open. Records that exceed a limit are flagged as overdue on the dashboard and in the sidebar. These same limits apply to bulk submissions of the matching Incoming or Outgoing type.</p>
+                <h5 class="mb-0 text-primary" id="sla-settings-title">Time limits for records <?php $settingsInfo('About time limits for records', 'Set how many days a record may stay open. Records that exceed a limit are flagged as overdue on the dashboard and in the sidebar. These same limits apply to bulk submissions of the matching Incoming or Outgoing type.'); ?></h5>
             </div>
             <div class="card-body p-3 p-md-4">
                 <?php if ($formSettingsNotice !== '' && $formSettingsNoticeScope === 'sla'): ?>
@@ -517,8 +514,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
     <div class="col-12">
         <section class="card shadow-sm" id="print-report-settings" aria-labelledby="print-report-settings-title">
             <div class="card-header bg-white px-3 px-md-4 py-3">
-                <h5 class="mb-1 text-primary" id="print-report-settings-title">Printed report settings</h5>
-                <p class="mb-0 small text-muted">Choose what appears when a report is printed or saved as PDF. These choices apply to every report type and to everyone using the admin portal.</p>
+                <h5 class="mb-0 text-primary" id="print-report-settings-title">Printed report settings <?php $settingsInfo('About printed report settings', 'Choose what appears when a report is printed or saved as PDF. These choices apply to every report type and to everyone using the admin portal.'); ?></h5>
             </div>
             <div class="card-body p-3 p-md-4">
                 <?php if ($formSettingsNotice !== '' && $formSettingsNoticeScope === 'print-report'): ?>
@@ -601,8 +597,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
     <div class="col-12">
         <section class="card shadow-sm" aria-labelledby="batch-workflow-settings-title">
             <div class="card-header bg-white px-3 px-md-4 py-3">
-                <h5 class="mb-1 text-primary" id="batch-workflow-settings-title">Bulk documents intake and QR</h5>
-                <p class="mb-0 small text-muted">Choose how the admin records receipt. Bulk submission QR codes use a tracking link that standard QR scanners can read.</p>
+                <h5 class="mb-0 text-primary" id="batch-workflow-settings-title">Bulk documents intake and QR <?php $settingsInfo('About bulk documents intake and QR', 'Choose how the admin records receipt. Bulk submission QR codes use a tracking link that standard QR scanners can read.'); ?></h5>
             </div>
             <div class="card-body p-3 p-md-4">
                 <?php if ($formSettingsNotice !== '' && $formSettingsNoticeScope === 'workflow'): ?>
@@ -634,8 +629,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                 <div class="d-flex align-items-start gap-3">
                     <span class="rounded-circle bg-primary-subtle text-primary p-2" aria-hidden="true"><i class="bi bi-activity"></i></span>
                     <div>
-                        <h5 class="mb-1 text-primary" id="workspace-settings-title">Workspace activity</h5>
-                        <p class="mb-0 small text-muted">Control how often this page checks for new logbook records and how it alerts you.</p>
+                        <h5 class="mb-0 text-primary" id="workspace-settings-title">Workspace activity <?php $settingsInfo('About workspace activity', 'Control how often this page checks for new logbook records and how it alerts you.'); ?></h5>
                     </div>
                 </div>
             </div>
@@ -679,7 +673,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
                     <div class="col-12">
                         <fieldset class="admin-theme-picker">
                             <legend class="form-label fw-semibold mb-1">Admin appearance</legend>
-                            <p class="form-text mt-0 mb-3">Choose the workspace style used across Admin pages, including Compact Mode. Your choice is saved in this browser.</p>
+                            <p class="form-text mt-0 mb-3">Choose the workspace style used across Admin pages.</p>
                             <div class="row g-3">
                                 <div class="col-12 col-md-6">
                                     <label class="admin-theme-option" for="adminThemeDefault">
@@ -742,29 +736,11 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
     </div>
 
     <div class="col-12">
-        <section class="card shadow-sm" aria-labelledby="system-settings-title">
-            <div class="card-header bg-white px-3 px-md-4 py-3">
-                <h5 class="mb-1 text-primary" id="system-settings-title">Communication services</h5>
-                <p class="mb-0 small text-muted">SMS and email provider settings are managed on the server.</p>
-            </div>
-            <div class="card-body p-3 p-md-4 d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3">
-                <div>
-                    <strong>SMS and email delivery</strong>
-                    <p class="small text-muted mb-0">Contact the server administrator for provider changes.</p>
-                </div>
-                <a class="btn btn-primary flex-shrink-0" href="notification_settings">View Communication Services <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i></a>
-            </div>
-        </section>
-    </div>
-
-    <div class="col-12">
         <section class="card shadow-sm" id="network-setup-settings" aria-labelledby="network-setup-settings-title">
             <div class="card-header bg-white px-3 px-md-4 py-3">
-                <h5 class="mb-1 text-primary" id="network-setup-settings-title">Computer and network setup</h5>
-                <p class="mb-0 small text-muted">Prepare this computer when moving the logbook or changing Wi-Fi networks.</p>
+                <h5 class="mb-0 text-primary" id="network-setup-settings-title">Computer and network setup <?php $settingsInfo('About computer and network setup', "Prepare this computer when moving the logbook or changing Wi-Fi networks. Download and run the helper on this Windows computer. It creates or refreshes the phone-camera certificate, starts XAMPP MySQL and Apache, adds firewall access only for Private networks, and starts the mobile app when Node.js and its packages are installed."); ?></h5>
             </div>
             <div class="card-body p-3 p-md-4">
-                <p class="mb-3">Download and run the helper on this Windows computer. It creates or refreshes the phone-camera certificate, starts XAMPP MySQL and Apache, adds firewall access only for Private networks, and starts the mobile app when Node.js and its packages are installed.</p>
                 <div class="alert alert-warning" role="note">
                     Run this only on the computer hosting XAMPP and only while connected to a trusted Wi-Fi network. Approve the Windows administrator prompt for the Private-network firewall rules. After setup, download the public camera certificate below and install/trust it on the phone. Guest Wi-Fi isolation, a Public Windows network profile, phone certificate trust, and router restrictions may still need manual changes.
                 </div>
@@ -779,8 +755,7 @@ $localCaCertificateUrl = ($settingsScriptDirectory === '' ? '' : '/' . $settings
     <div class="col-12">
         <section class="card shadow-sm" aria-labelledby="mobile-camera-certificate-title">
             <div class="card-header bg-white px-3 px-md-4 py-3">
-                <h5 class="mb-1 text-primary" id="mobile-camera-certificate-title">Mobile camera certificate</h5>
-                <p class="mb-0 small text-muted">Download the public certificate needed to trust this local development server on a phone.</p>
+                <h5 class="mb-0 text-primary" id="mobile-camera-certificate-title">Mobile camera certificate <?php $settingsInfo('About the mobile camera certificate', 'Download the public certificate needed to trust this local development server on a phone.'); ?></h5>
             </div>
             <div class="card-body p-3 p-md-4 d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3">
                 <div>

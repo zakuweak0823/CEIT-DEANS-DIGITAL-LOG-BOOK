@@ -1257,7 +1257,7 @@ function App() {
         <>
           <div className="mb-3">
             <p className={sectionTitleClass}>Outgoing documents</p>
-            <p className="mt-1 text-left text-sm text-slate-600">Documents prepared for release appear here.</p>
+            {outgoingItems.length > 0 && <p className="mt-1 text-left text-sm text-slate-600">Documents prepared for release appear here.</p>}
           </div>
 
           <div className="space-y-2">

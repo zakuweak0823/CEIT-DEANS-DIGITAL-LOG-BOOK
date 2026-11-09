@@ -10,9 +10,17 @@ if (!empty($_SESSION['admin'])) {
 
 $setupOk = ensure_password_reset_schema($conn);
 $smsReady = $setupOk && password_reset_sms_available($conn);
+$emailReady = $setupOk && logbook_email_available();
 $error = '';
 $info = '';
 $username = '';
+$linkToken = is_string($_GET['token'] ?? null) ? trim($_GET['token']) : '';
+$linkRow = $linkToken !== '' ? password_reset_link_find($conn, $linkToken) : null;
+if ($linkToken !== '' && !$linkRow) {
+    $error = 'This password link is invalid, expired, or already used. Request a new recovery link.';
+}
+$emailRequested = !empty($_SESSION['pw_reset_email']);
+unset($_SESSION['pw_reset_email']);
 $pending = $_SESSION['pw_reset'] ?? null;
 if (is_array($pending) && (time() - (int)($pending['at'] ?? 0)) > 900) {
     unset($_SESSION['pw_reset']);
@@ -29,28 +37,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $expectedToken = $_SESSION['csrf_token'] ?? '';
     if ($expectedToken === '' || !is_string($submittedToken) || !hash_equals($expectedToken, $submittedToken)) {
         $error = 'This page expired. Please try again.';
-    } elseif (!$smsReady) {
-        $error = 'SMS recovery is not available right now. Please contact your Super Admin.';
+    } elseif (isset($_POST['reset_email_password'])) {
+        $postedToken = is_string($_POST['token'] ?? null) ? trim($_POST['token']) : '';
+        $postedLink = password_reset_link_find($conn, $postedToken);
+        $password = (string)($_POST['password'] ?? '');
+        $confirmation = (string)($_POST['password_confirmation'] ?? '');
+        if (!$postedLink || !in_array($postedLink['purpose'], ['setup', 'recovery'], true)) {
+            $error = 'This password link is invalid, expired, or already used. Request a new recovery link.';
+        } elseif (!admin_password_meets_minimum_length($password)) {
+            $error = 'Use a password with at least ' . ADMIN_PASSWORD_MIN_LENGTH . ' characters.';
+        } elseif ($password !== $confirmation) {
+            $error = 'The password fields do not match.';
+        } elseif (!password_reset_link_complete($conn, $postedLink, $password)) {
+            $error = 'Your password could not be changed. Please request a new link and try again.';
+        } else {
+            unset($_SESSION['pw_reset']);
+            session_regenerate_id(true);
+            $_SESSION['login_notice'] = 'Your password was changed. Sign in with your new password.';
+            header('Location: login');
+            exit;
+        }
+    } elseif (!$smsReady && !$emailReady) {
+        $error = 'Password recovery is not available right now. Contact your administrator.';
     } elseif (isset($_POST['request_code'])) {
         $username = trim((string)($_POST['username'] ?? ''));
         if (preg_match('/^[A-Za-z0-9_.-]{3,100}$/', $username) !== 1) {
-            $error = 'Enter your administrator username.';
+            $error = 'Enter your username.';
         } else {
             $state = password_reset_throttle_state($conn, $username);
             if ($state === 'limited') {
-                $error = 'Too many recovery requests. Please try again in an hour or contact your Super Admin.';
+                $error = 'Too many recovery requests. Please try again in an hour or contact an Admin.';
             } elseif ($state === 'cooldown') {
                 $error = 'Please wait a minute before requesting another code.';
             } else {
                 if (random_int(1, 20) === 1) {
                     password_reset_purge($conn);
                 }
-                $issued = password_reset_issue($conn, $username);
+                $emailIssue = $emailReady ? password_reset_email_issue($conn, $username) : null;
+                if ($emailIssue !== null) {
+                    $_SESSION['pw_reset_email'] = true;
+                    password_reset_finish_response('forgot_password');
+                    if (!password_reset_email_send($conn, $emailIssue, 'recovery')) {
+                        $cancel = safe_query(
+                            $conn,
+                            'UPDATE password_reset_links SET used_at = NOW() WHERE token_hash = ? AND used_at IS NULL',
+                            's',
+                            [hash('sha256', (string)$emailIssue['token'])]
+                        );
+                        if ($cancel === false) {
+                            error_log('Undelivered password recovery link could not be revoked.');
+                        } else {
+                            mysqli_stmt_close($cancel);
+                        }
+                    }
+                    exit;
+                }
+                $issued = $smsReady ? password_reset_issue($conn, $username) : null;
                 $_SESSION['pw_reset'] = ['username' => $username, 'at' => time()];
-                // The reply is identical whether or not the account can receive a code.
+                // The reply is identical whether or not the account can receive a recovery message.
                 password_reset_finish_response('forgot_password');
                 if ($issued !== null) {
-                    password_reset_send_code($conn, $issued['phone'], $issued['code']);
+                    if (password_reset_send_code($conn, $issued['phone'], $issued['code'])) {
+                        record_audit_event($conn, 'password_reset_code_sent', $username);
+                    }
                 }
                 exit;
             }
@@ -86,7 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $pending = $_SESSION['pw_reset'] ?? null;
 }
-$step = is_array($pending) ? 'reset' : 'request';
+$step = $linkRow ? 'email-reset' : (is_array($pending) ? 'reset' : 'request');
 ?>
 <?php include __DIR__ . '/../includes/header.php'; ?>
 <section class="login-shell" aria-labelledby="recoveryTitle">
@@ -101,7 +150,7 @@ $step = is_array($pending) ? 'reset' : 'request';
             </div>
             <div class="login-heading">
                 <h1 id="recoveryTitle">Password recovery</h1>
-                <p class="login-intro"><?php echo $step === 'reset' ? 'Enter the code we sent and choose a new password.' : 'We will text a one-time code to your registered recovery phone.'; ?></p>
+                <p class="login-intro"><?php echo $step === 'email-reset' ? 'Choose a new password for your account.' : ($step === 'reset' ? 'Enter the code we sent and choose a new password.' : 'Enter your username. We will email a password link when an email is registered, otherwise we may text a recovery code.'); ?></p>
             </div>
             <?php if ($error): ?>
                 <div class="alert alert-danger login-error" role="alert">
@@ -109,14 +158,43 @@ $step = is_array($pending) ? 'reset' : 'request';
                     <span><?php echo sanitize($error); ?></span>
                 </div>
             <?php endif; ?>
-            <?php if (!$smsReady): ?>
+            <?php if ($step === 'email-reset'): ?>
+                <form method="POST" action="forgot_password?token=<?php echo rawurlencode($linkToken); ?>" novalidate>
+                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                    <input type="hidden" name="token" value="<?php echo sanitize($linkToken); ?>">
+                    <div class="login-field">
+                        <label for="recoveryPassword">New password</label>
+                        <div class="login-input-wrap">
+                            <i class="bi bi-lock" aria-hidden="true"></i>
+                            <input type="password" id="recoveryPassword" name="password" class="form-control" minlength="<?php echo ADMIN_PASSWORD_MIN_LENGTH; ?>" autocomplete="new-password" required>
+                        </div>
+                        <span class="form-text">At least <?php echo ADMIN_PASSWORD_MIN_LENGTH; ?> characters.</span>
+                    </div>
+                    <div class="login-field">
+                        <label for="recoveryPasswordConfirmation">Confirm new password</label>
+                        <div class="login-input-wrap">
+                            <i class="bi bi-lock-fill" aria-hidden="true"></i>
+                            <input type="password" id="recoveryPasswordConfirmation" name="password_confirmation" class="form-control" minlength="<?php echo ADMIN_PASSWORD_MIN_LENGTH; ?>" autocomplete="new-password" required>
+                        </div>
+                    </div>
+                    <button type="submit" name="reset_email_password" value="1" class="btn login-submit">
+                        <span>Set password</span><i class="bi bi-check2" aria-hidden="true"></i>
+                    </button>
+                </form>
+            <?php elseif (!$smsReady && !$emailReady): ?>
                 <div class="alert alert-warning login-recovery-note" role="note">
                     <i class="bi bi-info-circle" aria-hidden="true"></i>
                     <div>
-                        <p class="mb-0"><strong>SMS recovery is not available right now.</strong> Contact your Super Admin and ask them to reset your password from <strong>Administrator accounts</strong>. A Super Admin who is locked out needs the server owner to run <code>tools/reset_admin_password.php</code>.</p>
+                        <p class="mb-0"><strong>Self-service recovery is not available right now.</strong> Contact an Admin and ask them to reset your password from <strong>Account management</strong>.</p>
                     </div>
                 </div>
             <?php elseif ($step === 'request'): ?>
+                <?php if ($emailRequested): ?>
+                    <div class="alert alert-info login-recovery-note" role="status">
+                        <i class="bi bi-envelope" aria-hidden="true"></i>
+                        <div><p class="mb-0">If the account matches a registered recovery email or phone, instructions may be sent there. If nothing arrives, wait a minute and try again or ask an Admin to reset the password.</p></div>
+                    </div>
+                <?php endif; ?>
                 <form method="POST" novalidate>
                     <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                     <div class="login-field">
@@ -133,7 +211,7 @@ $step = is_array($pending) ? 'reset' : 'request';
                 <div class="alert alert-info login-recovery-note mt-3" role="note">
                     <i class="bi bi-info-circle" aria-hidden="true"></i>
                     <div>
-                        <p class="mb-0">No recovery phone on your account? Ask your Super Admin to add one or to reset your password from <strong>Administrator accounts</strong>.</p>
+                        <p class="mb-0">If you cannot access your registered email or recovery phone, ask an Admin to reset your password from <strong>Account management</strong>.</p>
                     </div>
                 </div>
             <?php else: ?>

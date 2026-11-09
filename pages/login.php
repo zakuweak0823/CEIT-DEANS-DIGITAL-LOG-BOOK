@@ -28,6 +28,7 @@ if (isset($_POST['login'])) {
                 $_SESSION['admin_role'] = $login['user']['role'];
                 $_SESSION['admin_password_hash'] = $login['user']['password'];
                 $_SESSION['admin_login_arrival'] = true;
+                record_audit_event($conn, 'login_success', $login['user']['username'], $login['user']['role']);
                 header('Location: dashboard');
                 exit;
             }
@@ -100,5 +101,4 @@ if (isset($_POST['login'])) {
         </div>
     </div>
 </section>
-<script src="assets/js/page-login.js?v=<?php echo (int)@filemtime(dirname(__DIR__) . '/assets/js/page-login.js'); ?>"></script>
 <?php include __DIR__ . '/../includes/footer.php'; ?>

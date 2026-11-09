@@ -322,8 +322,44 @@ if (document.body.classList.contains('admin-body')) {
     }, { capture: true });
 
     applyAdminPreferences();
+    const adminTables = Array.from(document.querySelectorAll('.admin-content .table-responsive table'));
+    const syncTableHeaderAlignment = function (table) {
+        const headerRow = table.tHead && table.tHead.rows.length ? table.tHead.rows[0] : null;
+        if (!headerRow) return;
+
+        Array.from(headerRow.cells).forEach(function (header, index) {
+            const previousAlignment = header.dataset.tableAutoAlignment;
+            if (previousAlignment) {
+                header.classList.remove(previousAlignment);
+                delete header.dataset.tableAutoAlignment;
+            }
+            if (header.classList.contains('text-center') || header.classList.contains('text-end')) return;
+
+            let alignment = null;
+            let isConsistent = true;
+            Array.from(table.tBodies).forEach(function (body) {
+                Array.from(body.rows).forEach(function (row) {
+                    const cell = row.cells[index];
+                    if (!cell || cell.hasAttribute('colspan')) return;
+                    const cellAlignment = window.getComputedStyle(cell).textAlign;
+                    if (alignment === null) {
+                        alignment = cellAlignment;
+                    } else if (alignment !== cellAlignment) {
+                        isConsistent = false;
+                    }
+                });
+            });
+
+            if (isConsistent && (alignment === 'center' || alignment === 'right')) {
+                const alignmentClass = alignment === 'center' ? 'text-center' : 'text-end';
+                header.classList.add(alignmentClass);
+                header.dataset.tableAutoAlignment = alignmentClass;
+            }
+        });
+    };
+
     // Add accessible mobile labels from the table headers without changing desktop markup.
-    document.querySelectorAll('.admin-content .table-responsive table').forEach(function (table) {
+    adminTables.forEach(function (table) {
         const headerRow = table.tHead && table.tHead.rows.length ? table.tHead.rows[0] : null;
         const lastHeader = headerRow && headerRow.cells.length
             ? headerRow.cells[headerRow.cells.length - 1].textContent.trim()
@@ -334,9 +370,14 @@ if (document.body.classList.contains('admin-body')) {
                 if (cell.tagName === 'TH' && !cell.hasAttribute('scope')) cell.setAttribute('scope', 'col');
             });
         }
-        if (document.body.classList.contains('admin-compact') && table.closest('.batch-history-table')) return;
-        if (!document.body.classList.contains('admin-compact') && table.closest('.d-none, .d-xl-block')) return;
         if (!headerRow) return;
+        if (
+            (document.body.classList.contains('admin-compact') && table.closest('.batch-history-table')) ||
+            (!document.body.classList.contains('admin-compact') && table.closest('.d-none, .d-xl-block'))
+        ) {
+            syncTableHeaderAlignment(table);
+            return;
+        }
 
         const labels = Array.from(headerRow.cells).map(function (cell) {
             return cell.textContent.trim().replace(/\s+/g, ' ');
@@ -355,7 +396,15 @@ if (document.body.classList.contains('admin-body')) {
                 });
             });
         });
+        syncTableHeaderAlignment(table);
     });
+    let tableAlignmentFrame = 0;
+    window.addEventListener('resize', function () {
+        if (tableAlignmentFrame) window.cancelAnimationFrame(tableAlignmentFrame);
+        tableAlignmentFrame = window.requestAnimationFrame(function () {
+            adminTables.forEach(syncTableHeaderAlignment);
+        });
+    }, { passive: true });
 
     const assistant = document.querySelector('.admin-assistant');
     if (assistant) {

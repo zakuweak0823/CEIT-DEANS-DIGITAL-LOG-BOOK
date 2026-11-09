@@ -747,9 +747,19 @@ body {
 .admin-content .table th,
 .admin-content .table td {
     padding: clamp(0.625rem, 1vw, 0.875rem);
-    text-align: center;
+    text-align: left;
     vertical-align: middle;
     line-height: 1.45;
+}
+
+.admin-content .table th.text-center,
+.admin-content .table td.text-center {
+    text-align: center;
+}
+
+.admin-content .table th.text-end,
+.admin-content .table td.text-end {
+    text-align: right;
 }
 
 .admin-content .table th {
@@ -2086,6 +2096,14 @@ footer {
 .login-password-toggle:focus-visible {
     outline: 2px solid #4a8b65;
     outline-offset: 2px;
+}
+
+.password-visibility-wrap {
+    position: relative;
+}
+
+.password-visibility-wrap > .form-control {
+    padding-right: 3.25rem;
 }
 
 .login-input-wrap .form-control:focus {

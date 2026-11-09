@@ -5,10 +5,49 @@ CREATE TABLE IF NOT EXISTS users (
     user_id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(100) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
-    role VARCHAR(50) NOT NULL DEFAULT 'admin',
-    recovery_phone VARCHAR(20) DEFAULT NULL
-);
+    role VARCHAR(50) NOT NULL DEFAULT 'staff',
+    recovery_phone VARCHAR(20) DEFAULT NULL,
+    first_name VARCHAR(100) NOT NULL DEFAULT '',
+    middle_name VARCHAR(100) NOT NULL DEFAULT '',
+    surname VARCHAR(100) NOT NULL DEFAULT '',
+    email VARCHAR(254) DEFAULT NULL,
+    UNIQUE KEY uq_users_email (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_phone VARCHAR(20) DEFAULT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(100) NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS middle_name VARCHAR(100) NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS surname VARCHAR(100) NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(254) DEFAULT NULL;
+
+CREATE TABLE IF NOT EXISTS app_schema_migrations (
+    version VARCHAR(100) NOT NULL PRIMARY KEY,
+    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS password_reset_links (
+    token_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    token_hash CHAR(64) NOT NULL UNIQUE,
+    purpose VARCHAR(20) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    used_at DATETIME DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_password_reset_links_user (user_id, purpose, used_at, expires_at),
+    CONSTRAINT fk_password_reset_links_user FOREIGN KEY (user_id)
+        REFERENCES users(user_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    audit_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    actor VARCHAR(100) DEFAULT NULL,
+    action VARCHAR(80) NOT NULL,
+    target VARCHAR(255) DEFAULT NULL,
+    details TEXT NOT NULL,
+    ip_address VARCHAR(45) NOT NULL DEFAULT '',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_audit_logs_created_at (created_at),
+    INDEX idx_audit_logs_actor (actor, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS login_cooldowns (
     user_id INT NOT NULL PRIMARY KEY,
@@ -27,7 +66,7 @@ CREATE TABLE IF NOT EXISTS mobile_api_tokens (
     INDEX idx_mobile_api_tokens_expiry (expires_at),
     CONSTRAINT fk_mobile_api_tokens_user FOREIGN KEY (user_id)
         REFERENCES users(user_id) ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS password_resets (
     reset_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -45,7 +84,7 @@ CREATE TABLE IF NOT EXISTS password_resets (
     INDEX idx_password_resets_ip (request_ip, created_at),
     CONSTRAINT fk_password_resets_user FOREIGN KEY (user_id)
         REFERENCES users(user_id) ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS documents (
     doc_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -63,8 +102,9 @@ CREATE TABLE IF NOT EXISTS documents (
     remarks TEXT,
     status VARCHAR(50) NOT NULL,
     date_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_documents_tracking_token (tracking_token),
     UNIQUE KEY uq_documents_local_reference (local_reference)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS client_phone VARCHAR(20) DEFAULT NULL;
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS submitter_name VARCHAR(255) NOT NULL DEFAULT '';
@@ -74,6 +114,28 @@ ALTER TABLE documents ADD COLUMN IF NOT EXISTS local_reference VARCHAR(40) DEFAU
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS entry_source VARCHAR(32) NOT NULL DEFAULT 'standard';
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS submitter_type VARCHAR(20) NOT NULL DEFAULT 'Other';
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_priority TINYINT(1) NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS document_events (
+    event_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    doc_id INT DEFAULT NULL,
+    batch_id INT DEFAULT NULL,
+    kind VARCHAR(12) NOT NULL DEFAULT 'status',
+    status VARCHAR(20) NOT NULL,
+    note VARCHAR(255) DEFAULT NULL,
+    actor VARCHAR(100) DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_document_events_doc (doc_id, created_at),
+    INDEX idx_document_events_batch (batch_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS document_requirements (
+    req_id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    doc_id INT NOT NULL,
+    label VARCHAR(100) NOT NULL,
+    received_at DATETIME DEFAULT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_document_requirements_doc (doc_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS mobile_submission_logs (
     log_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -90,7 +152,7 @@ CREATE TABLE IF NOT EXISTS item_categories (
     category_id INT AUTO_INCREMENT PRIMARY KEY,
     category_name VARCHAR(100) NOT NULL UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS borrowed_items (
     item_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -103,7 +165,7 @@ CREATE TABLE IF NOT EXISTS borrowed_items (
     status VARCHAR(50) NOT NULL,
     date_borrowed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (category_id) REFERENCES item_categories(category_id)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS document_batches (
     batch_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -113,11 +175,13 @@ CREATE TABLE IF NOT EXISTS document_batches (
     status VARCHAR(20) NOT NULL DEFAULT 'Received',
     batch_date DATE NOT NULL,
     sender VARCHAR(255) NOT NULL,
+    submitter_name VARCHAR(255) NOT NULL DEFAULT '',
     sender_type VARCHAR(20) NOT NULL DEFAULT 'Student',
     recipient VARCHAR(255) NOT NULL DEFAULT '',
     recipient_contact_type VARCHAR(20) NOT NULL DEFAULT 'Unassigned',
     remarks TEXT,
     tracking_token CHAR(64) DEFAULT NULL,
+    document_pages TEXT DEFAULT NULL,
     paper_count INT UNSIGNED NOT NULL DEFAULT 0,
     is_priority TINYINT(1) NOT NULL DEFAULT 0,
     received_paper_count INT UNSIGNED DEFAULT NULL,
@@ -125,12 +189,15 @@ CREATE TABLE IF NOT EXISTS document_batches (
     intake_notes TEXT,
     received_at DATETIME DEFAULT NULL,
     received_by VARCHAR(100) NOT NULL DEFAULT '',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_document_batches_tracking_token (tracking_token)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS tracking_token CHAR(64) DEFAULT NULL;
 ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS batch_type VARCHAR(255) NOT NULL DEFAULT '';
 ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT '';
+ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS submitter_name VARCHAR(255) NOT NULL DEFAULT '';
+ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS document_pages TEXT DEFAULT NULL;
 ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS sender_type VARCHAR(20) NOT NULL DEFAULT 'Student';
 ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS recipient_contact_type VARCHAR(20) NOT NULL DEFAULT 'Unassigned';
 ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS paper_count INT UNSIGNED NOT NULL DEFAULT 0;
@@ -152,7 +219,7 @@ CREATE TABLE IF NOT EXISTS batch_papers (
         REFERENCES document_batches(batch_id) ON DELETE CASCADE,
     CONSTRAINT fk_batch_papers_document FOREIGN KEY (doc_id)
         REFERENCES documents(doc_id) ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 UPDATE document_batches SET batch_type = document_type WHERE batch_type = '';
 UPDATE document_batches b
@@ -178,11 +245,13 @@ CREATE TABLE IF NOT EXISTS sms_logs (
     status VARCHAR(50) NOT NULL,
     provider_message_id VARCHAR(64) DEFAULT NULL,
     provider_status_checked_at DATETIME DEFAULT NULL,
+    provider_name VARCHAR(32) NOT NULL DEFAULT 'Semaphore',
     date_sent TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 ALTER TABLE sms_logs ADD COLUMN IF NOT EXISTS provider_message_id VARCHAR(64) DEFAULT NULL;
 ALTER TABLE sms_logs ADD COLUMN IF NOT EXISTS provider_status_checked_at DATETIME DEFAULT NULL;
+ALTER TABLE sms_logs ADD COLUMN IF NOT EXISTS provider_name VARCHAR(32) NOT NULL DEFAULT 'Semaphore';
 
 CREATE TABLE IF NOT EXISTS settings (
     setting_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -190,7 +259,7 @@ CREATE TABLE IF NOT EXISTS settings (
     value TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Add category_id column to borrowed_items if it doesn't exist
 ALTER TABLE borrowed_items ADD COLUMN IF NOT EXISTS category_id INT;
@@ -199,5 +268,20 @@ ALTER TABLE borrowed_items ADD COLUMN IF NOT EXISTS returned_date DATE DEFAULT N
 
 -- Insert a default admin user with username "admin" and password "admin".
 -- The application will migrate the password to a secure hash on the first login.
-INSERT INTO users (username, password, role) VALUES ('admin', 'admin', 'super_admin')
+INSERT INTO users (username, password, role) VALUES ('admin', 'admin', 'admin')
 ON DUPLICATE KEY UPDATE username = VALUES(username);
+
+-- Convert earlier role names once while preserving the original admin account.
+SET @migrate_account_roles = (
+    SELECT COUNT(*) = 0 FROM app_schema_migrations WHERE version = 'account-roles-v1'
+);
+START TRANSACTION;
+UPDATE users
+SET role = CASE
+    WHEN role = 'super_admin' THEN 'admin'
+    WHEN role = 'admin' AND username <> 'admin' THEN 'staff'
+    ELSE role
+END
+WHERE @migrate_account_roles = 1 AND role IN ('admin', 'super_admin');
+INSERT IGNORE INTO app_schema_migrations (version) VALUES ('account-roles-v1');
+COMMIT;
