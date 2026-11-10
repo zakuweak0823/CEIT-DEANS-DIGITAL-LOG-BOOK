@@ -15,6 +15,12 @@ try {
 $message = '';
 $messageType = 'success';
 $showBorrowingHistory = isset($_GET['view']) && $_GET['view'] === 'history';
+$restoreScrollY = isset($_POST['restore_scroll_y']) && is_string($_POST['restore_scroll_y']) && ctype_digit($_POST['restore_scroll_y'])
+    ? min((int)$_POST['restore_scroll_y'], 10000000)
+    : null;
+$restoreCategoryId = isset($_POST['restore_category_id']) && is_string($_POST['restore_category_id']) && ctype_digit($_POST['restore_category_id'])
+    ? (int)$_POST['restore_category_id']
+    : 0;
 $setMessage = static function (string $text, string $type = 'success') use (&$message, &$messageType): void {
     $message = $text;
     $messageType = $type;
@@ -32,6 +38,19 @@ if (!$showBorrowingHistory && isset($_POST['delete_category'])) {
     } catch (Throwable $error) {
         error_log('Borrowable inventory category deletion failed: ' . $error->getMessage());
         $setMessage('The category could not be deleted. Check the server log and try again.', 'danger');
+    }
+}
+
+if (!$showBorrowingHistory && isset($_POST['delete_inventory_item'])) {
+    $inventoryId = (int)($_POST['inventory_id'] ?? 0);
+    try {
+        delete_borrowed_inventory_item($conn, $inventoryId);
+        $setMessage('Inventory item deleted. Past borrowing records were kept.');
+    } catch (DomainException $error) {
+        $setMessage($error->getMessage(), 'warning');
+    } catch (Throwable $error) {
+        error_log('Borrowable inventory item deletion failed: ' . $error->getMessage());
+        $setMessage('The inventory item could not be deleted. Check the server log and try again.', 'danger');
     }
 }
 
@@ -67,41 +86,69 @@ if (!$showBorrowingHistory && (isset($_POST['add_inventory_item']) || isset($_PO
     if (($isUpdate && $inventoryId <= 0) || !$validCategory || $itemName === '' || strlen($itemName) > 255
         || ($requiresIdentifier && ($identifierInput === '' || strlen($identifierInput) > 100))) {
         $setMessage('Select a category, enter an item name, and provide an identifier when the category requires one.', 'danger');
-    } elseif ($isUpdate) {
-        $activeLoan = (int)safe_scalar(
-            $conn,
-            "SELECT COUNT(*) FROM borrowed_items WHERE inventory_id = ? AND status <> 'Returned'",
-            'i',
-            [$inventoryId]
-        );
-        if ($activeLoan > 0) {
-            $setMessage('This item cannot be edited until it has been returned.', 'warning');
-        } else {
-            $stmt = safe_query(
-                $conn,
-                'UPDATE borrowable_inventory SET category_id = ?, item_name = ?, identifier = ? WHERE inventory_id = ?',
-                'issi',
-                [$categoryId, $itemName, $identifier, $inventoryId]
-            );
-            if ($stmt === false) {
-                $setMessage('The inventory item could not be updated. Check that its identifier is unique in the category.', 'danger');
-            } else {
-                mysqli_stmt_close($stmt);
-                $setMessage('Inventory item updated.');
-            }
-        }
     } else {
-        $stmt = safe_query(
+        $duplicateStmt = safe_query(
             $conn,
-            "INSERT INTO borrowable_inventory (category_id, item_name, identifier, availability_status) VALUES (?, ?, ?, 'Available')",
-            'iss',
-            [$categoryId, $itemName, $identifier]
+            'SELECT item_name, identifier
+             FROM borrowable_inventory
+             WHERE (LOWER(item_name) = LOWER(?) OR (? IS NOT NULL AND LOWER(identifier) = LOWER(?)))
+               AND inventory_id <> ?
+             LIMIT 1',
+            'sssi',
+            [$itemName, $identifier, $identifier, $isUpdate ? $inventoryId : 0]
         );
-        if ($stmt === false) {
-            $setMessage('The item could not be added. Check that its identifier is unique in the category.', 'danger');
+        if ($duplicateStmt === false) {
+            $setMessage('Could not check for duplicate item names or identifiers. Try again.', 'danger');
         } else {
-            mysqli_stmt_close($stmt);
-            $setMessage('Inventory item added and marked Available.');
+            $duplicate = mysqli_fetch_assoc(mysqli_stmt_get_result($duplicateStmt));
+            mysqli_stmt_close($duplicateStmt);
+            if ($duplicate && strcasecmp($duplicate['item_name'], $itemName) === 0) {
+                $setMessage('An item with that name already exists in inventory.', 'danger');
+            } elseif ($duplicate) {
+                $setMessage('An item with that identifier ID already exists in inventory.', 'danger');
+            } elseif ($isUpdate) {
+                $activeLoanStmt = safe_query(
+                    $conn,
+                    "SELECT COUNT(*) FROM borrowed_items WHERE inventory_id = ? AND status <> 'Returned'",
+                    'i',
+                    [$inventoryId]
+                );
+                if ($activeLoanStmt === false) {
+                    $setMessage('Could not check whether this item is currently borrowed. Try again.', 'danger');
+                } else {
+                    $activeLoan = (int)mysqli_fetch_row(mysqli_stmt_get_result($activeLoanStmt))[0];
+                    mysqli_stmt_close($activeLoanStmt);
+                    if ($activeLoan > 0) {
+                        $setMessage('This item cannot be edited until it has been returned.', 'warning');
+                    } else {
+                        $stmt = safe_query(
+                            $conn,
+                            'UPDATE borrowable_inventory SET category_id = ?, item_name = ?, identifier = ? WHERE inventory_id = ?',
+                            'issi',
+                            [$categoryId, $itemName, $identifier, $inventoryId]
+                        );
+                        if ($stmt === false) {
+                            $setMessage('The inventory item could not be updated. Check that its identifier is unique in the category.', 'danger');
+                        } else {
+                            mysqli_stmt_close($stmt);
+                            $setMessage('Inventory item updated.');
+                        }
+                    }
+                }
+            } else {
+                $stmt = safe_query(
+                    $conn,
+                    "INSERT INTO borrowable_inventory (category_id, item_name, identifier, availability_status) VALUES (?, ?, ?, 'Available')",
+                    'iss',
+                    [$categoryId, $itemName, $identifier]
+                );
+                if ($stmt === false) {
+                    $setMessage('The item could not be added. Check that its identifier is unique in the category.', 'danger');
+                } else {
+                    mysqli_stmt_close($stmt);
+                    $setMessage('Inventory item added and marked Available.');
+                }
+            }
         }
     }
 }
@@ -307,6 +354,21 @@ foreach ($inventoryItems as $inventoryItem) {
         $categorySummaries[$categoryId][$inventoryItem['display_status']]++;
     }
 }
+foreach ($inventoryItemsByCategory as &$categoryItems) {
+    usort($categoryItems, static function (array $first, array $second): int {
+        $statusOrder = ['Available' => 0, 'Borrowed' => 1, 'Unavailable' => 2];
+        $statusComparison = ($statusOrder[$first['display_status']] ?? 3) <=> ($statusOrder[$second['display_status']] ?? 3);
+        if ($statusComparison !== 0) {
+            return $statusComparison;
+        }
+
+        $nameComparison = strcasecmp((string)$first['item_name'], (string)$second['item_name']);
+        return $nameComparison !== 0
+            ? $nameComparison
+            : strcasecmp((string)($first['identifier'] ?? ''), (string)($second['identifier'] ?? ''));
+    });
+}
+unset($categoryItems);
 
 $search = isset($_GET['search']) && is_string($_GET['search']) ? trim($_GET['search']) : '';
 $statusFilter = isset($_GET['status']) && is_string($_GET['status']) ? $_GET['status'] : 'All';
@@ -362,7 +424,16 @@ if ($itemFilterId > 0) {
 }
 ?>
 <?php include __DIR__ . '/../includes/header.php'; ?>
-<div class="row g-4">
+<div class="row g-4" id="borrowedPage" data-restore-scroll-y="<?php echo $restoreScrollY === null ? '' : $restoreScrollY; ?>" data-restore-category-id="<?php echo $restoreCategoryId; ?>">
+    <?php if ($message !== ''): ?>
+        <div class="admin-success-notice borrowed-feedback-notice" data-tone="<?php echo sanitize($messageType); ?>" role="<?php echo $messageType === 'danger' ? 'alert' : 'status'; ?>" aria-live="<?php echo $messageType === 'danger' ? 'assertive' : 'polite'; ?>">
+            <div>
+                <strong><?php echo $messageType === 'success' ? 'Action completed' : ($messageType === 'warning' ? 'Please review' : 'Action needs attention'); ?></strong>
+                <div><?php echo sanitize($message); ?></div>
+            </div>
+            <button type="button" class="btn-close" data-dismiss-borrowed-feedback aria-label="Dismiss notification"></button>
+        </div>
+    <?php endif; ?>
     <div class="col-12">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
             <div>
@@ -374,10 +445,6 @@ if ($itemFilterId > 0) {
             <?php endif; ?>
         </div>
     </div>
-    <?php if ($message !== ''): ?>
-        <div class="col-12"><?php echo show_alert($message, $messageType); ?></div>
-    <?php endif; ?>
-
     <?php if (!$showBorrowingHistory): ?>
     <div class="col-12 col-xl-4">
         <div class="card h-100 shadow-sm">
@@ -480,7 +547,7 @@ if ($itemFilterId > 0) {
                 <?php if (!$categories): ?>
                     <p class="py-4 text-center text-muted mb-0">No categories are available.</p>
                 <?php else: ?>
-                    <div class="accordion" id="inventoryCategoryAccordion">
+                    <div class="accordion borrowed-inventory-accordion" id="inventoryCategoryAccordion">
                         <?php foreach ($categories as $category): ?>
                             <?php
                             $categoryId = (int)$category['category_id'];
@@ -535,7 +602,21 @@ if ($itemFilterId > 0) {
                                                                         <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                                                                         <input type="hidden" name="inventory_id" value="<?php echo (int)$inventoryItem['inventory_id']; ?>">
                                                                         <input type="hidden" name="new_status" value="<?php echo $inventoryItem['display_status'] === 'Available' ? 'Unavailable' : 'Available'; ?>">
-                                                                        <button type="submit" name="set_inventory_status" class="btn btn-sm btn-outline-secondary"><?php echo $inventoryItem['display_status'] === 'Available' ? 'Mark unavailable' : 'Mark available'; ?></button>
+                                                                        <button type="submit" name="set_inventory_status" class="btn btn-sm text-nowrap <?php echo $inventoryItem['display_status'] === 'Available' ? 'btn-outline-secondary' : 'btn-outline-success'; ?>">
+                                                                            <i class="bi <?php echo $inventoryItem['display_status'] === 'Available' ? 'bi-dash-circle' : 'bi-check-circle'; ?> me-1" aria-hidden="true"></i><?php echo $inventoryItem['display_status'] === 'Available' ? 'Mark unavailable' : 'Mark available'; ?>
+                                                                        </button>
+                                                                    </form>
+                                                                    <form method="POST">
+                                                                        <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                                                                        <input type="hidden" name="inventory_id" value="<?php echo (int)$inventoryItem['inventory_id']; ?>">
+                                                                        <button
+                                                                            type="submit"
+                                                                            name="delete_inventory_item"
+                                                                            class="btn btn-sm btn-outline-danger"
+                                                                            data-confirm-title="Delete this inventory item?"
+                                                                            data-confirm-message="This permanently removes the item from inventory. Past borrowing records will be kept."
+                                                                            data-confirm-button="Delete item"
+                                                                        ><i class="bi bi-trash me-1" aria-hidden="true"></i>Delete</button>
                                                                     </form>
                                                                 <?php else: ?>
                                                                     <span class="small text-muted">No action available.</span>
@@ -622,7 +703,7 @@ if ($itemFilterId > 0) {
                         <input type="hidden" name="view" value="history">
                         <div class="col">
                             <label class="visually-hidden" for="borrowedSearch">Search borrowing records</label>
-                            <input type="search" id="borrowedSearch" name="search" class="form-control" placeholder="Item, identifier, borrower" value="<?php echo sanitize($search); ?>">
+                            <input type="search" id="borrowedSearch" name="search" class="form-control" placeholder="Item, ID, borrower" value="<?php echo sanitize($search); ?>">
                         </div>
                         <div class="col-auto">
                             <label class="visually-hidden" for="borrowedStatus">Borrowing status</label>
@@ -670,6 +751,56 @@ const configureInventoryIdentifier = (categorySelect, identifierInput) => {
     identifierInput.disabled = !required;
     if (!required) identifierInput.value = '';
 };
+const borrowedPage = document.getElementById('borrowedPage');
+borrowedPage?.querySelector('[data-dismiss-borrowed-feedback]')?.addEventListener('click', (event) => {
+    event.currentTarget.closest('.borrowed-feedback-notice')?.remove();
+});
+if (borrowedPage && !<?php echo $showBorrowingHistory ? 'true' : 'false'; ?>) {
+    document.addEventListener('submit', (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || !form.closest('#borrowedPage') || form.method.toLowerCase() !== 'post') return;
+        if (!form.querySelector('[name="restore_scroll_y"]')) {
+            const scrollInput = document.createElement('input');
+            scrollInput.type = 'hidden';
+            scrollInput.name = 'restore_scroll_y';
+            scrollInput.value = String(window.scrollY);
+            form.appendChild(scrollInput);
+        }
+
+        if (!form.querySelector('[name="restore_category_id"]')) {
+            const openCategory = document.querySelector('#inventoryCategoryAccordion .accordion-collapse.show');
+            const categoryInput = document.createElement('input');
+            categoryInput.type = 'hidden';
+            categoryInput.name = 'restore_category_id';
+            categoryInput.value = openCategory ? openCategory.id.replace('inventoryCategoryCollapse', '') : '';
+            form.appendChild(categoryInput);
+        }
+    }, true);
+
+    const savedScrollY = borrowedPage.dataset.restoreScrollY;
+    const savedCategoryId = borrowedPage.dataset.restoreCategoryId;
+    if (savedScrollY !== '' || savedCategoryId !== '0') {
+        window.history.scrollRestoration = 'manual';
+        window.addEventListener('load', () => {
+            const restoreScroll = () => window.scrollTo(0, Number(savedScrollY) || 0);
+            const collapse = savedCategoryId !== '0'
+                ? document.getElementById(`inventoryCategoryCollapse${savedCategoryId}`)
+                : null;
+            if (collapse && window.bootstrap?.Collapse) {
+                if (collapse.classList.contains('show')) {
+                    requestAnimationFrame(() => requestAnimationFrame(restoreScroll));
+                } else {
+                    collapse.addEventListener('shown.bs.collapse', () => {
+                        requestAnimationFrame(() => requestAnimationFrame(restoreScroll));
+                    }, { once: true });
+                    window.bootstrap.Collapse.getOrCreateInstance(collapse, { toggle: false }).show();
+                }
+            } else {
+                requestAnimationFrame(() => requestAnimationFrame(restoreScroll));
+            }
+        }, { once: true });
+    }
+}
 const newInventoryCategory = document.getElementById('newInventoryCategory');
 const newInventoryIdentifier = document.getElementById('newInventoryIdentifier');
 const editInventoryCategory = document.getElementById('editInventoryCategory');

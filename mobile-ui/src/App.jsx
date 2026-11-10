@@ -1343,7 +1343,7 @@ function App() {
                   )}
                 </details>
                 {borrowedForm.categoryId && categoryItems.length === 0 && <span className={helperClass}>No items are registered in this category.</span>}
-                <span className={helperClass}>Available (green) items can be selected. Borrowed items are with a borrower; Unavailable items cannot be selected.</span>
+                <span className={helperClass}>Choose an item marked Available. Borrowed items are checked out; Unavailable items cannot be selected.</span>
               </label>
             )}
             <label className="block space-y-2">

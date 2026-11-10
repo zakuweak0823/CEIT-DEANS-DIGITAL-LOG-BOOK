@@ -988,6 +988,40 @@ body {
     box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.15);
 }
 
+.borrowed-feedback-notice[data-tone="warning"] {
+    border-color: #ffecb5;
+    background: #fff3cd;
+    color: #664d03;
+}
+
+.borrowed-feedback-notice[data-tone="danger"] {
+    border-color: #f1aeb5;
+    background: #f8d7da;
+    color: #58151c;
+}
+
+.borrowed-feedback-notice[data-tone="info"] {
+    border-color: #9eeaf9;
+    background: #cff4fc;
+    color: #055160;
+}
+
+.borrowed-inventory-accordion .accordion-button:not(.collapsed) {
+    color: #0f5132;
+    background-color: #f1f7f3;
+    box-shadow: none;
+}
+
+.borrowed-inventory-accordion .accordion-button:focus:not(:focus-visible) {
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.borrowed-inventory-accordion .accordion-button:focus-visible {
+    border-color: rgba(25, 135, 84, 0.25);
+    box-shadow: 0 0 0 0.25rem rgba(25, 135, 84, 0.18);
+}
+
 .admin-submission-toast {
     position: fixed;
     z-index: 1090;

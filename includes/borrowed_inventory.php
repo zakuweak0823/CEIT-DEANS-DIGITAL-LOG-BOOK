@@ -163,3 +163,72 @@ function delete_borrowed_inventory_category($conn, int $categoryId): void
         throw $error;
     }
 }
+
+function delete_borrowed_inventory_item($conn, int $inventoryId): void
+{
+    if ($inventoryId <= 0) {
+        throw new DomainException('Select a valid inventory item.');
+    }
+
+    $conn->begin_transaction();
+    try {
+        $inventoryStmt = safe_query(
+            $conn,
+            'SELECT inventory_id FROM borrowable_inventory WHERE inventory_id = ? FOR UPDATE',
+            'i',
+            [$inventoryId]
+        );
+        if ($inventoryStmt === false) {
+            throw new RuntimeException('Could not verify the selected inventory item.');
+        }
+        $inventory = mysqli_fetch_assoc(mysqli_stmt_get_result($inventoryStmt));
+        mysqli_stmt_close($inventoryStmt);
+        if (!$inventory) {
+            throw new DomainException('This inventory item no longer exists.');
+        }
+
+        $activeStmt = safe_query(
+            $conn,
+            "SELECT COUNT(*) FROM borrowed_items WHERE inventory_id = ? AND status <> 'Returned'",
+            'i',
+            [$inventoryId]
+        );
+        if ($activeStmt === false) {
+            throw new RuntimeException('Could not check whether the inventory item is borrowed.');
+        }
+        $activeRecords = (int)mysqli_fetch_row(mysqli_stmt_get_result($activeStmt))[0];
+        mysqli_stmt_close($activeStmt);
+        if ($activeRecords > 0) {
+            throw new DomainException('Return this item before deleting it.');
+        }
+
+        $preserveHistoryStmt = safe_query(
+            $conn,
+            'UPDATE borrowed_items borrow_record
+             INNER JOIN borrowable_inventory asset ON asset.inventory_id = borrow_record.inventory_id
+             SET borrow_record.inventory_identifier = COALESCE(borrow_record.inventory_identifier, asset.identifier),
+                 borrow_record.inventory_id = NULL,
+                 borrow_record.category_id = NULL
+             WHERE asset.inventory_id = ?',
+            'i',
+            [$inventoryId]
+        );
+        if ($preserveHistoryStmt === false) {
+            throw new RuntimeException('Could not preserve borrowing history for the inventory item.');
+        }
+        mysqli_stmt_close($preserveHistoryStmt);
+
+        $deleteStmt = safe_query($conn, 'DELETE FROM borrowable_inventory WHERE inventory_id = ?', 'i', [$inventoryId]);
+        if ($deleteStmt === false || mysqli_stmt_affected_rows($deleteStmt) !== 1) {
+            if ($deleteStmt !== false) {
+                mysqli_stmt_close($deleteStmt);
+            }
+            throw new RuntimeException('Could not delete the inventory item.');
+        }
+        mysqli_stmt_close($deleteStmt);
+        $conn->commit();
+    } catch (Throwable $error) {
+        $conn->rollback();
+        throw $error;
+    }
+}

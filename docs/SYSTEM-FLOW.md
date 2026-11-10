@@ -501,6 +501,8 @@ item_categories ──1:N──► borrowable_inventory ──1:N──► borro
 7. Staff can delete a category after all its items are returned. The protected
    `Other` category cannot be deleted. Removed inventory items are detached
    from past records, which retain their item name and identifier.
+   Individual inventory items can also be deleted after return; duplicate item
+   names and non-empty identifier IDs are rejected across the inventory.
 
 Borrowed items are **not** part of the Outgoing overdue tile (they have their own
 return threshold). See [section 11](#11-overdue-sla-flow).
