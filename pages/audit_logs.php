@@ -99,7 +99,7 @@ mysqli_stmt_close($stmt);
         <section class="card shadow-sm" aria-labelledby="recordAuditTitle">
             <div class="card-header bg-white"><h2 class="h5 mb-0 text-primary" id="recordAuditTitle">Document and bulk status history</h2></div>
             <div class="table-responsive audit-log-table-wrap">
-            <table class="table table-striped table-hover align-middle mb-0 audit-log-table audit-status-table">
+            <table class="table table-striped table-hover align-middle mb-0 audit-log-table audit-status-table" data-status-guide="incoming,outgoing">
                 <thead><tr><th scope="col">Date and time</th><th scope="col">Performed by</th><th scope="col">Record type</th><th scope="col">Record</th><th scope="col">Action</th><th scope="col">Status</th><th scope="col">Details</th></tr></thead>
                     <tbody>
                     <?php if ($statusRows === []): ?>

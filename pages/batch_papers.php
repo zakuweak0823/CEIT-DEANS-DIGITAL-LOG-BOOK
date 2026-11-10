@@ -4,6 +4,8 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/batch_support.php';
 require_once __DIR__ . '/../includes/mobile_form_settings.php';
 require_once __DIR__ . '/../includes/sla_support.php';
+require_once __DIR__ . '/../includes/sms_service.php';
+require_once __DIR__ . '/../includes/message_composer.php';
 ensure_admin();
 
 $mobileFormLabels = get_mobile_form_labels($conn);
@@ -146,6 +148,7 @@ function render_batch_row_actions(array $batch, array $settings, string $collaps
         'batchDate' => (string)$batch['batch_date'],
         'senderType' => (string)$batch['sender_type'],
         'submitterName' => (string)($batch['submitter_name'] ?? ''),
+        'contactPhone' => (string)($batch['contact_phone'] ?? ''),
         'paperCount' => (int)$batch['paper_count'],
         'remarks' => (string)($batch['remarks'] ?? ''),
         'receivedAt' => (string)($batch['received_at'] ?? ''),
@@ -245,6 +248,9 @@ $showBatchModal = false;
 $documentType = $_POST['document_type'] ?? 'Incoming';
 $batchType = trim($_POST['batch_type'] ?? '');
 $batchSubmitterName = trim($_POST['submitter_name'] ?? '');
+$batchContactPhone = isset($_POST['contact_phone']) && is_string($_POST['contact_phone'])
+    ? trim($_POST['contact_phone'])
+    : '';
 $batchPriority = isset($_POST['is_priority']) ? 1 : 0;
 $batchDate = $_POST['batch_date'] ?? date('Y-m-d');
 $senderType = $_POST['sender_type'] ?? 'Student';
@@ -438,7 +444,7 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $statusNote = status_history_note($_POST['status_note'] ?? null);
                 $conn->begin_transaction();
                 $historyMarker = status_history_marker($conn);
-                $stmt = safe_query($conn, 'SELECT status, paper_count, received_at FROM document_batches WHERE batch_id = ? FOR UPDATE', 'i', [$batchId]);
+                $stmt = safe_query($conn, 'SELECT status, paper_count, received_at, batch_code, batch_type, submitter_name, contact_phone FROM document_batches WHERE batch_id = ? FOR UPDATE', 'i', [$batchId]);
                 if ($stmt === false) {
                     throw new RuntimeException('Could not verify the bulk submission status.');
                 }
@@ -496,10 +502,18 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 status_history_set_note($conn, 'batch_id', $batchId, $nextStatus, $statusNote, $historyMarker);
                 status_history_update_batch_documents($conn, $batchId, $nextStatus, $statusNote, $historyMarker);
                 $conn->commit();
+                $smsSent = null;
+                $smsNote = '';
+                if ($movesToRelease) {
+                    $smsResult = send_batch_release_sms($conn, $currentBatch);
+                    $smsSent = $smsResult['success'];
+                    $smsNote = ' ' . $smsResult['message'];
+                }
                 $_SESSION['batch_flash'] = show_alert(
                     $confirmsReceipt
-                        ? 'Receipt confirmed and status updated to ' . $nextStatus . '.'
-                        : 'Status updated to ' . $nextStatus . '.'
+                        ? 'Receipt confirmed and status updated to ' . $nextStatus . '.' . $smsNote
+                        : 'Status updated to ' . $nextStatus . '.' . $smsNote,
+                    $smsSent === false ? 'warning' : 'success'
                 );
             } catch (Throwable $error) {
                 $conn->rollback();
@@ -520,7 +534,12 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $statusNote = status_history_note($_POST['status_note'] ?? null);
                 $conn->begin_transaction();
                 $historyMarker = status_history_marker($conn);
-                $stmt = safe_query($conn, 'SELECT status, received_at FROM document_batches WHERE batch_id = ? FOR UPDATE', 'i', [$batchId]);
+                $stmt = safe_query(
+                    $conn,
+                    'SELECT status, received_at, batch_code, batch_type, submitter_name, contact_phone FROM document_batches WHERE batch_id = ? FOR UPDATE',
+                    'i',
+                    [$batchId]
+                );
                 if ($stmt === false) {
                     throw new RuntimeException('Could not verify the bulk submission status.');
                 }
@@ -541,7 +560,14 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 status_history_set_note($conn, 'batch_id', $batchId, $newStatus, $statusNote, $historyMarker);
                 status_history_update_batch_documents($conn, $batchId, $newStatus, $statusNote, $historyMarker);
                 $conn->commit();
-                $_SESSION['batch_flash'] = show_alert('Status updated to ' . $newStatus . '.');
+                $smsSent = null;
+                $smsNote = '';
+                if ($newStatus === DOC_STATUS_FOR_RELEASE) {
+                    $smsResult = send_batch_release_sms($conn, $currentBatch);
+                    $smsSent = $smsResult['success'];
+                    $smsNote = ' ' . $smsResult['message'];
+                }
+                $_SESSION['batch_flash'] = show_alert('Status updated to ' . $newStatus . '.' . $smsNote, $smsSent === false ? 'warning' : 'success');
             } catch (Throwable $error) {
                 $conn->rollback();
                 if (!($error instanceof DomainException)) {
@@ -654,8 +680,9 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$validDocumentType || $batchType === '' || $textLength($batchType) > 255 ||
             $batchSubmitterName === '' || $textLength($batchSubmitterName) > 255 ||
             ($batchId === 0 && (!$dateObject || $dateObject->format('Y-m-d') !== $batchDate || $batchDate < date('Y-m-d'))) ||
-            !$validSenderType || $paperCount < 1 || $paperCount > 3 || !$validPages) {
-            $message = show_alert('Check the submission type, date (not earlier than today) for a new entry, submitter, document count (1–3), and pages per document (optional, 1–9,999).', 'danger');
+            !$validSenderType || $paperCount < 1 || $paperCount > 3 || !$validPages ||
+            ($batchContactPhone !== '' && !is_valid_contact_number($batchContactPhone))) {
+            $message = show_alert('Check the submission type, date (not earlier than today) for a new entry, submitter, document count (1–3), page count for every document (1–9,999), and shared contact number (optional, 11 digits).', 'danger');
             $showBatchModal = true;
         } elseif ($batchId > 0) {
             try {
@@ -675,9 +702,9 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $batchStatus = $existingBatch['status'];
                 $stmt = safe_query(
                     $conn,
-                    'UPDATE document_batches SET document_type = ?, batch_type = ?, sender = ?, sender_type = ?, submitter_name = ?, remarks = ?, paper_count = ?, document_pages = ?, is_priority = ? WHERE batch_id = ?',
-                    'ssssssisii',
-                    [$documentType, $batchType, $senderType, $senderType, $batchSubmitterName, $batchRemarks, $paperCount, $documentPagesJson, $batchPriority, $batchId]
+                    'UPDATE document_batches SET document_type = ?, batch_type = ?, sender = ?, sender_type = ?, submitter_name = ?, remarks = ?, contact_phone = ?, paper_count = ?, document_pages = ?, is_priority = ? WHERE batch_id = ?',
+                    'sssssssisii',
+                    [$documentType, $batchType, $senderType, $senderType, $batchSubmitterName, $batchRemarks, $batchContactPhone === '' ? null : $batchContactPhone, $paperCount, $documentPagesJson, $batchPriority, $batchId]
                 );
                 if ($stmt === false) {
                     throw new RuntimeException('Could not update the bulk submission details.');
@@ -716,9 +743,9 @@ if (!$setupError && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 $recipientValue = '';
                 $stmt = safe_query(
                     $conn,
-                    'INSERT INTO document_batches (batch_code, document_type, batch_type, status, batch_date, sender, sender_type, submitter_name, recipient, recipient_contact_type, remarks, tracking_token, paper_count, document_pages, is_priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    'ssssssssssssisi',
-                    [$batchCode, $documentType, $batchType, 'Received', $batchDate, $senderType, $senderType, $batchSubmitterName, $recipientValue, $recipientContactType, $batchRemarks, $trackingToken, $paperCount, $documentPagesJson, $batchPriority]
+                    'INSERT INTO document_batches (batch_code, document_type, batch_type, status, batch_date, sender, sender_type, submitter_name, recipient, recipient_contact_type, remarks, contact_phone, tracking_token, paper_count, document_pages, is_priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    'sssssssssssssisi',
+                    [$batchCode, $documentType, $batchType, 'Received', $batchDate, $senderType, $senderType, $batchSubmitterName, $recipientValue, $recipientContactType, $batchRemarks, $batchContactPhone === '' ? null : $batchContactPhone, $trackingToken, $paperCount, $documentPagesJson, $batchPriority]
                 );
                 if ($stmt === false) {
                     throw new RuntimeException('Could not create the bulk submission.');
@@ -968,6 +995,11 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                             <input class="form-control" type="text" id="batchType" name="batch_type" maxlength="255" value="<?php echo sanitize($batchType); ?>" placeholder="e.g. Transcript request documents" required>
                         </div>
                         <div class="col-12 col-md-6">
+                            <label class="form-label" for="batchPaperCount">Number of documents</label>
+                            <input class="form-control" type="number" id="batchPaperCount" name="paper_count" min="1" max="3" value="<?php echo (int)$paperCount; ?>" required>
+                            <div class="form-text" id="batchPaperCountLockedHelp" hidden>The expected count is locked because staff have confirmed the intake receipt.</div>
+                        </div>
+                        <div class="col-12 col-md-6">
                             <label class="form-label" for="batchDate">Submission date</label>
                             <input class="form-control" type="date" id="batchDate" value="<?php echo sanitize((string)$batchDate); ?>" disabled>
                             <input type="hidden" id="immutableBatchDate" disabled>
@@ -976,6 +1008,11 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                         <div class="col-12 col-md-6">
                             <label class="form-label" for="batchSubmitterName">Submitter name</label>
                             <input class="form-control" type="text" id="batchSubmitterName" name="submitter_name" maxlength="255" value="<?php echo sanitize($batchSubmitterName); ?>" autocomplete="name" placeholder="Enter the submitter's full name" required>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label" for="batchContactPhone">Shared contact number <span class="text-muted fw-normal">(optional)</span></label>
+                            <input class="form-control" type="tel" id="batchContactPhone" name="contact_phone" inputmode="numeric" pattern="[0-9]{11}" maxlength="11" value="<?php echo sanitize($batchContactPhone); ?>" placeholder="11-digit number">
+                            <div class="form-text">One SMS is sent to this number when the batch moves to For Release.</div>
                         </div>
                         <div class="col-12 col-md-6">
                             <label class="form-label" for="batchSenderType"><?php echo sanitize($mobileFormLabels['sender']); ?></label>
@@ -991,13 +1028,8 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                             </div>
                         </div>
                         <div class="col-12">
-                            <label class="form-label" for="batchPaperCount">Number of documents</label>
-                            <input class="form-control" type="number" id="batchPaperCount" name="paper_count" min="1" max="3" value="<?php echo (int)$paperCount; ?>" required>
-                            <div class="form-text" id="batchPaperCountLockedHelp" hidden>The expected count is locked because staff have confirmed the intake receipt.</div>
-                        </div>
-                        <div class="col-12">
-                            <span class="form-label d-block">Pages per document <span class="text-muted fw-normal">(optional)</span></span>
-                            <div class="form-text mb-2">Enter how many pages each document has. Leave blank if not needed.</div>
+                            <span class="form-label d-block">Page count per document <span class="text-danger" aria-hidden="true">*</span></span>
+                            <div class="form-text mb-2">Enter at least 1 page for every document.</div>
                             <div id="batchDocumentPages" class="row g-2" data-initial="<?php echo sanitize((string)($documentPagesJson ?? '')); ?>"></div>
                         </div>
                         <div class="col-12">
@@ -1034,7 +1066,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                 </div>
                 <!-- Keep the desktop history table separate from the narrow-screen card list below. -->
                 <div class="table-responsive d-none d-xl-block batch-history-table">
-                    <table class="table table-hover align-middle mb-0 batch-history-data-table">
+                    <table class="table table-hover align-middle mb-0 batch-history-data-table" data-status-guide="incoming,outgoing">
                         <thead class="table-light">
                             <tr><th scope="col">Date</th><th scope="col">Reference</th><th scope="col">Document name</th><th scope="col">Submitted by / recipient</th><th scope="col">Documents</th><th scope="col">Status</th><th scope="col">Priority</th><th scope="col">Tracking QR</th><th scope="col">Actions</th></tr>
                         </thead>
@@ -1047,6 +1079,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                     $pagesLabel = batch_pages_label($batch['document_pages'] ?? null);
                                     $recipientText = trim((string)($batch['recipient'] ?? ''));
                                     $submitterText = trim((string)($batch['submitter_name'] ?? ''));
+                                    $contactPhoneText = trim((string)($batch['contact_phone'] ?? ''));
                                     ?>
                                     <tr>
                                         <td data-sort-value="<?php echo sanitize($batch['batch_date']); ?>"><?php echo sanitize(date('M j, Y', strtotime($batch['batch_date']))); ?></td>
@@ -1056,6 +1089,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                             <?php echo batch_text($batch['sender_type']); ?>
                                             <br><small class="text-muted">Submitted by <?php echo $submitterText !== '' ? batch_text($submitterText) : 'Name not recorded'; ?></small>
                                             <br><small class="text-muted"><?php echo $batch['recipient_contact_type'] === 'Unassigned' ? 'Recipient not provided' : batch_text($batch['recipient_contact_type']); ?><?php echo $recipientText !== '' ? ': ' . batch_text($recipientText) : ''; ?></small>
+                                            <br><small class="text-muted"><?php echo $contactPhoneText !== '' ? 'Shared contact: ' . batch_text($contactPhoneText) : 'No shared SMS contact'; ?></small>
                                         </td>
                                         <td>
                                             <?php echo (int)$batch['paper_count']; ?> expected
@@ -1108,6 +1142,7 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                 $pagesLabel = batch_pages_label($batch['document_pages'] ?? null);
                                 $recipientText = trim((string)($batch['recipient'] ?? ''));
                                 $submitterText = trim((string)($batch['submitter_name'] ?? ''));
+                                $contactPhoneText = trim((string)($batch['contact_phone'] ?? ''));
                                 $isPriority = (int)$batch['is_priority'] === 1;
                                 ?>
                                 <article class="batch-history-card border rounded-3 bg-white p-3">
@@ -1139,6 +1174,8 @@ $embeddedBatchAction = $isEmbeddedBatchAction ? ($_GET['open'] ?? '') : '';
                                         <dd class="col-8 mb-0 text-break"><?php echo $submitterText !== '' ? batch_text($submitterText) : 'Name not recorded'; ?></dd>
                                         <dt class="col-4 text-muted">Recipient</dt>
                                         <dd class="col-8 mb-0 text-break"><?php echo batch_text($batch['recipient_contact_type']); ?><?php echo $recipientText !== '' ? ': ' . batch_text($recipientText) : ''; ?></dd>
+                                        <dt class="col-4 text-muted">Shared contact</dt>
+                                        <dd class="col-8 mb-0 text-break"><?php echo $contactPhoneText !== '' ? batch_text($contactPhoneText) : 'Not provided'; ?></dd>
                                         <dt class="col-4 text-muted">Documents</dt>
                                         <dd class="col-8 mb-0">
                                             <?php echo (int)$batch['paper_count']; ?> expected
@@ -1389,6 +1426,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const batchIdInput = document.getElementById('editBatchId');
     const batchTypeInput = document.getElementById('batchType');
     const batchSubmitterNameInput = document.getElementById('batchSubmitterName');
+    const batchContactPhoneInput = document.getElementById('batchContactPhone');
     const batchPriorityInput = document.getElementById('batchPriority');
     const batchPaperCountInput = document.getElementById('batchPaperCount');
     const batchPaperCountLockedHelp = document.getElementById('batchPaperCountLockedHelp');
@@ -1422,8 +1460,9 @@ document.addEventListener('DOMContentLoaded', function () {
             input.min = '1';
             input.max = '9999';
             input.inputMode = 'numeric';
-            input.placeholder = 'Pages';
-            input.setAttribute('aria-label', 'Pages in document ' + (i + 1));
+            input.placeholder = 'Min. 1';
+            input.required = true;
+            input.setAttribute('aria-label', 'Page count for document ' + (i + 1));
             input.value = values[i] == null ? '' : values[i];
             col.append(label, input);
             pagesContainer.appendChild(col);
@@ -1468,6 +1507,7 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('documentType').value = data.documentType || 'Incoming';
             batchTypeInput.value = data.batchType || '';
             batchSubmitterNameInput.value = data.submitterName || '';
+            batchContactPhoneInput.value = data.contactPhone || '';
             batchPriorityInput.checked = Number(data.isPriority) === 1;
             batchDateInput.value = data.batchDate || '';
             batchDateInput.removeAttribute('min');
@@ -1496,6 +1536,7 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('documentType').value = 'Incoming';
             batchTypeInput.value = '';
             batchSubmitterNameInput.value = '';
+            batchContactPhoneInput.value = '';
             batchPriorityInput.checked = false;
             batchDateInput.value = '<?php echo date('Y-m-d'); ?>';
             batchDateInput.min = '<?php echo date('Y-m-d'); ?>';

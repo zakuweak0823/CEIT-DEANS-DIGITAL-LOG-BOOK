@@ -1,387 +1,694 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/borrowed_inventory.php';
 ensure_admin();
 
-$conn->query('ALTER TABLE borrowed_items ADD COLUMN IF NOT EXISTS borrower_phone VARCHAR(20) DEFAULT NULL');
+try {
+    ensure_borrowed_inventory_schema($conn);
+} catch (Throwable $error) {
+    error_log('Borrowable inventory setup failed: ' . $error->getMessage());
+    http_response_code(500);
+    exit('Borrowable inventory is unavailable. Check the server log and try again.');
+}
 
 $message = '';
-$item = '';
-$borrower = '';
-$borrower_phone = '';
-$search = trim($_GET['search'] ?? '');
-$statusFilter = $_GET['status'] ?? 'All';
+$messageType = 'success';
+$showBorrowingHistory = isset($_GET['view']) && $_GET['view'] === 'history';
+$setMessage = static function (string $text, string $type = 'success') use (&$message, &$messageType): void {
+    $message = $text;
+    $messageType = $type;
+};
+
+if (!$showBorrowingHistory && isset($_POST['delete_category'])) {
+    $categoryId = isset($_POST['category_id']) && is_string($_POST['category_id'])
+        ? (int)$_POST['category_id']
+        : 0;
+    try {
+        delete_borrowed_inventory_category($conn, $categoryId);
+        $setMessage('Category and its inventory were deleted. Past borrowing records were kept.');
+    } catch (DomainException $error) {
+        $setMessage($error->getMessage(), 'warning');
+    } catch (Throwable $error) {
+        error_log('Borrowable inventory category deletion failed: ' . $error->getMessage());
+        $setMessage('The category could not be deleted. Check the server log and try again.', 'danger');
+    }
+}
+
+if (!$showBorrowingHistory && isset($_POST['add_category'])) {
+    $categoryName = isset($_POST['category_name']) && is_string($_POST['category_name'])
+        ? trim($_POST['category_name'])
+        : '';
+    $requiresIdentifier = isset($_POST['requires_identifier']) && $_POST['requires_identifier'] === '1';
+    if ($categoryName === '' || strlen($categoryName) > 100) {
+        $setMessage('Enter a category name of 1–100 characters.', 'danger');
+    } else {
+        $stmt = safe_query($conn, 'INSERT INTO item_categories (category_name, requires_identifier) VALUES (?, ?)', 'si', [$categoryName, (int)$requiresIdentifier]);
+        if ($stmt === false) {
+            $setMessage('That category could not be added. It may already exist.', 'danger');
+        } else {
+            mysqli_stmt_close($stmt);
+            $setMessage('Inventory category added.');
+        }
+    }
+}
+
+if (!$showBorrowingHistory && (isset($_POST['add_inventory_item']) || isset($_POST['update_inventory_item']))) {
+    $isUpdate = isset($_POST['update_inventory_item']);
+    $inventoryId = (int)($_POST['inventory_id'] ?? 0);
+    $categoryId = (int)($_POST['category_id'] ?? 0);
+    $itemName = isset($_POST['item_name']) && is_string($_POST['item_name']) ? trim($_POST['item_name']) : '';
+    $identifierInput = isset($_POST['identifier']) && is_string($_POST['identifier']) ? trim($_POST['identifier']) : '';
+    $validCategory = $categoryId > 0
+        && (int)safe_scalar($conn, 'SELECT COUNT(*) FROM item_categories WHERE category_id = ?', 'i', [$categoryId]) === 1;
+    $requiresIdentifier = $validCategory
+        && (int)safe_scalar($conn, 'SELECT requires_identifier FROM item_categories WHERE category_id = ?', 'i', [$categoryId]) === 1;
+    $identifier = $requiresIdentifier ? $identifierInput : null;
+    if (($isUpdate && $inventoryId <= 0) || !$validCategory || $itemName === '' || strlen($itemName) > 255
+        || ($requiresIdentifier && ($identifierInput === '' || strlen($identifierInput) > 100))) {
+        $setMessage('Select a category, enter an item name, and provide an identifier when the category requires one.', 'danger');
+    } elseif ($isUpdate) {
+        $activeLoan = (int)safe_scalar(
+            $conn,
+            "SELECT COUNT(*) FROM borrowed_items WHERE inventory_id = ? AND status <> 'Returned'",
+            'i',
+            [$inventoryId]
+        );
+        if ($activeLoan > 0) {
+            $setMessage('This item cannot be edited until it has been returned.', 'warning');
+        } else {
+            $stmt = safe_query(
+                $conn,
+                'UPDATE borrowable_inventory SET category_id = ?, item_name = ?, identifier = ? WHERE inventory_id = ?',
+                'issi',
+                [$categoryId, $itemName, $identifier, $inventoryId]
+            );
+            if ($stmt === false) {
+                $setMessage('The inventory item could not be updated. Check that its identifier is unique in the category.', 'danger');
+            } else {
+                mysqli_stmt_close($stmt);
+                $setMessage('Inventory item updated.');
+            }
+        }
+    } else {
+        $stmt = safe_query(
+            $conn,
+            "INSERT INTO borrowable_inventory (category_id, item_name, identifier, availability_status) VALUES (?, ?, ?, 'Available')",
+            'iss',
+            [$categoryId, $itemName, $identifier]
+        );
+        if ($stmt === false) {
+            $setMessage('The item could not be added. Check that its identifier is unique in the category.', 'danger');
+        } else {
+            mysqli_stmt_close($stmt);
+            $setMessage('Inventory item added and marked Available.');
+        }
+    }
+}
+
+if (!$showBorrowingHistory && isset($_POST['set_inventory_status'])) {
+    $inventoryId = (int)($_POST['inventory_id'] ?? 0);
+    $newStatus = isset($_POST['new_status']) && is_string($_POST['new_status']) ? $_POST['new_status'] : '';
+    if ($inventoryId <= 0 || !in_array($newStatus, ['Available', 'Unavailable'], true)) {
+        $setMessage('Choose a valid inventory item and status.', 'danger');
+    } else {
+        try {
+            $conn->begin_transaction();
+            $lockStmt = safe_query($conn, 'SELECT inventory_id FROM borrowable_inventory WHERE inventory_id = ? FOR UPDATE', 'i', [$inventoryId]);
+            if ($lockStmt === false) {
+                throw new RuntimeException('Could not verify inventory item.');
+            }
+            $lockedItem = mysqli_fetch_assoc(mysqli_stmt_get_result($lockStmt));
+            mysqli_stmt_close($lockStmt);
+            if (!$lockedItem) {
+                throw new DomainException('Inventory item not found.');
+            }
+            $activeLoan = (int)safe_scalar(
+                $conn,
+                "SELECT COUNT(*) FROM borrowed_items WHERE inventory_id = ? AND status <> 'Returned'",
+                'i',
+                [$inventoryId]
+            );
+            if ($activeLoan > 0) {
+                throw new DomainException('This item is currently with a borrower. Mark it returned before changing availability.');
+            }
+            $updateStmt = safe_query($conn, 'UPDATE borrowable_inventory SET availability_status = ? WHERE inventory_id = ?', 'si', [$newStatus, $inventoryId]);
+            if ($updateStmt === false) {
+                throw new RuntimeException('Could not update inventory availability.');
+            }
+            mysqli_stmt_close($updateStmt);
+            $conn->commit();
+            $setMessage('Inventory item marked ' . $newStatus . '.');
+        } catch (Throwable $error) {
+            $conn->rollback();
+            if ($error instanceof DomainException) {
+                $setMessage($error->getMessage(), 'warning');
+            } else {
+                error_log('Borrowable inventory status update failed: ' . $error->getMessage());
+                $setMessage('Inventory availability could not be updated.', 'danger');
+            }
+        }
+    }
+}
+
+if (!$showBorrowingHistory && isset($_POST['mark_inventory_returned'])) {
+    $loanId = (int)($_POST['loan_id'] ?? 0);
+    $inventoryId = (int)($_POST['inventory_id'] ?? 0);
+    if ($loanId <= 0 || $inventoryId < 0) {
+        $setMessage('Select a valid inventory item to return.', 'danger');
+    } else {
+        try {
+            $conn->begin_transaction();
+            if ($inventoryId > 0) {
+                $inventoryLock = safe_query($conn, 'SELECT inventory_id FROM borrowable_inventory WHERE inventory_id = ? FOR UPDATE', 'i', [$inventoryId]);
+                if ($inventoryLock === false) {
+                    throw new RuntimeException('Could not verify the inventory item.');
+                }
+                $lockedInventory = mysqli_fetch_assoc(mysqli_stmt_get_result($inventoryLock));
+                mysqli_stmt_close($inventoryLock);
+                if (!$lockedInventory) {
+                    throw new DomainException('This inventory item no longer exists.');
+                }
+                $loanStmt = safe_query(
+                    $conn,
+                    "SELECT item_id FROM borrowed_items WHERE item_id = ? AND inventory_id = ? AND status <> 'Returned' FOR UPDATE",
+                    'ii',
+                    [$loanId, $inventoryId]
+                );
+            } else {
+                $loanStmt = safe_query(
+                    $conn,
+                    "SELECT loan.item_id
+                     FROM borrowed_items loan
+                     INNER JOIN item_categories category ON category.category_id = loan.category_id
+                     WHERE loan.item_id = ? AND loan.inventory_id IS NULL AND category.is_default = 1
+                       AND loan.status <> 'Returned'
+                     FOR UPDATE",
+                    'i',
+                    [$loanId]
+                );
+            }
+            if ($loanStmt === false) {
+                throw new RuntimeException('Could not verify the active borrowing record.');
+            }
+            $activeLoan = mysqli_fetch_assoc(mysqli_stmt_get_result($loanStmt));
+            mysqli_stmt_close($loanStmt);
+            if (!$activeLoan) {
+                throw new DomainException('This item is not currently marked as borrowed.');
+            }
+            $updateStmt = safe_query(
+                $conn,
+                "UPDATE borrowed_items SET status = 'Returned', returned_date = COALESCE(returned_date, CURDATE()) WHERE item_id = ?",
+                'i',
+                [$loanId]
+            );
+            if ($updateStmt === false) {
+                throw new RuntimeException('Could not mark the item returned.');
+            }
+            mysqli_stmt_close($updateStmt);
+            $conn->commit();
+            $setMessage('Item marked returned. Its inventory availability is shown in the status column.');
+        } catch (Throwable $error) {
+            $conn->rollback();
+            if ($error instanceof DomainException) {
+                $setMessage($error->getMessage(), 'warning');
+            } else {
+                error_log('Borrowable inventory return failed: ' . $error->getMessage());
+                $setMessage('The item could not be marked returned.', 'danger');
+            }
+        }
+    }
+}
+
+$categories = [];
+$categoryStmt = safe_query($conn, 'SELECT category_id, category_name, requires_identifier, is_default FROM item_categories ORDER BY is_default DESC, category_name');
+if ($categoryStmt === false) {
+    http_response_code(500);
+    exit('Inventory categories could not be loaded.');
+}
+$categoryResult = mysqli_stmt_get_result($categoryStmt);
+while ($row = mysqli_fetch_assoc($categoryResult)) {
+    $categories[] = $row;
+}
+mysqli_stmt_close($categoryStmt);
+
+$inventoryItems = [];
+$inventoryStmt = safe_query(
+    $conn,
+    "SELECT asset.inventory_id, asset.category_id, category.category_name, asset.item_name, asset.identifier,
+            asset.availability_status, 0 AS is_one_off,
+            (SELECT loan.item_id FROM borrowed_items loan
+             WHERE loan.inventory_id = asset.inventory_id AND loan.status <> 'Returned'
+             ORDER BY loan.date_borrowed DESC LIMIT 1) AS active_loan_id,
+            (SELECT loan.borrower FROM borrowed_items loan
+             WHERE loan.inventory_id = asset.inventory_id AND loan.status <> 'Returned'
+             ORDER BY loan.date_borrowed DESC LIMIT 1) AS active_borrower,
+            CASE WHEN EXISTS (
+                SELECT 1 FROM borrowed_items loan
+                WHERE loan.inventory_id = asset.inventory_id AND loan.status <> 'Returned'
+            ) THEN 'Borrowed' ELSE asset.availability_status END AS display_status
+     FROM borrowable_inventory asset
+     INNER JOIN item_categories category ON category.category_id = asset.category_id
+     ORDER BY category.category_name, asset.item_name, asset.identifier"
+);
+if ($inventoryStmt === false) {
+    http_response_code(500);
+    exit('Inventory items could not be loaded.');
+}
+$inventoryResult = mysqli_stmt_get_result($inventoryStmt);
+while ($row = mysqli_fetch_assoc($inventoryResult)) {
+    $inventoryItems[] = $row;
+}
+mysqli_stmt_close($inventoryStmt);
+
+$otherActiveStmt = safe_query(
+    $conn,
+    "SELECT loan.category_id, category.category_name, loan.item_name, loan.borrower AS active_borrower,
+            loan.item_id AS active_loan_id, NULL AS inventory_id, NULL AS identifier,
+            'Borrowed' AS availability_status, 'Borrowed' AS display_status, 1 AS is_one_off
+     FROM borrowed_items loan
+     INNER JOIN item_categories category ON category.category_id = loan.category_id
+     WHERE category.is_default = 1 AND loan.inventory_id IS NULL AND loan.status <> 'Returned'
+     ORDER BY loan.item_name, loan.date_borrowed DESC"
+);
+if ($otherActiveStmt === false) {
+    http_response_code(500);
+    exit('Unlisted borrowed items could not be loaded.');
+}
+$otherActiveResult = mysqli_stmt_get_result($otherActiveStmt);
+while ($row = mysqli_fetch_assoc($otherActiveResult)) {
+    $inventoryItems[] = $row;
+}
+mysqli_stmt_close($otherActiveStmt);
+
+$inventoryItemsByCategory = [];
+$categorySummaries = [];
+foreach ($categories as $category) {
+    $categoryId = (int)$category['category_id'];
+    $inventoryItemsByCategory[$categoryId] = [];
+    $categorySummaries[$categoryId] = [
+        'id' => $categoryId,
+        'name' => $category['category_name'],
+        'is_default' => (int)$category['is_default'] === 1,
+        'total' => 0,
+        'Available' => 0,
+        'Borrowed' => 0,
+        'Unavailable' => 0,
+    ];
+}
+foreach ($inventoryItems as $inventoryItem) {
+    $categoryId = (int)$inventoryItem['category_id'];
+    if (!isset($categorySummaries[$categoryId])) {
+        continue;
+    }
+    $inventoryItemsByCategory[$categoryId][] = $inventoryItem;
+    $categorySummaries[$categoryId]['total']++;
+    if (isset($categorySummaries[$categoryId][$inventoryItem['display_status']])) {
+        $categorySummaries[$categoryId][$inventoryItem['display_status']]++;
+    }
+}
+
+$search = isset($_GET['search']) && is_string($_GET['search']) ? trim($_GET['search']) : '';
+$statusFilter = isset($_GET['status']) && is_string($_GET['status']) ? $_GET['status'] : 'All';
 if (!in_array($statusFilter, ['All', 'Unreturned', 'Returned'], true)) {
     $statusFilter = 'All';
 }
-$showAddModal = false;
-
-$categories = [];
-$stmt = safe_query($conn, "SELECT * FROM item_categories ORDER BY category_name");
-if ($stmt !== false) {
-    $result = mysqli_stmt_get_result($stmt);
-    while ($row = mysqli_fetch_assoc($result)) {
-        $categories[] = $row;
-    }
-    mysqli_stmt_close($stmt);
+$loanConditions = [];
+$loanTypes = '';
+$loanParams = [];
+if ($search !== '') {
+    $searchTerm = '%' . $search . '%';
+    $loanConditions[] = '(loan.item_name LIKE ? OR loan.borrower LIKE ? OR asset.identifier LIKE ? OR category.category_name LIKE ?)';
+    $loanTypes .= 'ssss';
+    array_push($loanParams, $searchTerm, $searchTerm, $searchTerm, $searchTerm);
 }
+if ($statusFilter !== 'All') {
+    $loanConditions[] = $statusFilter === 'Returned' ? "loan.status = 'Returned'" : "loan.status <> 'Returned'";
+}
+$loanSql = "SELECT loan.item_id, loan.inventory_id, loan.item_name, loan.borrower, loan.borrower_phone,
+                   loan.date_borrowed, loan.returned_date, loan.status,
+                   COALESCE(loan.inventory_identifier, asset.identifier) AS identifier,
+                   COALESCE(category.category_name, CASE WHEN loan.inventory_identifier IS NOT NULL THEN 'Deleted category' ELSE 'Legacy record' END) AS category_name,
+                   CASE WHEN loan.status = 'Returned' THEN 'Returned' ELSE 'Unreturned' END AS display_status
+            FROM borrowed_items loan
+            LEFT JOIN borrowable_inventory asset ON asset.inventory_id = loan.inventory_id
+            LEFT JOIN item_categories category ON category.category_id = loan.category_id";
+if ($loanConditions) {
+    $loanSql .= ' WHERE ' . implode(' AND ', $loanConditions);
+}
+$loanSql .= ' ORDER BY loan.item_name ASC, loan.borrower ASC, loan.date_borrowed DESC LIMIT 200';
+$loanStmt = safe_query($conn, $loanSql, $loanTypes, $loanParams);
+if ($loanStmt === false) {
+    http_response_code(500);
+    exit('Borrowing records could not be loaded.');
+}
+$loans = [];
+$loanResult = mysqli_stmt_get_result($loanStmt);
+while ($row = mysqli_fetch_assoc($loanResult)) {
+    $loans[] = $row;
+}
+mysqli_stmt_close($loanStmt);
 
-if (isset($_POST['save'])) {
-    $item = trim($_POST['item'] ?? '');
-    $borrower = trim($_POST['borrower'] ?? '');
-    $borrower_phone = contact_number_input($_POST['borrower_phone'] ?? '');
-    $category_raw = trim($_POST['category_id'] ?? '');
-    $category_id = ($category_raw === '' ? null : (int)$category_raw);
-    if ($category_id !== null && $category_id <= 0) {
-        $category_id = null;
-    }
-
-    if ($item === '' || $borrower === '') {
-        $message = show_alert('Item name and borrower are required.', 'danger');
-        $showAddModal = true;
-    } elseif ($borrower_phone === null || ($borrower_phone !== '' && !is_valid_contact_number($borrower_phone))) {
-        $message = show_alert('Enter an 11-digit contact number using digits only, or leave it blank.', 'danger');
-        $showAddModal = true;
-    } else {
-        $phoneValue = $borrower_phone === '' ? null : $borrower_phone;
-        $stmt = safe_query($conn, "INSERT INTO borrowed_items(item_name, category_id, borrower, borrower_phone, status) VALUES(?, ?, ?, ?, 'Borrowed')", 'siss', [$item, $category_id, $borrower, $phoneValue]);
-        if ($stmt !== false) {
-            mysqli_stmt_close($stmt);
-            $message = show_alert('Borrowed item recorded successfully.');
-            $item = $borrower = $borrower_phone = '';
-        } else {
-            $message = show_alert('Failed to save the borrowed item.', 'danger');
-            $showAddModal = true;
+$itemFilterParam = $_GET['item_id'] ?? '';
+$itemFilterId = is_string($itemFilterParam) && ctype_digit($itemFilterParam) ? (int)$itemFilterParam : 0;
+$selectedLoan = null;
+if ($itemFilterId > 0) {
+    foreach ($loans as $loan) {
+        if ((int)$loan['item_id'] === $itemFilterId) {
+            $selectedLoan = $loan;
+            break;
         }
     }
-}
-
-if (isset($_POST['update'])) {
-    $id = (int)($_POST['id'] ?? 0);
-    $item = trim($_POST['item'] ?? '');
-    $borrower = trim($_POST['borrower'] ?? '');
-    $borrower_phone = contact_number_input($_POST['borrower_phone'] ?? '');
-    $category_raw = trim($_POST['category_id'] ?? '');
-    $category_id = ($category_raw === '' ? null : (int)$category_raw);
-    if ($category_id !== null && $category_id <= 0) {
-        $category_id = null;
-    }
-
-    if ($id > 0 && $item !== '' && $borrower !== '' && ($borrower_phone === '' || is_valid_contact_number($borrower_phone))) {
-        $phoneValue = $borrower_phone === '' ? null : $borrower_phone;
-        $stmt = safe_query($conn, "UPDATE borrowed_items SET item_name = ?, category_id = ?, borrower = ?, borrower_phone = ?, status = 'Borrowed' WHERE item_id = ? AND status != 'Returned'", 'sissi', [$item, $category_id, $borrower, $phoneValue, $id]);
-        if ($stmt !== false) {
-            $updated = mysqli_stmt_affected_rows($stmt);
-            mysqli_stmt_close($stmt);
-            $stillEditable = $updated > 0 || safe_scalar($conn, "SELECT COUNT(*) FROM borrowed_items WHERE item_id = ? AND status != 'Returned'", 'i', [$id]) > 0;
-            $message = $stillEditable
-                ? show_alert('Borrowed item updated successfully.')
-                : show_alert('Returned items cannot be edited.', 'warning');
-        } else {
-            $message = show_alert('Failed to update the borrowed item.', 'danger');
-        }
-    } else {
-        $message = show_alert($borrower_phone === null || ($borrower_phone !== '' && !is_valid_contact_number($borrower_phone))
-            ? 'Enter an 11-digit contact number using digits only, or leave it blank.'
-            : 'Check the item name, borrower, and record details.', 'danger');
-    }
-}
-
-if (isset($_POST['mark_returned'])) {
-    $id = (int)($_POST['id'] ?? 0);
-    if ($id > 0) {
-        // Keep the first recorded return date if this action is repeated or retried.
-        $stmt = safe_query($conn, "UPDATE borrowed_items SET status = 'Returned', returned_date = COALESCE(returned_date, CURDATE()) WHERE item_id = ? AND status != 'Returned'", 'i', [$id]);
-        if ($stmt !== false) {
-            $updated = mysqli_stmt_affected_rows($stmt);
-            mysqli_stmt_close($stmt);
-            $message = $updated > 0
-                ? show_alert('Item marked as returned.')
-                : show_alert('This item was already returned or could not be found.', 'warning');
-        } else {
-            $message = show_alert('Failed to update the item return status.', 'danger');
-        }
-    } else {
-        $message = show_alert('Invalid borrowed item.', 'danger');
-    }
-}
-
-if (isset($_POST['mark_unreturned'])) {
-    $id = (int)($_POST['id'] ?? 0);
-    if ($id > 0) {
-        // Reopening a return clears its date so the item again counts as outstanding.
-        $stmt = safe_query($conn, "UPDATE borrowed_items SET status = 'Borrowed', returned_date = NULL WHERE item_id = ? AND status = 'Returned'", 'i', [$id]);
-        if ($stmt !== false) {
-            $updated = mysqli_stmt_affected_rows($stmt);
-            mysqli_stmt_close($stmt);
-            $message = $updated > 0
-                ? show_alert('Item marked as unreturned.')
-                : show_alert('This item was already unreturned or could not be found.', 'warning');
-        } else {
-            $message = show_alert('Failed to update the item return status.', 'danger');
-        }
-    } else {
-        $message = show_alert('Invalid borrowed item.', 'danger');
-    }
-}
-
-$borrowedItems = [];
-// Normalize legacy/non-returned status values for the UI's two-state filter.
-$statusExpression = "CASE WHEN bi.status = 'Returned' THEN 'Returned' ELSE 'Unreturned' END";
-$statusCondition = $statusFilter === 'All' ? '' : " AND {$statusExpression} = ?";
-$itemIdParam = $_GET['item_id'] ?? '';
-$itemIdFilter = is_string($itemIdParam) && ctype_digit($itemIdParam) ? (int)$itemIdParam : 0;
-if ($itemIdFilter > 0) {
-    // The dashboard's Review action must show only the selected borrowed item.
-    $stmt = safe_query($conn, "SELECT bi.*, ic.category_name, {$statusExpression} AS display_status FROM borrowed_items bi LEFT JOIN item_categories ic ON bi.category_id = ic.category_id WHERE bi.item_id = ?", 'i', [$itemIdFilter]);
-} elseif ($search !== '') {
-    $searchTerm = "%{$search}%";
-    $query = "SELECT bi.*, ic.category_name, {$statusExpression} AS display_status FROM borrowed_items bi LEFT JOIN item_categories ic ON bi.category_id = ic.category_id WHERE (bi.item_name LIKE ? OR bi.borrower LIKE ? OR bi.status LIKE ? OR ic.category_name LIKE ?){$statusCondition} ORDER BY bi.date_borrowed DESC";
-    $types = 'ssss' . ($statusFilter === 'All' ? '' : 's');
-    $params = [$searchTerm, $searchTerm, $searchTerm, $searchTerm];
-    if ($statusFilter !== 'All') {
-        $params[] = $statusFilter;
-    }
-    $stmt = safe_query($conn, $query, $types, $params);
-} else {
-    $query = "SELECT bi.*, ic.category_name, {$statusExpression} AS display_status FROM borrowed_items bi LEFT JOIN item_categories ic ON bi.category_id = ic.category_id";
-    if ($statusFilter !== 'All') {
-        $query .= " WHERE {$statusExpression} = ?";
-        $stmt = safe_query($conn, $query . ' ORDER BY bi.date_borrowed DESC', 's', [$statusFilter]);
-    } else {
-        $stmt = safe_query($conn, $query . ' ORDER BY bi.date_borrowed DESC');
-    }
-}
-
-if ($stmt !== false) {
-    $result = mysqli_stmt_get_result($stmt);
-    if ($result) {
-        while ($row = mysqli_fetch_assoc($result)) {
-            $borrowedItems[] = $row;
-        }
-    }
-    mysqli_stmt_close($stmt);
 }
 ?>
 <?php include __DIR__ . '/../includes/header.php'; ?>
 <div class="row g-4">
     <div class="col-12">
-        <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3 mb-3">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
             <div>
-                <h2 class="mb-1 text-primary">Borrowed Items</h2>
-                <p class="text-muted mb-0">Track borrowed items and mark them as returned.</p>
+                <h2 class="mb-1 text-primary"><?php echo $showBorrowingHistory ? 'Borrowing History' : 'Borrowing &amp; Inventory'; ?></h2>
+                <p class="mb-0 text-muted"><?php echo $showBorrowingHistory ? 'Review borrowing records. Returns are managed from inventory.' : 'Manage items by category, record returns, and update availability.'; ?></p>
             </div>
-            <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#borrowedForm">
-                <i class="bi bi-plus-lg"></i> Add Borrowed Item
-            </button>
+            <?php if ($showBorrowingHistory): ?>
+                <a class="btn btn-outline-primary" href="borrowed"><i class="bi bi-arrow-left me-1" aria-hidden="true"></i>Back to inventory</a>
+            <?php endif; ?>
         </div>
     </div>
-    <?php if ($itemIdFilter > 0): ?>
-        <div class="col-12">
-            <div class="selected-record-banner" role="status">
-                <i class="bi bi-bullseye" aria-hidden="true"></i>
-                <div>
-                    <strong>Selected item</strong>
-                    <span><?php echo $borrowedItems ? sanitize($borrowedItems[0]['item_name']) . ' · borrowed by ' . sanitize($borrowedItems[0]['borrower']) : 'This item could not be found.'; ?></span>
-                </div>
-                <a class="btn btn-sm btn-outline-primary" href="borrowed">Show all borrowed items</a>
+    <?php if ($message !== ''): ?>
+        <div class="col-12"><?php echo show_alert($message, $messageType); ?></div>
+    <?php endif; ?>
+
+    <?php if (!$showBorrowingHistory): ?>
+    <div class="col-12 col-xl-4">
+        <div class="card h-100 shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title text-primary">Add category</h5>
+                <p class="small text-muted">Example: Projectors, Cameras, or Laptops.</p>
+                <form method="POST" class="d-flex flex-column gap-2">
+                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                    <label class="form-label mb-0" for="inventoryCategoryName">Category name</label>
+                    <input type="text" id="inventoryCategoryName" name="category_name" class="form-control" maxlength="100" placeholder="e.g. Projectors" required>
+                    <div class="form-check">
+                        <input type="checkbox" id="categoryRequiresIdentifier" name="requires_identifier" value="1" class="form-check-input" checked>
+                        <label class="form-check-label" for="categoryRequiresIdentifier">Ask for an identifier ID when registering items</label>
+                    </div>
+                    <button type="submit" name="add_category" class="btn btn-primary align-self-start"><i class="bi bi-folder-plus me-1" aria-hidden="true"></i>Add category</button>
+                </form>
+                <hr>
+                <p class="small text-muted mb-0"><?php echo count($categories); ?> categories configured.</p>
             </div>
         </div>
-    <?php endif; ?>
-    <div class="col-12">
-        <div class="card shadow-sm">
+    </div>
+
+    <div class="col-12 col-xl-8">
+        <div class="card h-100 shadow-sm">
             <div class="card-body">
-                <form method="GET" class="row g-2 mb-3 align-items-end">
-                    <div class="col-12 col-md">
-                        <label class="form-label small fw-semibold mb-1" for="borrowedSearch">Search borrowed items</label>
-                        <input type="search" id="borrowedSearch" name="search" class="form-control" placeholder="Item, borrower, or category" value="<?php echo sanitize($search); ?>">
-                    </div>
-                    <div class="col-12 col-md-3">
-                        <label class="form-label small fw-semibold mb-1" for="borrowedStatus">Status</label>
-                        <select id="borrowedStatus" name="status" class="form-select">
-                            <?php foreach (['All' => 'All items', 'Unreturned' => 'Not Returned', 'Returned' => 'Returned'] as $value => $label): ?>
-                                <option value="<?php echo $value; ?>"<?php echo $statusFilter === $value ? ' selected' : ''; ?>><?php echo $label; ?></option>
+                <h5 class="card-title text-primary">Register an item</h5>
+                <p class="small text-muted">Items are grouped under their category. An identifier is required only when that category asks for one. “Other” lets users borrow an unlisted item without registering an ID.</p>
+                <form method="POST" class="row g-3 align-items-end">
+                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                    <div class="col-12 col-md-4">
+                        <label class="form-label" for="newInventoryCategory">Category</label>
+                        <select id="newInventoryCategory" name="category_id" class="form-select" required>
+                            <option value="">Select category</option>
+                            <?php foreach ($categories as $category): ?>
+                                <option value="<?php echo (int)$category['category_id']; ?>" data-requires-identifier="<?php echo (int)$category['requires_identifier']; ?>"><?php echo sanitize($category['category_name']); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    <div class="col-12 col-md-auto d-flex gap-2">
-                        <button class="btn btn-primary flex-grow-1" type="submit"><i class="bi bi-funnel me-1"></i> Filter</button>
-                        <?php if ($search !== '' || $statusFilter !== 'All'): ?>
-                            <a class="btn btn-outline-secondary" href="borrowed">Clear</a>
-                        <?php endif; ?>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label" for="newInventoryName">Item name</label>
+                        <input type="text" id="newInventoryName" name="item_name" class="form-control" maxlength="255" placeholder="e.g. Projector 1" required>
+                    </div>
+                    <div class="col-12 col-md-3">
+                        <label class="form-label" for="newInventoryIdentifier">Identifier ID</label>
+                        <input type="text" id="newInventoryIdentifier" name="identifier" class="form-control" maxlength="100" placeholder="e.g. PRJ-001" required>
+                    </div>
+                    <div class="col-12 col-md-1 d-grid">
+                        <button type="submit" name="add_inventory_item" class="btn btn-primary" aria-label="Register item"><i class="bi bi-plus-lg" aria-hidden="true"></i></button>
                     </div>
                 </form>
-                <!-- Shared table styling keeps row separators; the card-table class stacks fields on phones. -->
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="editInventoryItemModal" tabindex="-1" aria-labelledby="editInventoryItemTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form method="POST" class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title text-primary" id="editInventoryItemTitle">Edit item</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                    <input type="hidden" id="editInventoryId" name="inventory_id">
+                    <div class="mb-3">
+                        <label class="form-label" for="editInventoryCategory">Category</label>
+                        <select id="editInventoryCategory" name="category_id" class="form-select" required>
+                            <?php foreach ($categories as $category): ?>
+                                <option value="<?php echo (int)$category['category_id']; ?>" data-requires-identifier="<?php echo (int)$category['requires_identifier']; ?>"><?php echo sanitize($category['category_name']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="editInventoryName">Item name</label>
+                        <input type="text" id="editInventoryName" name="item_name" class="form-control" maxlength="255" required>
+                    </div>
+                    <div>
+                        <label class="form-label" for="editInventoryIdentifier">Identifier ID <span class="text-muted">(if required)</span></label>
+                        <input type="text" id="editInventoryIdentifier" name="identifier" class="form-control" maxlength="100" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" name="update_inventory_item" class="btn btn-primary">Save item details</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="d-flex flex-column align-items-center gap-2 mb-3 text-center">
+                    <div class="text-center">
+                        <h5 class="card-title text-primary mb-1">Inventory status</h5>
+                        <p class="small text-muted mb-0">Open a category to see only its items. Return borrowed items or update availability from each item’s Action column.</p>
+                    </div>
+                    <span class="small text-muted"><?php echo count($inventoryItems); ?> item(s)</span>
+                </div>
+                <?php if (!$categories): ?>
+                    <p class="py-4 text-center text-muted mb-0">No categories are available.</p>
+                <?php else: ?>
+                    <div class="accordion" id="inventoryCategoryAccordion">
+                        <?php foreach ($categories as $category): ?>
+                            <?php
+                            $categoryId = (int)$category['category_id'];
+                            $categoryItems = $inventoryItemsByCategory[$categoryId] ?? [];
+                            ?>
+                            <div class="accordion-item">
+                                <h3 class="accordion-header" id="inventoryCategoryHeading<?php echo $categoryId; ?>">
+                                    <button class="accordion-button<?php echo $categoryId === (int)$categories[0]['category_id'] ? '' : ' collapsed'; ?>" type="button" data-bs-toggle="collapse" data-bs-target="#inventoryCategoryCollapse<?php echo $categoryId; ?>" aria-expanded="<?php echo $categoryId === (int)$categories[0]['category_id'] ? 'true' : 'false'; ?>" aria-controls="inventoryCategoryCollapse<?php echo $categoryId; ?>">
+                                        <span class="fw-semibold"><?php echo sanitize($category['category_name']); ?></span>
+                                        <span class="small text-muted ms-2"><?php echo count($categoryItems); ?> item(s)</span>
+                                    </button>
+                                </h3>
+                                <div id="inventoryCategoryCollapse<?php echo $categoryId; ?>" class="accordion-collapse collapse<?php echo $categoryId === (int)$categories[0]['category_id'] ? ' show' : ''; ?>" aria-labelledby="inventoryCategoryHeading<?php echo $categoryId; ?>" data-bs-parent="#inventoryCategoryAccordion">
+                                    <div class="accordion-body p-0">
+                                        <div class="table-responsive">
+                                            <table class="table table-hover align-middle mb-0 borrowed-inventory-table" data-status-guide="inventory">
+                                                <thead class="table-light"><tr><th>Item</th><th>Identifier ID</th><th>Status</th><th>Action</th></tr></thead>
+                                                <tbody>
+                                                <?php if (!$categoryItems): ?>
+                                                    <tr><td colspan="4" class="py-4 text-center text-muted">No items in this category yet.</td></tr>
+                                                <?php else: foreach ($categoryItems as $inventoryItem): ?>
+                                                    <tr>
+                                                        <td class="fw-semibold"><?php echo sanitize($inventoryItem['item_name']); ?><?php if (!empty($inventoryItem['is_one_off'])): ?><small class="d-block fw-normal text-muted">Unlisted item</small><?php endif; ?></td>
+                                                        <td><?php echo $inventoryItem['identifier'] !== null && $inventoryItem['identifier'] !== '' ? '<code>' . sanitize($inventoryItem['identifier']) . '</code>' : '—'; ?></td>
+                                                        <td>
+                                                            <?php $statusDot = $inventoryItem['display_status'] === 'Available' ? 'bg-success' : ($inventoryItem['display_status'] === 'Borrowed' ? 'bg-primary' : 'bg-secondary'); ?>
+                                                            <span class="d-inline-flex align-items-center gap-2"><span class="rounded-circle <?php echo $statusDot; ?>" style="width:.6rem;height:.6rem" aria-hidden="true"></span><?php echo sanitize($inventoryItem['display_status']); ?></span>
+                                                            <?php if (!empty($inventoryItem['active_borrower'])): ?><small class="d-block text-muted">With <?php echo sanitize($inventoryItem['active_borrower']); ?></small><?php endif; ?>
+                                                        </td>
+                                                        <td>
+                                                            <div class="d-flex flex-wrap gap-2">
+                                                                <?php if ($inventoryItem['display_status'] === 'Borrowed' && !empty($inventoryItem['active_loan_id'])): ?>
+                                                                    <form method="POST">
+                                                                        <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                                                                        <input type="hidden" name="inventory_id" value="<?php echo (int)($inventoryItem['inventory_id'] ?? 0); ?>">
+                                                                        <input type="hidden" name="loan_id" value="<?php echo (int)$inventoryItem['active_loan_id']; ?>">
+                                                                        <button type="submit" name="mark_inventory_returned" class="btn btn-sm btn-success">Mark returned</button>
+                                                                    </form>
+                                                                <?php elseif (empty($inventoryItem['is_one_off'])): ?>
+                                                                    <button
+                                                                        type="button"
+                                                                        class="btn btn-sm btn-outline-primary"
+                                                                        data-bs-toggle="modal"
+                                                                        data-bs-target="#editInventoryItemModal"
+                                                                        data-inventory-edit
+                                                                        data-inventory-id="<?php echo (int)$inventoryItem['inventory_id']; ?>"
+                                                                        data-category-id="<?php echo (int)$inventoryItem['category_id']; ?>"
+                                                                        data-item-name="<?php echo sanitize($inventoryItem['item_name']); ?>"
+                                                                        data-identifier="<?php echo sanitize($inventoryItem['identifier'] ?? ''); ?>"
+                                                                    >Edit item</button>
+                                                                    <form method="POST">
+                                                                        <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                                                                        <input type="hidden" name="inventory_id" value="<?php echo (int)$inventoryItem['inventory_id']; ?>">
+                                                                        <input type="hidden" name="new_status" value="<?php echo $inventoryItem['display_status'] === 'Available' ? 'Unavailable' : 'Available'; ?>">
+                                                                        <button type="submit" name="set_inventory_status" class="btn btn-sm btn-outline-secondary"><?php echo $inventoryItem['display_status'] === 'Available' ? 'Mark unavailable' : 'Mark available'; ?></button>
+                                                                    </form>
+                                                                <?php else: ?>
+                                                                    <span class="small text-muted">No action available.</span>
+                                                                <?php endif; ?>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                <?php endforeach; endif; ?>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="d-flex flex-column align-items-center gap-2 mb-3 text-center">
+                    <div class="text-center">
+                        <h5 class="card-title text-primary mb-1">Categories</h5>
+                        <p class="small text-muted mb-0">Inventory counts by category.</p>
+                    </div>
+                    <span class="small text-muted"><?php echo count($categorySummaries); ?> categories</span>
+                </div>
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle admin-mobile-card-table mb-0" data-status-guide="borrowed">
+                    <table class="table table-hover align-middle mb-0 borrowed-category-table">
                         <thead class="table-light">
-                            <tr>
-                                <th>Item</th>
-                                <th>Category</th>
-                                <th>Borrower</th>
-                                <th>Date borrowed</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
+                            <tr><th scope="col">Category</th><th scope="col">Items</th><th scope="col">Available</th><th scope="col">Borrowed</th><th scope="col">Unavailable</th><th scope="col">Action</th></tr>
                         </thead>
                         <tbody>
-                            <?php if (count($borrowedItems) === 0): ?>
-                                <tr><td colspan="6" class="text-center text-muted py-4">No matching borrowed items. Try changing the search or status filter.</td></tr>
-                            <?php else: ?>
-                                <?php foreach ($borrowedItems as $itemRow): ?>
-                                    <tr>
-                                        <td class="fw-semibold" data-label="Item"><?php echo sanitize($itemRow['item_name']); ?></td>
-                                        <td data-label="Category"><?php echo sanitize($itemRow['category_name'] ?? 'Uncategorized'); ?></td>
-                                        <td data-label="Borrower">
-                                            <div class="fw-semibold"><?php echo sanitize($itemRow['borrower']); ?></div>
-                                            <?php if (!empty($itemRow['borrower_phone'])): ?>
-                                                <small class="text-muted"><?php echo sanitize($itemRow['borrower_phone']); ?></small>
-                                            <?php endif; ?>
-                                        </td>
-                                        <td class="small" data-label="Date borrowed" data-sort-value="<?php echo sanitize($itemRow['date_borrowed']); ?>">
-                                            <div>
-                                                <span class="d-block text-muted">Borrowed</span>
-                                                <span class="d-block fw-medium"><?php echo sanitize(date('M j, Y', strtotime($itemRow['date_borrowed']))); ?></span>
-                                                <span class="d-block text-muted"><?php echo sanitize(date('g:i A', strtotime($itemRow['date_borrowed']))); ?></span>
-                                            </div>
-                                            <?php if (!empty($itemRow['returned_date'])): ?>
-                                                <div class="mt-1 text-success">
-                                                    <span class="d-block">Returned</span>
-                                                    <span class="d-block"><?php echo sanitize(date('M j, Y', strtotime($itemRow['returned_date']))); ?></span>
-                                                </div>
-                                            <?php endif; ?>
-                                        </td>
-                                        <td data-label="Status">
-                                            <span class="badge rounded-pill <?php echo admin_status_badge_class($itemRow['display_status']); ?>"><?php echo sanitize($itemRow['display_status'] === 'Unreturned' ? 'Not Returned' : $itemRow['display_status']); ?></span>
-                                        </td>
-                                        <td data-label="Actions">
-                                            <div class="table-actions">
-                                                <?php if ($itemRow['display_status'] !== 'Returned'): ?>
-                                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="editItem(<?php echo (int)$itemRow['item_id']; ?>, <?php echo htmlspecialchars(json_encode($itemRow['item_name'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($itemRow['borrower'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo htmlspecialchars(json_encode($itemRow['borrower_phone'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8'); ?>, <?php echo $itemRow['category_id'] !== null ? (int)$itemRow['category_id'] : 'null'; ?>)">
-                                                        <i class="bi bi-pencil"></i> Edit
-                                                    </button>
-                                                    <form method="POST">
-                                                        <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
-                                                        <input type="hidden" name="id" value="<?php echo (int)$itemRow['item_id']; ?>">
-                                                        <button type="submit" name="mark_returned" class="btn btn-sm btn-success" data-confirm-title="Mark item as returned?" data-confirm-message="This records the item as returned and sets the return date to today." data-confirm-button="Mark Returned"><i class="bi bi-check2-circle me-1"></i>Mark Returned</button>
-                                                    </form>
-                                                <?php else: ?>
-                                                    <form method="POST">
-                                                        <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
-                                                        <input type="hidden" name="id" value="<?php echo (int)$itemRow['item_id']; ?>">
-                                                        <button type="submit" name="mark_unreturned" class="btn btn-sm btn-outline-secondary" data-confirm-title="Mark item as not returned?" data-confirm-message="This clears the return date and moves the item back to the not returned list." data-confirm-button="Mark Not Returned"><i class="bi bi-arrow-counterclockwise me-1"></i>Mark Not Returned</button>
-                                                    </form>
-                                                <?php endif; ?>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
+                            <?php if (!$categorySummaries): ?>
+                                <tr><td colspan="6" class="py-4 text-muted">No categories have been added.</td></tr>
+                            <?php else: foreach ($categorySummaries as $summary): ?>
+                                <tr>
+                                    <td class="fw-semibold"><?php echo sanitize($summary['name']); ?></td>
+                                    <td><?php echo (int)$summary['total']; ?></td>
+                                    <td><?php echo (int)$summary['Available']; ?></td>
+                                    <td><?php echo (int)$summary['Borrowed']; ?></td>
+                                    <td><?php echo (int)$summary['Unavailable']; ?></td>
+                                    <td>
+                                        <?php if ($summary['is_default']): ?>
+                                            <span class="text-muted">Default</span>
+                                        <?php else: ?>
+                                        <form method="POST" class="m-0">
+                                            <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
+                                            <input type="hidden" name="category_id" value="<?php echo (int)$summary['id']; ?>">
+                                            <button
+                                                type="submit"
+                                                name="delete_category"
+                                                class="btn btn-sm btn-outline-danger"
+                                                <?php echo $summary['Borrowed'] > 0 ? 'disabled title="Return all items in this category before deleting it."' : ''; ?>
+                                                data-confirm-title="Delete this category?"
+                                                data-confirm-message="This deletes the category and its registered inventory items. Past borrowing records will be kept. Items must be returned before this category can be deleted."
+                                                data-confirm-button="Delete category"
+                                            ><i class="bi bi-trash me-1" aria-hidden="true"></i>Delete</button>
+                                        </form>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; endif; ?>
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
     </div>
-    <div class="modal fade" id="borrowedForm" tabindex="-1" aria-labelledby="borrowedFormTitle" aria-hidden="true" data-open-on-load="<?php echo $showAddModal ? 'true' : 'false'; ?>">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
+    <?php else: ?>
+    <div class="col-12" id="borrowing-history">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end gap-3 mb-3">
                     <div>
-                        <h5 class="modal-title text-primary" id="borrowedFormTitle">Add Borrowed Item</h5>
-                        <p class="mb-0 mt-1 small text-muted">Record who has the item and any optional return date.</p>
+                        <h5 class="card-title text-primary mb-1">Borrowing records</h5>
+                        <p class="small text-muted mb-0">Read-only records. Mark items returned from the Action column in their inventory category.</p>
                     </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <form method="POST" novalidate>
-                    <div class="modal-body">
-                        <div class="row g-3">
-                        <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
-                        <div class="col-12">
-                        <div class="mb-3">
-                            <label class="form-label" for="item">Item</label>
-                            <input type="text" id="item" name="item" class="form-control" value="<?php echo sanitize($item); ?>" required>
+                    <form method="GET" class="row g-2">
+                        <input type="hidden" name="view" value="history">
+                        <div class="col">
+                            <label class="visually-hidden" for="borrowedSearch">Search borrowing records</label>
+                            <input type="search" id="borrowedSearch" name="search" class="form-control" placeholder="Item, identifier, borrower" value="<?php echo sanitize($search); ?>">
                         </div>
-                        </div>
-                        <div class="col-12 col-sm-6">
-                        <div class="mb-3">
-                            <label class="form-label" for="category_id">Category</label>
-                            <select id="category_id" name="category_id" class="form-select">
-                                <option value="">Uncategorized</option>
-                                <?php foreach ($categories as $cat): ?>
-                                    <option value="<?php echo (int)$cat['category_id']; ?>"<?php echo isset($_POST['category_id']) && (int)$_POST['category_id'] === (int)$cat['category_id'] ? ' selected' : ''; ?>><?php echo sanitize($cat['category_name']); ?></option>
+                        <div class="col-auto">
+                            <label class="visually-hidden" for="borrowedStatus">Borrowing status</label>
+                            <select id="borrowedStatus" name="status" class="form-select">
+                                <?php foreach (['All' => 'All records', 'Unreturned' => 'Borrowed', 'Returned' => 'Returned'] as $value => $label): ?>
+                                    <option value="<?php echo $value; ?>"<?php echo $statusFilter === $value ? ' selected' : ''; ?>><?php echo $label; ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        </div>
-                        <div class="col-12 col-sm-6">
-                        <div class="mb-3">
-                            <label class="form-label" for="borrower">Borrower Name</label>
-                            <input type="text" id="borrower" name="borrower" class="form-control" value="<?php echo sanitize($borrower); ?>" required>
-                        </div>
-                        </div>
-                        <div class="col-12 col-sm-6">
-                        <div class="mb-3">
-                            <label class="form-label" for="borrower_phone">Borrower Contact Number <span class="text-muted fw-normal">(optional)</span></label>
-                            <input type="tel" id="borrower_phone" name="borrower_phone" class="form-control" value="<?php echo sanitize($borrower_phone ?? ''); ?>" inputmode="numeric" pattern="[0-9]{11}" maxlength="11" placeholder="09123456789" title="Enter exactly 11 digits.">
-                            <div class="form-text">Enter exactly 11 digits, or leave blank.</div>
-                        </div>
-                        </div>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button type="submit" name="save" class="btn btn-primary">Record Item</button>
-                    </div>
-                </form>
+                        <div class="col-auto"><button type="submit" class="btn btn-outline-primary">Filter</button></div>
+                    </form>
+                </div>
+                <?php if ($itemFilterId > 0): ?>
+                    <div class="alert alert-info py-2">Selected record: <?php echo $selectedLoan ? sanitize($selectedLoan['item_name'] . ' · ' . $selectedLoan['borrower']) : 'This borrowing record is not in the current result set.'; ?> <a class="alert-link ms-2" href="borrowed?view=history#borrowing-history">Show all</a></div>
+                <?php endif; ?>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0 borrowed-history-table" data-status-guide="borrowed">
+                        <thead class="table-light"><tr><th>Item / ID</th><th>Category</th><th>Borrower</th><th>Borrowed</th><th>Returned</th><th>Status</th></tr></thead>
+                        <tbody>
+                        <?php if (!$loans): ?>
+                            <tr><td colspan="6" class="py-4 text-muted">No borrowing records match these filters.</td></tr>
+                        <?php else: foreach ($loans as $loan): ?>
+                            <tr>
+                                <td><div class="fw-semibold"><?php echo sanitize($loan['item_name']); ?></div><?php if ($loan['identifier']): ?><code><?php echo sanitize($loan['identifier']); ?></code><?php endif; ?></td>
+                                <td><?php echo sanitize($loan['category_name'] ?? 'Legacy record'); ?></td>
+                                <td><div class="fw-semibold"><?php echo sanitize($loan['borrower']); ?></div><?php if ($loan['borrower_phone']): ?><small class="text-muted"><?php echo sanitize($loan['borrower_phone']); ?></small><?php endif; ?></td>
+                                <td><?php echo sanitize(date('M j, Y g:i A', strtotime($loan['date_borrowed']))); ?></td>
+                                <td><?php echo $loan['returned_date'] ? sanitize(date('M j, Y', strtotime($loan['returned_date']))) : '—'; ?></td>
+                                <td><span class="badge rounded-pill <?php echo admin_status_badge_class($loan['display_status']); ?>"><?php echo sanitize($loan['display_status'] === 'Unreturned' ? 'Borrowed' : 'Returned'); ?></span></td>
+                            </tr>
+                        <?php endforeach; endif; ?>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
-
-<!-- Edit Modal -->
-<div class="modal fade" id="editModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Edit Borrowed Item</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form method="POST" id="editBorrowedForm" novalidate>
-                    <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
-                    <input type="hidden" name="id" id="editId">
-                    <div class="mb-3">
-                        <label class="form-label" for="editItem">Item</label>
-                        <input type="text" id="editItem" name="item" class="form-control" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="editCategory">Category</label>
-                        <select id="editCategory" name="category_id" class="form-select">
-                            <option value="">Uncategorized</option>
-                            <?php foreach ($categories as $cat): ?>
-                                <option value="<?php echo $cat['category_id']; ?>"><?php echo sanitize($cat['category_name']); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="editBorrower">Borrower Name</label>
-                        <input type="text" id="editBorrower" name="borrower" class="form-control" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label" for="editBorrowerPhone">Borrower Contact Number <span class="text-muted fw-normal">(optional)</span></label>
-                        <input type="tel" id="editBorrowerPhone" name="borrower_phone" class="form-control" inputmode="numeric" pattern="[0-9]{11}" maxlength="11" placeholder="09123456789" title="Enter exactly 11 digits.">
-                        <div class="form-text">Enter exactly 11 digits, or leave blank.</div>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" name="update" form="editBorrowedForm" class="btn btn-primary">Save Changes</button>
-            </div>
-        </div>
-    </div>
+    <?php endif; ?>
 </div>
-
-<script src="assets/js/page-borrowed.js?v=<?php echo (int)@filemtime(dirname(__DIR__) . '/assets/js/page-borrowed.js'); ?>"></script>
-
+<script>
+const configureInventoryIdentifier = (categorySelect, identifierInput) => {
+    const option = categorySelect.selectedOptions[0];
+    const required = option?.dataset.requiresIdentifier === '1';
+    identifierInput.required = required;
+    identifierInput.disabled = !required;
+    if (!required) identifierInput.value = '';
+};
+const newInventoryCategory = document.getElementById('newInventoryCategory');
+const newInventoryIdentifier = document.getElementById('newInventoryIdentifier');
+const editInventoryCategory = document.getElementById('editInventoryCategory');
+const editInventoryIdentifier = document.getElementById('editInventoryIdentifier');
+if (newInventoryCategory && newInventoryIdentifier) {
+    newInventoryCategory.addEventListener('change', () => configureInventoryIdentifier(newInventoryCategory, newInventoryIdentifier));
+    configureInventoryIdentifier(newInventoryCategory, newInventoryIdentifier);
+}
+if (editInventoryCategory && editInventoryIdentifier) {
+    editInventoryCategory.addEventListener('change', () => configureInventoryIdentifier(editInventoryCategory, editInventoryIdentifier));
+    document.querySelectorAll('[data-inventory-edit]').forEach((button) => {
+        button.addEventListener('click', () => {
+            document.getElementById('editInventoryId').value = button.dataset.inventoryId;
+            editInventoryCategory.value = button.dataset.categoryId;
+            document.getElementById('editInventoryName').value = button.dataset.itemName;
+            configureInventoryIdentifier(editInventoryCategory, editInventoryIdentifier);
+            editInventoryIdentifier.value = button.dataset.identifier;
+        });
+    });
+}
+</script>
 <?php include __DIR__ . '/../includes/footer.php'; ?>

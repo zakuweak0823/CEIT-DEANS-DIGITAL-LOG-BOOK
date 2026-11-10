@@ -178,6 +178,12 @@ if (document.body.classList.contains('admin-body')) {
     let notificationCheckInProgress = false;
     let documentActivityIntervalId = 0;
     const submissionToast = document.getElementById('adminSubmissionToast');
+    const notificationsRoot = document.getElementById('adminNotifications');
+    const notificationsToggle = document.getElementById('adminNotificationsToggle');
+    const notificationsPanel = document.getElementById('adminNotificationsPanel');
+    const notificationsBadge = document.getElementById('adminNotificationsBadge');
+    const notificationsCount = document.getElementById('adminNotificationsCount');
+    const notificationsList = document.getElementById('adminNotificationsList');
     let submissionToastTimer = 0;
     const notificationTone = new Audio(new URL('assets/audio/notif_tone.mp3', window.location.href).href);
     notificationTone.preload = 'auto';
@@ -204,6 +210,58 @@ if (document.body.classList.contains('admin-body')) {
     if (submissionToast) {
         const closeButton = submissionToast.querySelector('.admin-submission-toast-close');
         if (closeButton) closeButton.addEventListener('click', hideSubmissionToast);
+    }
+
+    const renderAdminNotifications = function (activity) {
+        if (!notificationsList || !notificationsBadge || !notificationsCount) return;
+        const pendingCount = Number(activity.pendingCount);
+        if (!Number.isSafeInteger(pendingCount) || pendingCount < 0 || !Array.isArray(activity.incomingDocuments)) {
+            throw new Error('Document notification list was invalid');
+        }
+        notificationsBadge.textContent = pendingCount > 99 ? '99+' : String(pendingCount);
+        notificationsBadge.hidden = pendingCount === 0;
+        notificationsCount.textContent = String(pendingCount);
+        notificationsList.replaceChildren();
+        if (activity.incomingDocuments.length === 0) {
+            const emptyItem = document.createElement('li');
+            emptyItem.className = 'admin-notifications-empty';
+            emptyItem.textContent = 'No incoming documents need attention.';
+            notificationsList.appendChild(emptyItem);
+            return;
+        }
+        activity.incomingDocuments.forEach(function (item) {
+            const listItem = document.createElement('li');
+            const link = document.createElement('a');
+            link.className = 'admin-notification-item';
+            link.href = 'incoming?document_id=' + encodeURIComponent(String(item.id));
+            const title = document.createElement('strong');
+            title.textContent = item.subject || 'Incoming document';
+            const detail = document.createElement('span');
+            detail.textContent = [item.reference, item.status, item.date].filter(Boolean).join(' · ');
+            link.append(title, detail);
+            listItem.appendChild(link);
+            notificationsList.appendChild(listItem);
+        });
+    };
+
+    if (notificationsRoot && notificationsToggle && notificationsPanel) {
+        notificationsToggle.addEventListener('click', function () {
+            const isExpanded = notificationsToggle.getAttribute('aria-expanded') === 'true';
+            notificationsToggle.setAttribute('aria-expanded', String(!isExpanded));
+            notificationsPanel.hidden = isExpanded;
+        });
+        document.addEventListener('pointerdown', function (event) {
+            if (!notificationsRoot.contains(event.target)) {
+                notificationsToggle.setAttribute('aria-expanded', 'false');
+                notificationsPanel.hidden = true;
+            }
+        });
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                notificationsToggle.setAttribute('aria-expanded', 'false');
+                notificationsPanel.hidden = true;
+            }
+        });
     }
 
     const playAdminNotificationTone = function () {
@@ -255,6 +313,7 @@ if (document.body.classList.contains('admin-body')) {
             if (!activity.success || !Number.isSafeInteger(Number(activity.latestDocumentId))) {
                 throw new Error(activity.message || 'Document activity response was invalid');
             }
+            renderAdminNotifications(activity);
             if (adminServerAvailabilityHandler) adminServerAvailabilityHandler(true);
             const latestDocumentId = Number(activity.latestDocumentId);
             if (!hasDocumentActivityBaseline) {
@@ -268,6 +327,12 @@ if (document.body.classList.contains('admin-body')) {
             }
         } catch (error) {
             console.warn('New-document activity check failed; it will retry automatically.', error);
+            if (notificationsList) {
+                const errorItem = document.createElement('li');
+                errorItem.className = 'admin-notifications-empty';
+                errorItem.textContent = 'Notifications could not be refreshed. They will retry automatically.';
+                notificationsList.replaceChildren(errorItem);
+            }
             if (!String(error.message || '').includes('session has expired')) {
                 if (adminServerAvailabilityHandler) adminServerAvailabilityHandler(false);
             }
@@ -452,7 +517,7 @@ if (document.body.classList.contains('admin-body')) {
                 },
                 {
                     match: /\b(loan|loans|borrow|borrowed|return|overdue|item)\b/i,
-                    text: 'Use Borrowed Items to check current borrowed items, due dates, and return actions. Item Categories lets you manage the inventory categories.',
+                    text: 'Use Borrowed Items to check which items are currently borrowed, their borrowers, and return actions. Item Categories lets you manage the inventory categories.',
                     links: [
                         { label: 'Borrowed Items', href: 'borrowed' },
                         { label: 'Item Categories', href: 'item_categories' }

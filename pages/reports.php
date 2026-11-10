@@ -149,6 +149,11 @@ function reportTitle(string $type): string
 
 // Column count of the current table layout (used for full-width placeholder rows).
 $tableColumns = $reportType === 'Bulk Reports' ? 10 : (in_array($reportType, ['SMS Logs', 'Borrowed Items'], true) ? 4 : ($reportType === 'All Reports' ? 5 : 7));
+$reportStatusGuide = $reportType === 'All Reports' ? 'incoming,outgoing,borrowed,sms'
+    : ($reportType === 'Incoming' ? 'incoming'
+        : ($reportType === 'Outgoing' ? 'outgoing'
+            : ($reportType === 'Borrowed Items' ? 'borrowed'
+                : ($reportType === 'SMS Logs' ? 'sms' : ($reportType === 'Bulk Reports' ? 'incoming,outgoing' : 'documents')))));
 
 // Printed report settings: which columns print, their widths, and which columns go to Excel.
 $reportLayout = report_column_layout($reportType);
@@ -880,7 +885,7 @@ $showPrintHeader = $reportGenerated && ($printSettings['letterhead'] || $printSe
                 </div>
                 <?php endif; ?>
                 <div class="table-responsive report-table-wrap">
-                    <table id="reportTable" data-no-pagination class="table table-hover align-middle mb-0 report-table <?php echo $reportType === 'All Reports' ? 'report-table--all' : ($reportType === 'Bulk Reports' ? 'report-table--bulk' : ($reportType === 'SMS Logs' ? 'report-table--sms' : ($reportType === 'Borrowed Items' ? 'report-table--borrowed' : 'report-table--documents'))); ?>">
+                    <table id="reportTable" data-no-pagination data-status-guide="<?php echo sanitize($reportStatusGuide); ?>" class="table table-hover align-middle mb-0 report-table <?php echo $reportType === 'All Reports' ? 'report-table--all' : ($reportType === 'Bulk Reports' ? 'report-table--bulk' : ($reportType === 'SMS Logs' ? 'report-table--sms' : ($reportType === 'Borrowed Items' ? 'report-table--borrowed' : 'report-table--documents'))); ?>">
                         <?php if ($reportType === 'Bulk Reports'): ?>
                             <colgroup>
                                 <col class="report-col-date">

@@ -50,7 +50,7 @@ mysqli_stmt_close($stmt);
             <div class="text-center text-md-start">
                 <p class="quick-document-eyebrow mb-1"><i class="bi bi-lightning-charge-fill me-1" aria-hidden="true"></i>Mobile submissions</p>
                 <h2 class="mb-1 text-primary">Quick Submit Records</h2>
-                <p class="mb-0 text-muted">Only documents created with the mobile UI&apos;s Quick Submit button appear here.</p>
+                <p class="mb-0 text-muted">A separate staff queue for fast counter-intake documents submitted from the mobile UI.</p>
             </div>
             <a class="btn btn-outline-primary" href="incoming"><i class="bi bi-list-ul me-2" aria-hidden="true"></i>View All Incoming Documents</a>
         </div>
@@ -58,7 +58,7 @@ mysqli_stmt_close($stmt);
     <div class="col-12">
         <div class="quick-document-storage-note" role="note">
             <i class="bi bi-info-circle-fill" aria-hidden="true"></i>
-            <span>These are incoming document records, stored with the rest of the incoming documents. This page only filters records submitted through <strong>Quick Submit</strong>; regular incoming submissions are not included. Tracking applies to submissions made after this feature was added.</span>
+            <span>Quick Submit records are tagged separately and listed here so staff can identify and open them directly. They remain incoming documents and follow the usual Incoming review and status process; use <strong>Manage</strong> to continue processing a record. Submitters receive a reference or QR code for tracking, but no SMS status updates because Quick Submit does not collect a contact number.</span>
         </div>
     </div>
     <div class="col-12">
@@ -75,7 +75,7 @@ mysqli_stmt_close($stmt);
                 </form>
                 <!-- Use the shared row-separated table skin consistently across admin lists. -->
                 <div class="table-responsive">
-                    <table class="table align-middle mb-0 quick-submit-table">
+                    <table class="table align-middle mb-0 quick-submit-table" data-status-guide="incoming,outgoing">
                         <thead class="table-light">
                             <tr>
                                 <th>Date Submitted</th>

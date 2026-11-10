@@ -19,8 +19,6 @@ $linkRow = $linkToken !== '' ? password_reset_link_find($conn, $linkToken) : nul
 if ($linkToken !== '' && !$linkRow) {
     $error = 'This password link is invalid, expired, or already used. Request a new recovery link.';
 }
-$emailRequested = !empty($_SESSION['pw_reset_email']);
-unset($_SESSION['pw_reset_email']);
 $pending = $_SESSION['pw_reset'] ?? null;
 if (is_array($pending) && (time() - (int)($pending['at'] ?? 0)) > 900) {
     unset($_SESSION['pw_reset']);
@@ -66,16 +64,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $state = password_reset_throttle_state($conn, $username);
             if ($state === 'limited') {
-                $error = 'Too many recovery requests. Please try again in an hour or contact an Admin.';
+                $error = 'If you recently requested recovery, wait before trying again. Otherwise, contact an Admin for help.';
             } elseif ($state === 'cooldown') {
-                $error = 'Please wait a minute before requesting another code.';
+                $error = 'If you recently requested recovery, wait before trying again. Otherwise, contact an Admin for help.';
             } else {
                 if (random_int(1, 20) === 1) {
                     password_reset_purge($conn);
                 }
+                $_SESSION['pw_reset'] = ['username' => $username, 'at' => time()];
                 $emailIssue = $emailReady ? password_reset_email_issue($conn, $username) : null;
                 if ($emailIssue !== null) {
-                    $_SESSION['pw_reset_email'] = true;
                     password_reset_finish_response('forgot_password');
                     if (!password_reset_email_send($conn, $emailIssue, 'recovery')) {
                         $cancel = safe_query(
@@ -93,7 +91,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     exit;
                 }
                 $issued = $smsReady ? password_reset_issue($conn, $username) : null;
-                $_SESSION['pw_reset'] = ['username' => $username, 'at' => time()];
                 // The reply is identical whether or not the account can receive a recovery message.
                 password_reset_finish_response('forgot_password');
                 if ($issued !== null) {
@@ -149,8 +146,8 @@ $step = $linkRow ? 'email-reset' : (is_array($pending) ? 'reset' : 'request');
                 </span>
             </div>
             <div class="login-heading">
-                <h1 id="recoveryTitle">Password recovery</h1>
-                <p class="login-intro"><?php echo $step === 'email-reset' ? 'Choose a new password for your account.' : ($step === 'reset' ? 'Enter the code we sent and choose a new password.' : 'Enter your username. We will email a password link when an email is registered, otherwise we may text a recovery code.'); ?></p>
+                <h1 id="recoveryTitle"><?php echo $step === 'email-reset' && ($linkRow['purpose'] ?? '') === 'setup' ? 'Set up your new account password' : 'Password recovery'; ?></h1>
+                <p class="login-intro"><?php echo $step === 'email-reset' ? (($linkRow['purpose'] ?? '') === 'setup' ? 'This one-time link is for setting a password on a new account created by an Admin. It is not for recovering an existing account.' : 'This one-time link is for changing the password on your existing account.') : ($step === 'reset' ? 'Recovery is for an existing account. If it has a registered email or phone, recovery instructions may have been sent there.' : 'Recover access to an existing account. Enter your username; instructions may be sent to a registered email or phone.'); ?></p>
             </div>
             <?php if ($error): ?>
                 <div class="alert alert-danger login-error" role="alert">
@@ -189,12 +186,6 @@ $step = $linkRow ? 'email-reset' : (is_array($pending) ? 'reset' : 'request');
                     </div>
                 </div>
             <?php elseif ($step === 'request'): ?>
-                <?php if ($emailRequested): ?>
-                    <div class="alert alert-info login-recovery-note" role="status">
-                        <i class="bi bi-envelope" aria-hidden="true"></i>
-                        <div><p class="mb-0">If the account matches a registered recovery email or phone, instructions may be sent there. If nothing arrives, wait a minute and try again or ask an Admin to reset the password.</p></div>
-                    </div>
-                <?php endif; ?>
                 <form method="POST" novalidate>
                     <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                     <div class="login-field">
@@ -205,27 +196,27 @@ $step = $linkRow ? 'email-reset' : (is_array($pending) ? 'reset' : 'request');
                         </div>
                     </div>
                     <button type="submit" name="request_code" value="1" class="btn login-submit">
-                        <span>Send recovery code</span><i class="bi bi-send" aria-hidden="true"></i>
+                        <span>Send recovery instructions</span><i class="bi bi-send" aria-hidden="true"></i>
                     </button>
                 </form>
                 <div class="alert alert-info login-recovery-note mt-3" role="note">
                     <i class="bi bi-info-circle" aria-hidden="true"></i>
                     <div>
-                        <p class="mb-0">If you cannot access your registered email or recovery phone, ask an Admin to reset your password from <strong>Account management</strong>.</p>
+                        <p class="mb-0">This recovery option is only for an existing account. If you cannot access its registered email or phone, ask an Admin to reset the password from <strong>Account management</strong>.</p>
                     </div>
                 </div>
             <?php else: ?>
                 <div class="alert alert-info login-recovery-note" role="status">
                     <i class="bi bi-chat-dots" aria-hidden="true"></i>
                     <div>
-                        <p class="mb-1">If the account <strong><?php echo sanitize((string)$pending['username']); ?></strong> has a recovery phone, a 6-digit code was just sent to it. It expires in <?php echo (int)PASSWORD_RESET_CODE_MINUTES; ?> minutes.</p>
-                        <p class="mb-0 small">Nothing arrived? Wait a minute, then <a href="forgot_password?restart=1">request a new code</a>.</p>
+                        <p class="mb-1"><strong>Recovery request received.</strong> If this username belongs to an existing account with a registered recovery email or phone, instructions may have been sent there. Open the link in your email, or enter the 6-digit code if you received one by SMS; a received code expires in <?php echo (int)PASSWORD_RESET_CODE_MINUTES; ?> minutes.</p>
+                        <p class="mb-0 small">For privacy, this page cannot confirm whether the username is registered. Nothing arrived? Verify the username or ask an Admin for help.</p>
                     </div>
                 </div>
                 <form method="POST" novalidate>
                     <input type="hidden" name="csrf_token" value="<?php echo sanitize(csrf_token()); ?>">
                     <div class="login-field">
-                        <label for="recoveryCode">6-digit code</label>
+                        <label for="recoveryCode">6-digit SMS code (if received)</label>
                         <div class="login-input-wrap">
                             <i class="bi bi-shield-lock" aria-hidden="true"></i>
                             <input type="text" id="recoveryCode" name="code" class="form-control" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required autofocus>

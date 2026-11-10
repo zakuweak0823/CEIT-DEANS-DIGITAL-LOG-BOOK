@@ -73,6 +73,25 @@ $validateOutgoing = static function (string $subject, ?string $clientPhone) use 
     return null;
 };
 
+$sendReleaseSms = static function (int $documentId) use ($conn, $documentTrackingSettings): array {
+    try {
+        $context = composer_document_context($conn, $documentId, $documentTrackingSettings);
+        if ($context === null) {
+            return [false, ' The status was saved, but the document details could not be loaded for SMS.'];
+        }
+        if (!is_valid_contact_number((string)($context['phone'] ?? ''))) {
+            return [false, ' No SMS was sent because no valid contact number is saved.'];
+        }
+        $result = send_logged_sms($conn, (string)$context['phone'], compose_sms_message($context));
+        return $result['success']
+            ? [true, ' SMS sent to the submitter.']
+            : [false, ' The status was saved, but the SMS was not sent: ' . $result['message']];
+    } catch (Throwable $error) {
+        error_log('For-release SMS notification failed: ' . $error->getMessage());
+        return [false, ' The status was saved, but the SMS could not be sent. Check the SMS logs.'];
+    }
+};
+
 $search = isset($_GET['search']) && is_string($_GET['search']) ? trim($_GET['search']) : '';
 $documentIdParam = $_GET['document_id'] ?? '';
 $documentIdFilter = is_string($documentIdParam) && ctype_digit($documentIdParam) ? (int)$documentIdParam : 0;
@@ -204,9 +223,14 @@ if (isset($_POST['issue_tracking_qr'])) {
             mysqli_stmt_close($stmt);
             if ($updated === 1) status_history_set_note($conn, 'doc_id', $id, $status, $note, $historyMarker);
             $conn->commit();
-            $message = $updated === 1
-                ? show_alert('Document status updated to ' . $status . '.')
-                : show_alert('Document was not found or already has that status.', 'warning');
+            if ($updated === 1 && $status === DOC_STATUS_FOR_RELEASE) {
+                [$smsSent, $smsNote] = $sendReleaseSms($id);
+                $message = show_alert('Document status updated to ' . $status . '.' . $smsNote, $smsSent ? 'success' : 'warning');
+            } else {
+                $message = $updated === 1
+                    ? show_alert('Document status updated to ' . $status . '.')
+                    : show_alert('Document was not found or already has that status.', 'warning');
+            }
         } catch (DomainException $error) {
             $message = show_alert($error->getMessage(), 'danger');
         } catch (Throwable $error) {
@@ -401,7 +425,7 @@ if ($stmt !== false) {
                 </p>
                 <!-- Use the shared row-separated table skin consistently across admin lists. -->
                 <div class="table-responsive outgoing-documents-table-responsive">
-                    <table class="table align-middle mb-0 outgoing-documents-table">
+                    <table class="table align-middle mb-0 outgoing-documents-table" data-status-guide="outgoing">
                         <thead class="table-light">
                             <tr>
                                 <th scope="col">Date</th>

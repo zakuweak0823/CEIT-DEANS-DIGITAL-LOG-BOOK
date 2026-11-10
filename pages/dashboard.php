@@ -474,7 +474,7 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
                 <div class="dashboard-empty-state"><i class="bi bi-check2-circle" aria-hidden="true"></i><span>No overdue records. All items are within their processing time.</span></div>
             <?php else: ?>
                 <div class="table-responsive">
-                    <table class="table align-middle mb-0 dashboard-activity-table dashboard-overdue-table admin-mobile-card-table">
+                    <table class="table align-middle mb-0 dashboard-activity-table dashboard-overdue-table admin-mobile-card-table" data-status-guide="incoming,outgoing">
                         <thead><tr><th scope="col">Record</th><th scope="col">Type</th><th scope="col">Person</th><th scope="col">Status</th><th scope="col">Overdue by</th><th scope="col">Actions</th></tr></thead>
                         <tbody>
                             <?php foreach ($overdueRows as $row): ?>
@@ -659,7 +659,7 @@ $plural = static function (int $count, string $singular, ?string $pluralForm = n
             <a href="records" class="dashboard-text-link">View all records<i class="bi bi-arrow-right" aria-hidden="true"></i></a>
         </div>
         <div class="table-responsive">
-            <table class="table align-middle mb-0 dashboard-activity-table admin-mobile-card-table">
+            <table class="table align-middle mb-0 dashboard-activity-table admin-mobile-card-table" data-status-guide="incoming,outgoing">
                 <thead><tr><th scope="col">Date</th><th scope="col">Direction</th><th scope="col">Subject</th><th scope="col">Submitter / recipient</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
                 <tbody>
                     <?php if (empty($recentDocuments)): ?>

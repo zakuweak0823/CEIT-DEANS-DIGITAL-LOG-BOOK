@@ -53,7 +53,7 @@ $result = mysqli_stmt_get_result($stmt);
             </div>
         </div>
         <div class="table-responsive">
-            <table class="table table-hover align-middle">
+            <table class="table table-hover align-middle" data-status-guide="incoming,outgoing">
                 <thead>
                     <tr>
                         <th>Type</th>

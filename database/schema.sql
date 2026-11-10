@@ -151,21 +151,48 @@ CREATE TABLE IF NOT EXISTS mobile_submission_logs (
 CREATE TABLE IF NOT EXISTS item_categories (
     category_id INT AUTO_INCREMENT PRIMARY KEY,
     category_name VARCHAR(100) NOT NULL UNIQUE,
+    requires_identifier TINYINT(1) NOT NULL DEFAULT 1,
+    is_default TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE item_categories ADD COLUMN IF NOT EXISTS requires_identifier TINYINT(1) NOT NULL DEFAULT 1;
+ALTER TABLE item_categories ADD COLUMN IF NOT EXISTS is_default TINYINT(1) NOT NULL DEFAULT 0;
+INSERT IGNORE INTO item_categories (category_name, requires_identifier, is_default) VALUES ('Other', 0, 1);
+UPDATE item_categories SET requires_identifier = 0, is_default = 1 WHERE category_name = 'Other';
 
 CREATE TABLE IF NOT EXISTS borrowed_items (
     item_id INT AUTO_INCREMENT PRIMARY KEY,
     item_name VARCHAR(255) NOT NULL,
     category_id INT,
+    inventory_id INT DEFAULT NULL,
+    inventory_identifier VARCHAR(100) DEFAULT NULL,
     borrower VARCHAR(255) NOT NULL,
     borrower_phone VARCHAR(20) DEFAULT NULL,
     due_date DATE DEFAULT NULL,
     returned_date DATE DEFAULT NULL,
     status VARCHAR(50) NOT NULL,
     date_borrowed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_borrowed_items_inventory (inventory_id),
     FOREIGN KEY (category_id) REFERENCES item_categories(category_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS borrowable_inventory (
+    inventory_id INT AUTO_INCREMENT PRIMARY KEY,
+    category_id INT NOT NULL,
+    item_name VARCHAR(255) NOT NULL,
+    identifier VARCHAR(100) DEFAULT NULL,
+    availability_status VARCHAR(20) NOT NULL DEFAULT 'Available',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_borrowable_inventory_category_identifier (category_id, identifier),
+    CONSTRAINT fk_borrowable_inventory_category FOREIGN KEY (category_id)
+        REFERENCES item_categories(category_id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE borrowed_items ADD COLUMN IF NOT EXISTS inventory_id INT DEFAULT NULL;
+ALTER TABLE borrowed_items ADD COLUMN IF NOT EXISTS inventory_identifier VARCHAR(100) DEFAULT NULL;
+ALTER TABLE borrowable_inventory MODIFY identifier VARCHAR(100) DEFAULT NULL;
 
 CREATE TABLE IF NOT EXISTS document_batches (
     batch_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -179,9 +206,11 @@ CREATE TABLE IF NOT EXISTS document_batches (
     sender_type VARCHAR(20) NOT NULL DEFAULT 'Student',
     recipient VARCHAR(255) NOT NULL DEFAULT '',
     recipient_contact_type VARCHAR(20) NOT NULL DEFAULT 'Unassigned',
+    contact_phone VARCHAR(20) DEFAULT NULL,
     remarks TEXT,
     tracking_token CHAR(64) DEFAULT NULL,
     document_pages TEXT DEFAULT NULL,
+    document_names MEDIUMTEXT DEFAULT NULL,
     paper_count INT UNSIGNED NOT NULL DEFAULT 0,
     is_priority TINYINT(1) NOT NULL DEFAULT 0,
     received_paper_count INT UNSIGNED DEFAULT NULL,
@@ -198,8 +227,10 @@ ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS batch_type VARCHAR(255) NO
 ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT '';
 ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS submitter_name VARCHAR(255) NOT NULL DEFAULT '';
 ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS document_pages TEXT DEFAULT NULL;
+ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS document_names MEDIUMTEXT DEFAULT NULL;
 ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS sender_type VARCHAR(20) NOT NULL DEFAULT 'Student';
 ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS recipient_contact_type VARCHAR(20) NOT NULL DEFAULT 'Unassigned';
+ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS contact_phone VARCHAR(20) DEFAULT NULL;
 ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS paper_count INT UNSIGNED NOT NULL DEFAULT 0;
 ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS is_priority TINYINT(1) NOT NULL DEFAULT 0;
 ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS received_paper_count INT UNSIGNED DEFAULT NULL;

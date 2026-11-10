@@ -148,12 +148,12 @@ function App() {
   const [reportItems, setReportItems] = useState([]);
 
   const [incomingForm, setIncomingForm] = useState({ date: '', from: 'Student', submitterName: '', subject: '', clientPhone: '' });
-  const [borrowedForm, setBorrowedForm] = useState({ item: '', borrower: '', phone: '' });
-  const [borrowedBusyId, setBorrowedBusyId] = useState(null);
+  const [borrowedForm, setBorrowedForm] = useState({ categoryId: '', inventoryId: '', otherItemName: '', borrower: '', phone: '' });
   const [borrowedSubmitting, setBorrowedSubmitting] = useState(false);
   const [batchSubmitting, setBatchSubmitting] = useState(false);
   const isFormSubmitting = incomingSubmitting || borrowedSubmitting || batchSubmitting;
-  const [batchForm, setBatchForm] = useState({ type: '', submitterName: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', documentPages: [], remarks: '' });
+  const [batchForm, setBatchForm] = useState({ type: '', submitterName: '', contactPhone: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', documentNames: [''], documentPages: [], remarks: '' });
+  const [batchDocumentPage, setBatchDocumentPage] = useState(0);
   const [editingBatchId, setEditingBatchId] = useState(null);
   const [batchStatusBusyId, setBatchStatusBusyId] = useState(null);
   const [reportForm, setReportForm] = useState({ type: 'Incoming', from: '', to: '' });
@@ -280,7 +280,11 @@ function App() {
         setBorrowedItems(data.borrowedItems.map(b => ({
           id: b.id,
           item: b.item,
+          inventoryId: b.inventoryId,
+          identifier: b.identifier || '',
+          category: b.category || '',
           borrower: b.borrower,
+          borrowerPhone: b.borrowerPhone || '',
           borrowed: b.borrowed,
           borrowedAt: b.borrowedAt,
           returned: b.returned || '',
@@ -563,7 +567,8 @@ function App() {
   const openRecordModal = (formType) => {
     if (formType === 'batches') {
       setEditingBatchId(null);
-      setBatchForm({ type: '', submitterName: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', documentPages: [], remarks: '' });
+      setBatchForm({ type: '', submitterName: '', contactPhone: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', documentNames: [''], documentPages: [], remarks: '' });
+      setBatchDocumentPage(0);
     }
     setRecordModal(formType);
   };
@@ -772,6 +777,15 @@ function App() {
   const handleSubmitBorrowed = async (event) => {
     event.preventDefault();
     if (borrowedSubmitting) return;
+    const selectedCategory = (apiData?.borrowInventoryCategories || []).find((category) => String(category.id) === String(borrowedForm.categoryId));
+    const isOtherCategory = selectedCategory && (selectedCategory.isDefault === true || Number(selectedCategory.isDefault) === 1);
+    const inventoryItem = (apiData?.borrowInventoryItems || []).find((item) => String(item.id) === String(borrowedForm.inventoryId));
+    const isUnlistedOther = isOtherCategory && !borrowedForm.inventoryId;
+    const borrowedItemName = isUnlistedOther ? borrowedForm.otherItemName.trim() : inventoryItem?.name;
+    if (!borrowedForm.borrower.trim() || !selectedCategory || !borrowedItemName || (!isUnlistedOther && inventoryItem?.status !== 'Available')) {
+      showActionFeedback({ title: 'Choose an available item', description: isUnlistedOther ? 'Enter the item name and borrower name.' : 'Enter the borrower name and select an item marked Available.', tone: 'warning' });
+      return;
+    }
     if (borrowedForm.phone !== '' && !isValidContactNumber(borrowedForm.phone)) {
       showActionFeedback({ title: 'Check the contact number', description: 'Enter exactly 11 digits using numbers only, or leave the field blank.', tone: 'warning' });
       return;
@@ -783,8 +797,9 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'add_borrowed',
-          item: borrowedForm.item,
-          borrower: borrowedForm.borrower,
+          category_id: selectedCategory.id,
+          ...(isUnlistedOther ? { item_name: borrowedItemName } : { inventory_id: inventoryItem.id }),
+          borrower: borrowedForm.borrower.trim(),
           borrower_phone: borrowedForm.phone,
         }),
       });
@@ -796,12 +811,29 @@ function App() {
       if (result.success) {
         if (mobileSettings.confirmationSound) playConfirmTone();
         const borrowedStatus = result.status || 'Borrowed';
-        setBorrowedItems((prev) => [{ id: result.id, ...borrowedForm, borrowed: result.borrowedAt.slice(0, 10), borrowedAt: result.borrowedAt, returned: '', status: borrowedStatus }, ...prev]);
+        const borrowedRecord = {
+          id: result.id,
+          inventoryId: result.inventoryId,
+          item: result.item || borrowedItemName,
+          identifier: result.identifier || inventoryItem?.identifier || '',
+          category: result.category || selectedCategory.name,
+          borrower: borrowedForm.borrower.trim(),
+          borrowerPhone: borrowedForm.phone,
+          borrowed: result.borrowedAt.slice(0, 10),
+          borrowedAt: result.borrowedAt,
+          returned: '',
+          status: borrowedStatus,
+        };
+        setBorrowedItems((prev) => [borrowedRecord, ...prev]);
+        setApiData((current) => current ? {
+          ...current,
+          borrowInventoryItems: (current.borrowInventoryItems || []).map((item) => item.id === inventoryItem?.id ? { ...item, status: 'Borrowed' } : item),
+        } : current);
         setReportItems((prev) => [
-          { id: result.id, date: result.borrowedAt.slice(0, 10), type: 'Borrowed', from: borrowedForm.borrower, subject: borrowedForm.item, status: borrowedStatus },
+          { id: result.id, date: result.borrowedAt.slice(0, 10), type: 'Borrowed', from: borrowedForm.borrower.trim(), subject: borrowedItemName, status: borrowedStatus },
           ...prev,
         ]);
-        setBorrowedForm({ item: '', borrower: '', phone: '' });
+        setBorrowedForm({ categoryId: '', inventoryId: '', otherItemName: '', borrower: '', phone: '' });
         closePopup(() => {
           setActiveForm(null);
           setRecordModal(null);
@@ -809,8 +841,8 @@ function App() {
             title: 'Borrowed item recorded',
             description: 'The borrowed item has been added to the office records.',
             details: [
-              { label: 'Item', value: borrowedForm.item },
-              { label: 'Borrower', value: borrowedForm.borrower },
+              { label: 'Item', value: `${borrowedItemName}${inventoryItem?.identifier ? ` (${inventoryItem.identifier})` : ''}` },
+              { label: 'Borrower', value: borrowedForm.borrower.trim() },
               { label: 'Status', value: statusLabel(borrowedStatus) },
             ],
             reference: result.id ? `Record #${result.id}` : '',
@@ -824,37 +856,6 @@ function App() {
               showActionFeedback({ title: 'Borrowed item not recorded', description: error.message, tone: 'danger' });
     } finally {
       setBorrowedSubmitting(false);
-    }
-  };
-
-  const handleMarkBorrowedReturned = async (item) => {
-    if (!item.id || borrowedBusyId !== null) return;
-    setBorrowedBusyId(item.id);
-    try {
-      const response = await apiFetch({
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'mark_borrowed_returned', item_id: item.id }),
-      });
-      const result = await readApiResponse(response);
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || `HTTP error! status: ${response.status}`);
-      }
-      const returned = result.returned || todayLocalDate();
-      setBorrowedItems((items) => items.map((current) => current.id === item.id
-        ? { ...current, returned, status: 'Returned' }
-        : current));
-      setReportItems((items) => items.map((current) => (
-        current.type === 'Borrowed' && current.id === item.id && current.status !== 'Returned'
-          ? { ...current, status: 'Returned' }
-          : current
-      )));
-      showActionFeedback({       title: 'Item marked as returned', description: `${item.item} is now recorded as Returned.`, tone: 'success' });
-    } catch (error) {
-            console.error('Borrowed item return update failed:', error);
-            showActionFeedback({ title: 'Borrowed item not updated', description: error.message || 'The borrowed item could not be updated.', tone: 'danger' });
-    } finally {
-      setBorrowedBusyId(null);
     }
   };
 
@@ -873,8 +874,8 @@ function App() {
       setReloadCount((count) => count + 1);
       showActionFeedback({
         title: 'Bulk submission status updated',
-        description: `${batch.batchCode} and its linked documents are now ${result.status}.`,
-        tone: 'success',
+        description: `${batch.batchCode} and its linked documents are now ${result.status}.${result.sms_notice ? ` ${result.sms_notice}` : ''}`,
+        tone: result.sms_sent === false ? 'warning' : 'success',
       });
     } catch (error) {
       showActionFeedback({ title: 'Bulk submission status not updated', description: error.message, tone: 'danger' });
@@ -886,14 +887,15 @@ function App() {
   const handleSubmitBatch = async (event) => {
     event.preventDefault();
     if (batchSubmitting) return;
-    const batchType = batchForm.type.trim();
-    if (!batchType || batchType.length > 255) {
-      showActionFeedback({ title: 'Check the bulk submission type', description: 'Enter a bulk submission type of up to 255 characters.', tone: 'warning' });
-      return;
-    }
+    const batchType = batchForm.type.trim() || 'Bulk documents';
     const submitterName = batchForm.submitterName.trim();
     if (!submitterName || submitterName.length > 255) {
       showActionFeedback({ title: 'Check the name', description: 'Enter a name of no more than 255 characters.', tone: 'warning' });
+      return;
+    }
+    const contactPhone = contactNumberDigits(batchForm.contactPhone || '');
+    if (batchForm.contactPhone && !isValidContactNumber(contactPhone)) {
+      showActionFeedback({ title: 'Check the shared contact number', description: 'Enter one 11-digit number for the whole bulk submission, or leave it blank.', tone: 'warning' });
       return;
     }
     if (!editingBatchId && (!batchForm.date || batchForm.date < todayLocalDate() || batchForm.date < MIN_RECORD_DATE)) {
@@ -901,18 +903,27 @@ function App() {
       return;
     }
     const paperCount = Number(batchForm.paperCount);
-    if (!Number.isInteger(paperCount) || paperCount < 1 || paperCount > 3) {
-      showActionFeedback({ title: 'Check the number of documents', description: 'Enter a number between 1 and 3.', tone: 'warning' });
+    if (!Number.isInteger(paperCount) || paperCount < 1 || paperCount > 9999) {
+      showActionFeedback({ title: 'Check the number of documents', description: 'Enter a number between 1 and 9,999.', tone: 'warning' });
+      return;
+    }
+    const documentNames = Array.from({ length: paperCount }, (_, index) => String(batchForm.documentNames?.[index] ?? '').trim());
+    const invalidNameIndex = documentNames.findIndex((name) => name === '' || name.length > 255);
+    if (invalidNameIndex !== -1) {
+      setBatchDocumentPage(Math.floor(invalidNameIndex / 25));
+      showActionFeedback({ title: 'Check the document names', description: `Enter a name of up to 255 characters for document ${invalidNameIndex + 1}.`, tone: 'warning' });
       return;
     }
     const pageValues = Array.from({ length: paperCount }, (_, index) => String(batchForm.documentPages?.[index] ?? '').trim());
-    const pagesInvalid = pageValues.some((value) => value !== '' && (!/^\d+$/.test(value) || Number(value) < 1 || Number(value) > 9999));
+    const invalidPageIndex = pageValues.findIndex((value) => !/^\d+$/.test(value) || Number(value) < 1 || Number(value) > 9999);
+    const pagesInvalid = invalidPageIndex !== -1;
     if (pagesInvalid) {
-      showActionFeedback({ title: 'Check the pages per document', description: 'Leave a document blank, or enter a number between 1 and 9,999.', tone: 'warning' });
+      setBatchDocumentPage(Math.floor(invalidPageIndex / 25));
+      showActionFeedback({ title: 'Check the page counts', description: `Enter at least 1 page for document ${invalidPageIndex + 1} (maximum 9,999).`, tone: 'warning' });
       return;
     }
-    const documentPages = pageValues.some((value) => value !== '') ? pageValues.map((value) => (value === '' ? null : Number(value))) : [];
-    const totalPages = documentPages.reduce((sum, value) => sum + (value || 0), 0);
+    const documentPages = pageValues.map(Number);
+    const totalPages = documentPages.reduce((sum, value) => sum + value, 0);
     setBatchSubmitting(true);
     try {
       const response = await apiFetch({
@@ -924,9 +935,11 @@ function App() {
           document_type: batchForm.documentType,
           batch_type: batchType,
           submitter_name: submitterName,
+          contact_phone: contactPhone,
           sender_type: formLabels.senderEnabled ? batchForm.senderType : '',
           remarks: batchForm.remarks,
           paper_count: paperCount,
+          document_names: documentNames,
           document_pages: documentPages,
         }),
       });
@@ -936,7 +949,7 @@ function App() {
       let successNotice;
       if (editingBatchId) {
         setBatchItems((items) => items.map((batch) => batch.id === editingBatchId
-          ? { ...batch, documentType: batchForm.documentType, batchType, submitterName, senderType: batchForm.senderType, paperCount, documentPages, remarks: batchForm.remarks }
+          ? { ...batch, documentType: batchForm.documentType, batchType, submitterName, contactPhone, senderType: batchForm.senderType, paperCount, documentNames, documentPages, remarks: batchForm.remarks }
           : batch));
         successNotice = {
           title: 'Bulk submission updated',
@@ -991,7 +1004,8 @@ function App() {
         };
       }
       closePopup(() => {
-        setBatchForm({ type: '', submitterName: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', documentPages: [], remarks: '' });
+        setBatchForm({ type: '', submitterName: '', contactPhone: '', documentType: 'Incoming', date: todayLocalDate(), senderType: 'Student', paperCount: '1', documentNames: [''], documentPages: [], remarks: '' });
+        setBatchDocumentPage(0);
         setEditingBatchId(null);
         setActiveForm(null);
         setRecordModal(null);
@@ -1094,7 +1108,7 @@ function App() {
               Cancel
             </button>
             <button type="submit" disabled={incomingSubmitting || !isOnline} className={`${buttonClass} ${formPrimaryClass}`} aria-live="polite">
-              {incomingSubmitting ? <><span className="loading-spinner" aria-hidden="true" />Submitting…</> : !isOnline ? 'Connection required' : 'Submit'}
+              {incomingSubmitting ? <><span className="loading-spinner" aria-hidden="true" />Submitting…</> : !isOnline ? 'Connection required' : formType === 'quick' ? 'Quick Submit' : 'Submit document'}
             </button>
           </div>
         </form>
@@ -1102,6 +1116,10 @@ function App() {
     }
 
     if (formType === 'batches') {
+      const batchPaperCount = Math.max(0, Math.min(Math.floor(Number(batchForm.paperCount)) || 0, 9999));
+      const batchDocumentPageCount = Math.ceil(batchPaperCount / 25);
+      const batchPageStart = batchDocumentPage * 25;
+      const visibleBatchDocumentCount = Math.min(25, Math.max(0, batchPaperCount - batchPageStart));
       return (
         <form onSubmit={handleSubmitBatch} className="mobile-modal-scroll min-h-0 flex-1 overflow-y-auto rounded-3xl border border-emerald-200 bg-white p-4 shadow-sm sm:p-6">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -1113,62 +1131,100 @@ function App() {
               <span className={labelClass}>Name</span>
               <input type="text" maxLength={255} autoComplete="name" className={inputClass} value={batchForm.submitterName} onChange={(event) => setBatchForm({ ...batchForm, submitterName: event.target.value })} placeholder="Full name" required />
             </label>
-            <fieldset className="min-w-0 space-y-2" hidden={!formLabels.senderEnabled}>
-              <legend className={labelClass}>{formLabels.sender}</legend>
-              <div className="grid grid-cols-2 gap-2">
-                {['Student', 'Faculty'].map((senderType) => {
-                  const selected = batchForm.senderType === senderType;
+            <label className="space-y-2 sm:col-span-2">
+              <span className={labelClass}>Shared contact number <span className="font-normal text-slate-500">(optional)</span></span>
+              <input type="tel" inputMode="numeric" autoComplete="tel-national" pattern="[0-9]{11}" title="Enter exactly 11 digits." className={inputClass} value={batchForm.contactPhone} onChange={(event) => setBatchForm({ ...batchForm, contactPhone: contactNumberDigits(event.target.value) })} placeholder="11-digit number, e.g. 09123456789" />
+              <span className={helperClass}>One number for the entire bulk submission. Staff will send one SMS to this number when the batch moves to For Release.</span>
+            </label>
+            <div className="grid grid-cols-[minmax(0,1fr)_7rem] items-start gap-3 sm:col-span-2">
+              <fieldset className="min-w-0 space-y-2" hidden={!formLabels.senderEnabled}>
+                <legend className={labelClass}>{formLabels.sender}</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  {['Student', 'Faculty'].map((senderType) => {
+                    const selected = batchForm.senderType === senderType;
+                    return (
+                      <label key={senderType} className={`flex min-h-12 cursor-pointer items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-semibold transition focus-within:ring-2 focus-within:ring-emerald-200 ${selected ? 'border-emerald-700 bg-emerald-50 text-emerald-900' : 'border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50'}`}>
+                        <input
+                          type="radio"
+                          name="batch_sender_type"
+                          value={senderType}
+                          checked={selected}
+                          onChange={() => setBatchForm({ ...batchForm, senderType })}
+                          className="h-4 w-4 shrink-0 accent-emerald-800"
+                          required={formLabels.senderEnabled}
+                          disabled={!formLabels.senderEnabled}
+                        />
+                        <span>{senderType}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
+              <label className="min-w-0 space-y-2">
+                <span className={`${labelClass} text-xs`}>Number of documents</span>
+                <input type="number" inputMode="numeric" min="1" max="9999" className={inputClass} value={batchForm.paperCount} onChange={(event) => {
+                  const nextCount = Math.max(0, Math.min(Math.floor(Number(event.target.value)) || 0, 9999));
+                  setBatchForm({ ...batchForm, paperCount: event.target.value, documentNames: Array.from({ length: nextCount }, (_, index) => batchForm.documentNames?.[index] ?? ''), documentPages: Array.from({ length: nextCount }, (_, index) => batchForm.documentPages?.[index] ?? '') });
+                  setBatchDocumentPage(0);
+                }} readOnly={Boolean(editingBatchId && batchItems.find((batch) => batch.id === editingBatchId)?.receivedAt)} required />
+                {editingBatchId && batchItems.find((batch) => batch.id === editingBatchId)?.receivedAt && <span className={helperClass}>Count locked after receipt.</span>}
+              </label>
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <span className={labelClass}>Name and pages for each document</span>
+              <p className={helperClass}>Enter a name and a page count of at least 1 for every document. Showing documents {batchPaperCount ? `${batchPageStart + 1}–${batchPageStart + visibleBatchDocumentCount}` : '0'} of {batchPaperCount}.</p>
+              <div className="space-y-2">
+                {Array.from({ length: visibleBatchDocumentCount }, (_, offset) => {
+                  const index = batchPageStart + offset;
                   return (
-                    <label key={senderType} className={`flex min-h-12 cursor-pointer items-center gap-2 rounded-2xl border px-3 py-2 text-sm font-semibold transition focus-within:ring-2 focus-within:ring-emerald-200 ${selected ? 'border-emerald-700 bg-emerald-50 text-emerald-900' : 'border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50'}`}>
-                      <input
-                        type="radio"
-                        name="batch_sender_type"
-                        value={senderType}
-                        checked={selected}
-                        onChange={() => setBatchForm({ ...batchForm, senderType })}
-                        className="h-4 w-4 shrink-0 accent-emerald-800"
-                        required={formLabels.senderEnabled}
-                        disabled={!formLabels.senderEnabled}
-                      />
-                      <span>{senderType}</span>
-                    </label>
+                    <div key={index} className="grid grid-cols-[minmax(0,1fr)_7rem] items-end gap-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-3">
+                      <label className="block space-y-1">
+                        <span className="text-xs font-medium text-slate-600">Document {index + 1} name</span>
+                        <input
+                          type="text"
+                          maxLength={255}
+                          placeholder="e.g. Transcript request"
+                          aria-label={`Name of document ${index + 1}`}
+                          className={inputClass}
+                          value={batchForm.documentNames?.[index] ?? ''}
+                          onChange={(event) => {
+                            const next = [...(batchForm.documentNames || [])];
+                            next[index] = event.target.value;
+                            setBatchForm({ ...batchForm, documentNames: next });
+                          }}
+                          required
+                        />
+                      </label>
+                      <label className="block min-w-0 space-y-1">
+                        <span className="text-xs font-medium text-slate-600">Page count</span>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min="1"
+                          max="9999"
+                          placeholder="Min. 1"
+                          aria-label={`Page count for document ${index + 1}`}
+                          className={inputClass}
+                          value={batchForm.documentPages?.[index] ?? ''}
+                          onChange={(event) => {
+                            const next = [...(batchForm.documentPages || [])];
+                            next[index] = event.target.value;
+                            setBatchForm({ ...batchForm, documentPages: next });
+                          }}
+                          required
+                        />
+                      </label>
+                    </div>
                   );
                 })}
               </div>
-            </fieldset>
-            <label className="space-y-2">
-              <span className={labelClass}>{formLabels.documentType}</span>
-              <input type="text" maxLength={255} className={inputClass} value={batchForm.type} onChange={(event) => setBatchForm({ ...batchForm, type: event.target.value })} placeholder="e.g. Transcript request" required />
-            </label>
-            <label className="space-y-2 sm:col-span-2">
-              <span className={labelClass}>Number of documents</span>
-              <input type="number" inputMode="numeric" min="1" max="3" className={inputClass} value={batchForm.paperCount} onChange={(event) => setBatchForm({ ...batchForm, paperCount: event.target.value })} readOnly={Boolean(editingBatchId && batchItems.find((batch) => batch.id === editingBatchId)?.receivedAt)} required />
-              {editingBatchId && batchItems.find((batch) => batch.id === editingBatchId)?.receivedAt && <span className={helperClass}>The expected count is locked because staff have confirmed receipt.</span>}
-            </label>
-            <div className="space-y-2 sm:col-span-2">
-              <span className={labelClass}>Pages per document <span className="font-normal text-slate-500">(optional)</span></span>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {Array.from({ length: Math.min(Math.max(Math.floor(Number(batchForm.paperCount)) || 0, 0), 3) }, (_, index) => (
-                  <label key={index} className="block space-y-1">
-                    <span className="text-xs font-medium text-slate-600">Document {index + 1}</span>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min="1"
-                      max="9999"
-                      placeholder="Pages"
-                      aria-label={`Pages in document ${index + 1}`}
-                      className={inputClass}
-                      value={batchForm.documentPages?.[index] ?? ''}
-                      onChange={(event) => {
-                        const next = [...(batchForm.documentPages || [])];
-                        next[index] = event.target.value;
-                        setBatchForm({ ...batchForm, documentPages: next });
-                      }}
-                    />
-                  </label>
-                ))}
-              </div>
+              {batchDocumentPageCount > 1 && (
+                <div className="flex items-center justify-between gap-3 pt-1">
+                  <button type="button" className={secondaryButtonClass} disabled={batchDocumentPage === 0} onClick={() => setBatchDocumentPage((page) => Math.max(0, page - 1))}>Previous 25</button>
+                  <span className="text-xs text-slate-600">Page {batchDocumentPage + 1} of {batchDocumentPageCount}</span>
+                  <button type="button" className={secondaryButtonClass} disabled={batchDocumentPage + 1 >= batchDocumentPageCount} onClick={() => setBatchDocumentPage((page) => Math.min(batchDocumentPageCount - 1, page + 1))}>Next 25</button>
+                </div>
+              )}
             </div>
           </div>
           <label className="mt-4 block space-y-2">
@@ -1184,25 +1240,118 @@ function App() {
     }
 
     if (formType === 'borrowed') {
+      const inventoryCategories = apiData?.borrowInventoryCategories || [];
+      const inventoryItems = apiData?.borrowInventoryItems || [];
+      const selectedCategory = inventoryCategories.find((category) => String(category.id) === String(borrowedForm.categoryId));
+      const isOtherCategory = selectedCategory?.isDefault === true || Number(selectedCategory?.isDefault) === 1;
+      const categoryItems = inventoryItems.filter((item) => String(item.categoryId) === String(borrowedForm.categoryId));
+      const selectedInventoryItem = categoryItems.find((item) => String(item.id) === String(borrowedForm.inventoryId));
       return (
         <form onSubmit={handleSubmitBorrowed} className="mobile-modal-scroll min-h-0 flex-1 overflow-y-auto rounded-3xl border border-emerald-200 bg-white p-4 shadow-sm sm:p-6">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="space-y-2">
-              <span className={labelClass}>Item name</span>
-              <input type="text" maxLength={255} className={inputClass} value={borrowedForm.item} onChange={(event) => setBorrowedForm({ ...borrowedForm, item: event.target.value })} placeholder="e.g. Projector" required />
-            </label>
-            <label className="space-y-2">
-              <span className={labelClass}>Name</span>
+          <div className="space-y-4">
+            <label className="block space-y-2">
+              <span className={labelClass}>Borrower name</span>
               <input type="text" maxLength={255} autoComplete="name" className={inputClass} value={borrowedForm.borrower} onChange={(event) => setBorrowedForm({ ...borrowedForm, borrower: event.target.value })} placeholder="Full name" required />
             </label>
-            <label className="space-y-2">
-              <span className={labelClass}>Contact number (optional)</span>
+            <label className="block space-y-2">
+              <span className={labelClass}>Item category</span>
+              <select
+                className={inputClass}
+                value={borrowedForm.categoryId}
+                onChange={(event) => setBorrowedForm({ ...borrowedForm, categoryId: event.target.value, inventoryId: '', otherItemName: '' })}
+                required
+              >
+                <option value="">Select a category</option>
+                {inventoryCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+              </select>
+              {inventoryCategories.length === 0 && <span className={helperClass}>No inventory categories are configured yet. Ask office staff to add categories and items.</span>}
+            </label>
+            {isOtherCategory ? (
+              <div className="space-y-3">
+                {categoryItems.length > 0 && (
+                  <label className="block space-y-2">
+                    <span className={labelClass}>Registered Other item <span className="font-normal text-slate-500">(optional)</span></span>
+                    <select className={inputClass} value={borrowedForm.inventoryId} onChange={(event) => setBorrowedForm({ ...borrowedForm, inventoryId: event.target.value, otherItemName: '' })}>
+                      <option value="">Borrow an unlisted item instead</option>
+                      {categoryItems.map((item) => <option key={item.id} value={item.id} disabled={item.status !== 'Available'}>{item.name}{item.status !== 'Available' ? ` · ${item.status}` : ''}</option>)}
+                    </select>
+                  </label>
+                )}
+                {!borrowedForm.inventoryId && (
+                  <label className="block space-y-2">
+                    <span className={labelClass}>Unlisted item</span>
+                    <input type="text" maxLength={255} className={inputClass} value={borrowedForm.otherItemName} onChange={(event) => setBorrowedForm({ ...borrowedForm, otherItemName: event.target.value })} placeholder="Enter item name" required />
+                    <span className={helperClass}>No identifier ID is needed for items borrowed under Other.</span>
+                  </label>
+                )}
+              </div>
+            ) : (
+              <label className="block space-y-2">
+                <span className={labelClass}>Available item</span>
+                <details className="group relative">
+                  <summary
+                    className={`${inputClass} flex list-none cursor-pointer items-center justify-between gap-3 text-left marker:hidden`}
+                    aria-haspopup="listbox"
+                    aria-disabled={!borrowedForm.categoryId}
+                    onClick={(event) => {
+                      if (!borrowedForm.categoryId) event.preventDefault();
+                    }}
+                  >
+                    <span className={selectedInventoryItem ? 'truncate text-emerald-950' : 'truncate text-slate-500'}>
+                      {selectedInventoryItem ? `${selectedInventoryItem.name}${selectedInventoryItem.identifier ? ` · ${selectedInventoryItem.identifier}` : ''}` : borrowedForm.categoryId ? 'Choose an item' : 'Select a category first'}
+                    </span>
+                    {selectedInventoryItem && (
+                      <span className="inline-flex shrink-0 items-center gap-2 text-xs font-semibold text-slate-600">
+                        <span className={`h-3 w-3 rounded-full ${selectedInventoryItem.status === 'Available' ? 'bg-green-500' : 'bg-slate-400'}`} aria-hidden="true" />
+                        {selectedInventoryItem.status}
+                      </span>
+                    )}
+                    {!selectedInventoryItem && <span className="text-slate-500" aria-hidden="true">⌄</span>}
+                  </summary>
+                  {borrowedForm.categoryId && (
+                    <div className="absolute z-20 mt-2 max-h-60 w-full overflow-y-auto rounded-2xl border border-emerald-200 bg-white p-2 shadow-xl" role="listbox" aria-label="Inventory items">
+                      {categoryItems.length === 0 ? (
+                        <p className="px-3 py-2 text-sm text-slate-600">No items are registered in this category.</p>
+                      ) : categoryItems.map((item) => {
+                        const available = item.status === 'Available';
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            role="option"
+                            aria-selected={String(item.id) === String(borrowedForm.inventoryId)}
+                            disabled={!available}
+                            onClick={(event) => {
+                              setBorrowedForm({ ...borrowedForm, inventoryId: String(item.id) });
+                              const dropdown = event.currentTarget.closest('details');
+                              if (dropdown) dropdown.open = false;
+                            }}
+                            className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-sm transition hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate font-semibold text-emerald-950">{item.name}</span>
+                              {item.identifier && <span className="block truncate text-xs text-slate-600">{item.identifier}</span>}
+                            </span>
+                            <span className="inline-flex shrink-0 items-center gap-2 text-xs font-medium text-slate-600">
+                              <span className={`h-3 w-3 rounded-full ${available ? 'bg-green-500' : 'bg-slate-400'}`} aria-hidden="true" />
+                              {item.status}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </details>
+                {borrowedForm.categoryId && categoryItems.length === 0 && <span className={helperClass}>No items are registered in this category.</span>}
+                <span className={helperClass}>Available (green) items can be selected. Borrowed items are with a borrower; Unavailable items cannot be selected.</span>
+              </label>
+            )}
+            <label className="block space-y-2">
+              <span className={labelClass}>Contact number <span className="font-normal text-slate-500">(optional)</span></span>
               <input type="tel" inputMode="numeric" autoComplete="tel-national" pattern="[0-9]{11}" title="Enter exactly 11 digits." className={inputClass} value={borrowedForm.phone} onChange={(event) => setBorrowedForm({ ...borrowedForm, phone: contactNumberDigits(event.target.value) })} placeholder="11-digit number, e.g. 09123456789" />
             </label>
+            <p className={helperClass}>The borrowed date and time are recorded automatically. Staff mark the item returned to make it available again.</p>
           </div>
-          <p className={helperClass}>
-            The borrowed date and time are recorded automatically. Mark the item as returned when it is brought back.
-          </p>
 
           <div className={formActionsClass}>
             <button type="button" disabled={borrowedSubmitting} onClick={() => closePopup(() => { setRecordModal(null); setActiveForm(null); })} className={secondaryButtonClass}>
@@ -1298,7 +1447,7 @@ function App() {
         <>
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className={sectionTitleClass}>Borrowed items</p>
-                        {!activeForm && <button className={buttonClass} onClick={() => openRecordModal('borrowed')}>Add borrowed item</button>}
+            {!activeForm && <button className={buttonClass} onClick={() => openRecordModal('borrowed')}>Borrow an item</button>}
           </div>
 
           <div className="space-y-2">
@@ -1307,7 +1456,9 @@ function App() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="break-words text-left font-semibold text-emerald-950">{item.item}</p>
+                    <p className="mt-1 text-left text-xs font-medium text-emerald-800">{item.category ? `${item.category} · ` : ''}{item.identifier || 'No ID'}</p>
                     <p className="mt-1 text-left text-sm text-slate-600">Borrowed by {item.borrower}</p>
+                    {item.borrowerPhone && <p className="mt-1 text-left text-xs text-slate-600">{item.borrowerPhone}</p>}
                   </div>
                   <span className={`${badgeClass} ${statusClasses[item.status] || neutralBadgeClass}`}>{statusLabel(item.status, 'Borrowed')}</span>
                 </div>
@@ -1315,16 +1466,6 @@ function App() {
                   <span>Borrowed on {formatBorrowedDateTime(item.borrowedAt || item.borrowed)}</span>
                   <span>{item.returned ? `Returned on ${String(item.returned).slice(0, 10)}` : 'Not yet returned'}</span>
                 </div>
-                {item.status !== 'Returned' && item.id && (
-                  <button
-                    type="button"
-                    onClick={() => handleMarkBorrowedReturned(item)}
-                    disabled={borrowedBusyId !== null || !isOnline}
-                    className={cardActionClass}
-                  >
-                    {borrowedBusyId === item.id ? 'Updating…' : 'Mark as returned'}
-                  </button>
-                )}
               </article>
             ))}
           </div>
@@ -1359,7 +1500,16 @@ function App() {
                   </div>
                 </div>
                 <p className="mt-2 text-sm font-semibold text-emerald-900">{batch.batchType || 'Bulk submission'} · {batch.paperCount} expected{parseDocumentPages(batch.documentPages).reduce((sum, value) => sum + (Number(value) || 0), 0) ? ` · ${parseDocumentPages(batch.documentPages).reduce((sum, value) => sum + (Number(value) || 0), 0)} pages` : ''}</p>
+                {parseDocumentPages(batch.documentNames).length > 0 && (
+                  <ul className="mt-2 space-y-1 text-left text-sm text-slate-700">
+                    {parseDocumentPages(batch.documentNames).map((name, index) => {
+                      const pages = parseDocumentPages(batch.documentPages)[index];
+                      return <li key={`${batch.id}-document-${index}`}>{index + 1}. {name}{Number(pages) > 0 ? ` · ${pages} ${Number(pages) === 1 ? 'page' : 'pages'}` : ''}</li>;
+                    })}
+                  </ul>
+                )}
                 <p className="mt-1 text-sm text-slate-600">Submitted by {batch.submitterName || 'Name not recorded'}</p>
+                {batch.contactPhone && <p className="mt-1 text-sm text-slate-600">Shared contact: {batch.contactPhone}</p>}
                 {batch.receivedAt
                   ? <p className={`mt-1 text-sm font-medium ${Number(batch.receivedPaperCount) === Number(batch.intakeExpectedCount) ? 'text-emerald-700' : 'text-rose-700'}`}>{batch.receivedPaperCount} received · {String(batch.receivedAt).slice(0, 16)}</p>
                   : <p className="mt-1 text-sm text-slate-600">Awaiting office count confirmation</p>}
@@ -1387,13 +1537,16 @@ function App() {
                       setBatchForm({
                         type: batch.batchType || '',
                         submitterName: batch.submitterName || '',
+                        contactPhone: batch.contactPhone || '',
                         documentType: batch.documentType || 'Incoming',
                         date: String(batch.batchDate || '').slice(0, 10),
                         senderType: batch.senderType || 'Student',
                         paperCount: String(batch.paperCount || 1),
+                        documentNames: Array.from({ length: Number(batch.paperCount) || 1 }, (_, index) => parseDocumentPages(batch.documentNames)[index] || ''),
                         documentPages: parseDocumentPages(batch.documentPages).map((value) => (value ? String(value) : '')),
                         remarks: batch.remarks || '',
                       });
+                      setBatchDocumentPage(0);
                       setRecordModal('batches');
                     }}
                   >
@@ -1690,7 +1843,7 @@ function App() {
                     group: 'Submit',
                     items: [
                       { key: 'submit', label: 'Submit a document', detail: 'Record a document for office review.', icon: BiArchiveIn },
-                      { key: 'quick', label: 'Quick submit', detail: 'Submit a document without a contact number.', icon: BiFile },
+                      { key: 'quick', label: 'Quick Submit', detail: 'For one-way drop-offs needing no reply (e.g., completed forms or supporting documents). No phone number required.', icon: BiFile },
                       { key: 'batch', label: 'Bulk documents', detail: 'Record several documents in one submission.', icon: BiLayer },
                     ],
                   },
@@ -1808,20 +1961,24 @@ function App() {
                 <div className="text-left">
                   <h2 id="incoming-modal-title" className="text-left text-xl font-bold text-emerald-950 sm:text-2xl">
                     {incomingModalMode === 'quick'
-                      ? 'Quick submit'
+                      ? 'Quick Submit'
                       : isBatchOrBorrowModal
                         ? recordModal === 'batches' ? (editingBatchId ? 'Edit bulk documents' : 'Bulk documents') : 'Borrowed item'
                         : 'Submit a document'}
                   </h2>
-                  <p className="mt-1 text-left text-sm text-slate-600">
-                    {incomingModalMode === 'quick'
-                      ? 'Records the document without collecting a contact number.'
-                      : isBatchOrBorrowModal
+                  {incomingModalMode === 'quick' ? (
+                    <p className="mt-1 text-left text-sm text-slate-600">
+                      For one-way drop-offs (e.g., completed forms); no phone number needed.
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-left text-sm text-slate-600">
+                      {isBatchOrBorrowModal
                         ? recordModal === 'batches'
                           ? editingBatchId ? 'Update the details and the number of documents.' : 'Enter the details and the number of documents.'
                           : 'Record the item and the person who borrowed it.'
                         : 'Enter the document details and a contact number.'}
-                  </p>
+                    </p>
+                  )}
                 </div>
               </div>
               {incomingModalMode ? renderForm(incomingModalMode) : recordModal ? renderForm(recordModal) : renderForm()}

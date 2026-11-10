@@ -383,8 +383,14 @@ document_batches  ──1:N──►  batch_papers  ──1:1──►  document
 4. Optionally issue a `tracking_token` for the batch itself.
 5. Mobile path runs inside a transaction and commits only after every insert.
 
-`normalize_document_pages()` validates the per-paper page numbers (0–9999,
-matching `paper_count`) and stores them as JSON.
+The mobile bulk form creates one named entry per item (1–9,999), with up to 25
+entries shown at a time. `document_names` stores the trimmed names as JSON;
+`normalize_document_names()` requires one name of at most 255 characters per
+paper. `normalize_document_pages()` requires a page count for every paper
+(1–9999, matching `paper_count`) and stores them as JSON. Names and page counts
+remain aligned by their array position. `contact_phone` stores one optional,
+11-digit shared batch contact; entering For Release sends one SMS to that
+number after the status transaction commits.
 
 ### 6.2 Intake receipt (two modes)
 
@@ -462,25 +468,42 @@ visible from receipt confirmation. A batch can be confirmed but still `Pending`.
 
 ---
 
-## 7. Borrowed items flow
+## 7. Borrowed inventory flow
 
 ```text
-item_categories ──1:N──► borrowed_items
+item_categories ──1:N──► borrowable_inventory ──1:N──► borrowed_items
+       └────────────────1:N───────────────────► borrowed_items (unlisted Other items)
 ```
 
-1. `borrowed.php` ensures `borrower_phone` exists (idempotent `ALTER TABLE`).
-2. Create: item name + borrower required; phone blank or 11 digits; optional
-   `category_id` (invalid/`0` becomes `NULL` rather than a broken FK).
-3. Status starts as `Borrowed`.
-4. Return: status → `Returned` and `returned_date` set.
-5. Filters: `All | Unreturned | Returned`.
-
-> **Why `NULL` instead of `0` for category:** `borrowed_items.category_id` is a
-> foreign key. Writing `0` would violate the constraint; `NULL` means
-> "uncategorised".
+1. Staff create categories and choose whether item identifiers are required.
+   Required IDs are entered manually and must be unique within their category.
+   The protected `Other` category is created automatically and does not require
+   an ID.
+2. Staff configure an item's availability as `Available` or `Unavailable`.
+   Available items can be selected, Borrowed items are with a borrower, and
+   Unavailable items cannot be selected. Borrowed is automatic and cannot be
+   manually toggled.
+3. Inventory is grouped into category sections. Mobile checkout asks for
+   borrower name first, then category, then an item. The protected `Other`
+   category supports registered no-ID items or a free-text unlisted item.
+   Borrowed and Unavailable entries cannot be selected; Available is shown
+   with a green indicator.
+4. `add_borrowed` locks the inventory row, rechecks its configured availability
+   and active borrow records, and inserts a linked `borrowed_items.inventory_id` record
+   in one transaction. For a free-text `Other` item, the system instead stores
+   the item name and default category with a NULL `inventory_id`. This prevents
+   two users from checking out the same registered item concurrently.
+5. Staff mark a borrowed item Returned from its inventory category's Action
+   column. Its status then reflects its configured Available/Unavailable state.
+   Borrowing History is read-only; mobile borrowing records are also read-only.
+6. Pre-inventory borrow records and free-text `Other` records remain in history
+   with a NULL `inventory_id`.
+7. Staff can delete a category after all its items are returned. The protected
+   `Other` category cannot be deleted. Removed inventory items are detached
+   from past records, which retain their item name and identifier.
 
 Borrowed items are **not** part of the Outgoing overdue tile (they have their own
-loan threshold). See [section 11](#11-overdue-sla-flow).
+return threshold). See [section 11](#11-overdue-sla-flow).
 
 ---
 
@@ -682,6 +705,12 @@ Authorization: Bearer <64 hex>   (also read via getallheaders() fallback)
 | Audit log `submission_type` | `Standard Submit` | `Quick Submit` |
 | Shown in | Incoming page | `quick_document.php` |
 
+Quick Submit is the fast counter-intake path: it tags the record as
+`quick_submit` and places it in the staff Quick Submit Records queue. Staff use
+Manage to open the record in Incoming Documents and continue the normal review
+and status workflow. The submitter tracks it by reference or QR code rather
+than SMS.
+
 The whole submission runs in one transaction:
 
 ```text
@@ -783,7 +812,7 @@ settings.key_name = 'sla_settings'  (JSON)
 OR
 (type='Outgoing' AND status='For Release' AND date_created < NOW() - INTERVAL ? DAY)
 
--- loans
+-- borrowed-item records
 status <> 'Returned' AND date_borrowed < NOW() - INTERVAL ? DAY
 ```
 
@@ -794,7 +823,7 @@ Notes:
 - When `enabled` is false the function returns empty arrays — the header badge
   and dashboard pop-out simply disappear.
 - **Only documents are counted as overdue.** `documentCount` feeds the dashboard
-  tiles and the sidebar badge; loans are reported separately.
+  tiles and the sidebar badge; borrowed-item returns are reported separately.
 
 > **Why separate incoming/outgoing thresholds:** an incoming document waits for
 > office *processing*; an outgoing one waits for the *client* to claim it. Those
@@ -867,7 +896,7 @@ workaround for data saved before the "Submitter type" rename.
 ```text
 users ──1:N──► mobile_api_tokens
 users ──1:N──► documents.entry_source (informational)
-item_categories ──1:N──► borrowed_items
+item_categories ──1:N──► borrowable_inventory ──1:N──► borrowed_items
 document_batches ──1:N──► batch_papers ──1:1──► documents
 settings (flat key/value)
 sms_logs (independent, keyed by phone number)
@@ -881,7 +910,8 @@ mobile_submission_logs (independent, records mobile arrival)
 | `documents` | Every document, both directions | `type`, `status`, `tracking_token`, `submitter_type`, `is_priority`, `entry_source` |
 | `mobile_submission_logs` | Mobile arrival audit | `document_id`, `submission_type` |
 | `item_categories` | Borrowable categories | `category_name` UNIQUE |
-| `borrowed_items` | Loans | `status`, `due_date`, `returned_date` |
+| `borrowable_inventory` | Physical borrowable items | `category_id`, `identifier`, `availability_status` |
+| `borrowed_items` | Borrowing records | `inventory_id`, `borrower`, `status`, `returned_date` |
 | `document_batches` | Bulk submissions | `batch_code` UNIQUE, `tracking_token`, receipt columns |
 | `batch_papers` | Batch ↔ document links | `doc_id` UNIQUE, `ON DELETE CASCADE` |
 | `sms_logs` | Outbound SMS | `provider_message_id`, `status` |
@@ -1108,7 +1138,7 @@ Staff      batch_papers.php               DB
 | **Kiosk mode** | Unauthenticated mobile access controlled by `mobile_kiosk_enabled` |
 | **Tracking token** | 64-hex, unguessable credential embedded in a QR code |
 | **Reference** | Human-facing `DIT-000123`, derived from `doc_id` |
-| **SLA / overdue** | Configurable day thresholds per direction and for loans |
+| **SLA / overdue** | Configurable day thresholds per direction and for borrowed-item returns |
 | **Prepare for Release** | Incoming → Outgoing transition |
 | **Priority** | Staff-controlled submission flag, available for any submitter, that floats to the top of the default list |
 | **Safe query** | `safe_query()` — a prepared statement wrapper that always closes on failure |

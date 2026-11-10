@@ -183,10 +183,14 @@ function logbook_send_password_link(string $email, string $username, string $tok
 {
     $url = logbook_app_base_url() . '/forgot_password?token=' . rawurlencode($token);
     $setup = $purpose === 'setup';
-    $subject = $setup ? 'Set up your CEIT Logbook account' : 'Reset your CEIT Logbook password';
+    $subject = $setup
+        ? 'Set up the password for your new CEIT Logbook account'
+        : 'Reset your existing CEIT Logbook account password';
     $expiry = $setup ? 'one hour' : '30 minutes';
     $body = "Hello {$username},\r\n\r\n"
-        . ($setup ? "Your CEIT Dean's Office Digital Logbook account is ready.\r\n" : "A password reset was requested for your account.\r\n")
+        . ($setup
+            ? "A new CEIT Dean's Office Digital Logbook account was created for you. Use this link to set the password for that new account. This is account setup, not password recovery.\r\n"
+            : "A password recovery was requested for your existing CEIT Dean's Office Digital Logbook account. Use this link to choose a new password.\r\n")
         . "Use this one-time link within {$expiry}:\r\n{$url}\r\n\r\n"
         . "If you did not request this, you can ignore this message.\r\n";
     return logbook_send_email($email, $subject, $body);

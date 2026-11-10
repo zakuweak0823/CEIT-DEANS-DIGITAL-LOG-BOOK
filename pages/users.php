@@ -406,11 +406,13 @@ $reopenAdd = $_SERVER['REQUEST_METHOD'] === 'POST'
     <?php if ($createdAccountDetails !== null): ?>
         <div class="col-12">
             <section class="alert alert-info mb-0" aria-label="New staff account credentials">
-                <h2 class="h6">Give these initial sign-in details to the staff member securely</h2>
+                <h2 class="h6">New account setup — share these details securely</h2>
                 <p class="mb-1">Username: <code><?php echo sanitize($createdAccountDetails['username']); ?></code></p>
-                <p class="mb-1">Generated password: <code><?php echo sanitize($createdAccountDetails['password']); ?></code></p>
+                <p class="mb-1">Temporary initial password: <code><?php echo sanitize($createdAccountDetails['password']); ?></code></p>
                 <?php if ($createdAccountDetails['email'] !== ''): ?>
-                    <p class="mb-0"><?php echo $createdAccountDetails['email_sent'] ? 'A password setup link was sent to ' : 'Email link could not be sent to '; ?><?php echo sanitize($createdAccountDetails['email']); ?>.</p>
+                    <p class="mb-0"><?php echo $createdAccountDetails['email_sent'] ? 'A new-account password setup link was sent to ' : 'The new-account password setup link could not be sent to '; ?><?php echo sanitize($createdAccountDetails['email']); ?>. The staff member should use that link to create a personal password; this is not a recovery link.</p>
+                <?php else: ?>
+                    <p class="mb-0">No email setup link was sent. Give the temporary initial password securely so the staff member can sign in to this new account.</p>
                 <?php endif; ?>
             </section>
         </div>
@@ -554,7 +556,7 @@ $modalPhoneField = static function (string $id, string $value = '') {
                 <div class="mb-3">
                     <label class="form-label" for="newStaffEmail">Email <span class="text-muted">(optional)</span></label>
                     <input class="form-control" type="email" id="newStaffEmail" name="email" value="<?php echo $reopenAdd ? sanitize((string)($_POST['email'] ?? '')) : ''; ?>" maxlength="254" autocomplete="email">
-                    <div class="form-text">A one-time link will be sent so the staff member can set a password, if SMTP is configured.</div>
+                    <div class="form-text">For this new account only: if SMTP is configured, a one-time setup link lets the staff member create their password. It is not for recovering an existing account.</div>
                 </div>
                 <div>
                     <label class="form-label" for="newAdminRecoveryPhone">Recovery phone <span class="text-muted">(optional)</span></label>

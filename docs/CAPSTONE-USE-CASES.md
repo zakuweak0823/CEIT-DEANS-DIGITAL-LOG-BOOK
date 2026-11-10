@@ -20,11 +20,11 @@ limited tracking information without signing in.
 **Inside the system**
 
 - Admin portal: authentication, accounts, documents, bulk submissions,
-  inventory loans, reports, settings, audit history, and database backup.
+  borrowed-item records, reports, settings, audit history, and database backup.
 - Mobile client/API: agenda and record views, submissions, workflow updates,
   borrowing, reporting, and phone-number status lookup.
 - Public document and bulk trackers: read-only status and history views.
-- Persisted application data: users, records, requirements, batches, loans,
+- Persisted application data: users, records, requirements, batches, borrow records,
   settings, logs, and history.
 
 **External dependencies**
@@ -46,7 +46,7 @@ configuration.
 | Actor | Description |
 |---|---|
 | **Administrator (Admin)** | Authorized office user with all Staff functions plus account management, audit-log access, and database-backup access. |
-| **Staff** | Authorized office user who signs in to process documents, bulk submissions, loans, reports, and operational settings. Staff accounts do not use the Admin-only account-management page. |
+| **Staff** | Authorized office user who signs in to process documents, bulk submissions, borrowed items, reports, and operational settings. Staff accounts do not use the Admin-only account-management page. |
 | **Mobile/Kiosk User** | Person using the mobile client. When kiosk access is enabled, the current client can use the mobile logbook without signing in; when kiosk access is disabled, API access requires a valid bearer token. The shipped React client does not provide a sign-in screen. |
 | **Submitter / Client** | Person who submits documents or checks a tracking link or registered phone number. This person is not an authenticated portal user. |
 | **PhilSMS Service** | External SMS provider that accepts outbound messages and may report delivery status. |
@@ -87,7 +87,7 @@ flowchart LR
         tracking((View QR status and history))
         mobile((Use mobile logbook))
         phone((Look up status by phone))
-        loans((Manage borrowed items))
+        borrowedItems((Manage borrowed items))
         categories((Manage item categories))
         smsuse((Send and monitor SMS))
         records((Search records and generate reports))
@@ -107,7 +107,7 @@ flowchart LR
     staff --> outgoing
     staff --> batch
     staff --> intake
-    staff --> loans
+    staff --> borrowedItems
     staff --> categories
     staff --> smsuse
     staff --> records
@@ -315,7 +315,7 @@ the batch; an explicit staff confirmation records the counted number of papers.
 | Primary actor | Mobile/Kiosk User |
 | Preconditions | The device can reach the office server. Kiosk access is enabled, or the API request supplies a valid bearer token. |
 | Trigger | The user opens the mobile application. |
-| Main success flow | 1. The client loads the current day's logbook data, form labels, and mobile display settings. 2. The user views Incoming, Outgoing, Bulk Documents, Borrowed Items, or Reports, and may scan a CEIT tracking QR with the camera or an image. 3. The user can refresh the data manually or wait for periodic refresh while online. 4. The user submits a standard document (11-digit contact number required) or quick document (contact optional); the system returns a reference and, when tracking is enabled, a tracker link/QR. 5. Depending on the selected section and available record, the user adds or edits a batch, advances an allowed document/batch status, records a loan or return, sends an eligible released-document notification, or requests a report. |
+| Main success flow | 1. The client loads the current day's logbook data, form labels, and mobile display settings. 2. The user views Incoming, Outgoing, Bulk Documents, Borrowed Items, or Reports, and may scan a CEIT tracking QR with the camera or an image. 3. The user can refresh the data manually or wait for periodic refresh while online. 4. The user submits a standard document (11-digit contact number required) or quick document (contact optional); the system returns a reference and, when tracking is enabled, a tracker link/QR. 5. Depending on the selected section and available record, the user adds or edits a batch, advances an allowed document/batch status, records an item checkout or return, sends an eligible released-document notification, or requests a report. |
 | Alternate / exception flows | If the device is offline, data refresh or writes fail and the client reports the problem; reconnecting permits another refresh. When kiosk access is disabled, unauthenticated API requests are denied. The bundled React client has no sign-in screen, so a valid token must be supplied by another supported client if kiosk access is disabled. |
 | Postconditions | Successful mobile actions are stored in the same logbook as portal actions. |
 
@@ -330,16 +330,16 @@ the batch; an explicit staff confirmation records the counted number of papers.
 | Alternate / exception flows | An invalid number or empty result is reported to the user. Records without a matching stored contact are not returned. |
 | Postconditions | The lookup is read-only and changes no record. |
 
-### UC-14 — Manage borrowed items and categories
+### UC-14 — Manage borrowed inventory and returns
 
 | Field | Specification |
 |---|---|
 | Primary actor | Staff or Administrator |
 | Preconditions | User is signed in. |
-| Trigger | The user opens Borrowed Items or Item Categories. |
-| Main success flow | 1. The user records an item, borrower, optional category, and optional phone number. 2. The system saves the loan with `Borrowed` status and a recorded date/time. 3. Staff may search or filter loan records, edit an unreturned loan, mark an item Returned, or reopen a return as unreturned. 4. Staff may add or remove a category when database relationships permit. |
-| Alternate / exception flows | Item name and borrower are required; invalid contact data is rejected. Returned loans cannot be edited until reopened. A category referenced by a loan cannot be removed while its foreign-key relationship exists. |
-| Postconditions | The loan reflects the recorded borrower and current return state; the return date is set or cleared as appropriate. |
+| Trigger | Staff opens Borrowed Items to manage inventory or a user opens Borrowed Items in the mobile client to request an item. |
+| Main success flow | 1. Staff add a category and choose whether item identifiers are required; required IDs are entered manually. 2. Inventory is grouped by category, where staff can set items to Available or Unavailable and mark borrowed items Returned from the Action column. 3. The user enters a borrower name, chooses a category, and selects an Available item. In the protected Other category, the user may select a registered no-ID item or enter an unlisted item name. 4. The system locks and rechecks registered item availability before recording the borrow. 5. Borrowing History and mobile borrow records display records without return controls. |
+| Alternate / exception flows | Empty names, required-but-missing identifiers, duplicate category identifiers, and invalid contact data are rejected. A stale selection or concurrent checkout is rejected if the item is no longer available. Borrowed items cannot have availability changed before they are returned. The protected Other category cannot be deleted. Legacy and free-text Other records remain visible without an inventory link. |
+| Postconditions | Registered borrow records identify their inventory item and borrower. Free-text Other records preserve the entered item name and borrower without requiring an inventory ID. Current availability is derived from the configured inventory state and whether the item is currently with a borrower. |
 
 ### UC-15 — Send and monitor SMS notifications
 

@@ -75,6 +75,15 @@ $validateIncoming = static function (string $submitterName, string $submitterTyp
     return null;
 };
 
+// Sends a generated (or staff-edited) SMS and returns a short sentence for the page message.
+$sendDocumentSms = static function (string $phone, string $text) use ($conn): string {
+    if (!is_valid_contact_number($phone)) {
+        return ' No SMS was sent because no valid contact number is saved.';
+    }
+    $smsResult = send_logged_sms($conn, $phone, $text);
+    return $smsResult['success'] ? ' SMS sent to the submitter.' : ' The SMS was not sent: ' . $smsResult['message'];
+};
+
 $sender = '';
 $submitterName = '';
 $submitterType = 'Other';
@@ -260,8 +269,20 @@ if (isset($_POST['prepare_release'])) {
                     mysqli_stmt_close($stmt);
                     status_history_set_note($conn, 'doc_id', $id, DOC_STATUS_FOR_RELEASE, $releaseNote, $historyMarker);
                     $conn->commit();
-                    $message = show_alert('Document moved to Outgoing as For Release.');
-                    $setReleaseOutcome('Document prepared for release', 'The document is now in Outgoing with status “For Release”. Its previous recipient is used as the outgoing sender, or Dean’s Office if no recipient was saved. The original sender becomes the recipient, or the submitter’s name if no department or office was saved.', 'success');
+                    $smsSent = false;
+                    try {
+                        $releaseContext = composer_document_context($conn, $id, $documentTrackingSettings);
+                        $smsNote = $releaseContext === null
+                            ? ' No SMS was sent because the document details could not be loaded.'
+                            : $sendDocumentSms((string)$releaseContext['phone'], compose_sms_message($releaseContext));
+                        $smsSent = $smsNote === ' SMS sent to the submitter.';
+                    } catch (Throwable $smsError) {
+                        error_log('For-release SMS notification failed: ' . $smsError->getMessage());
+                        $smsNote = ' The document was moved successfully, but the SMS could not be sent. Check the SMS logs.';
+                    }
+                    $outcomeType = $smsSent ? 'success' : 'warning';
+                    $message = show_alert('Document moved to Outgoing as For Release.' . $smsNote, $outcomeType);
+                    $setReleaseOutcome('Document prepared for release', 'The document is now in Outgoing with status “For Release”. Its previous recipient is used as the outgoing sender, or Dean’s Office if no recipient was saved. The original sender becomes the recipient, or the submitter’s name if no department or office was saved.' . $smsNote, $outcomeType);
                 }
             } catch (Throwable $error) {
                 $conn->rollback();
@@ -302,15 +323,6 @@ if (isset($_POST['change_status'])) {
         }
     }
 }
-
-// Sends a generated (or staff-edited) SMS to the submitter and returns a short sentence for the page message.
-$sendDocumentSms = static function (string $phone, string $text) use ($conn): string {
-    if (!is_valid_contact_number($phone)) {
-        return ' No SMS was sent because no valid contact number is saved.';
-    }
-    $smsResult = send_logged_sms($conn, $phone, $text);
-    return $smsResult['success'] ? ' SMS sent to the submitter.' : ' The SMS was not sent: ' . $smsResult['message'];
-};
 
 if (isset($_POST['mark_incomplete'])) {
     $shouldRedirect = true;
@@ -555,7 +567,7 @@ foreach ($documents as $listedDocument) {
                 </p>
                 <!-- Use the shared row-separated table skin consistently across admin lists. -->
                 <div class="table-responsive">
-                    <table class="table align-middle mb-0 incoming-documents-table">
+                    <table class="table align-middle mb-0 incoming-documents-table" data-status-guide="incoming">
                         <thead class="table-light">
                             <tr>
                                 <th scope="col">Date</th>

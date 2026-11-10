@@ -117,15 +117,15 @@ the sections below and in the [Windows setup guide](docs/WINDOWS-SETUP.md).
 | Area | Capabilities |
 | --- | --- |
 | **Dashboard** | Review activity summaries, daily counts, pending incoming work, document and borrowed item analytics, and recent records. The Overdue records panel counts only Incoming and Outgoing documents that stay open longer than the time limits set under Settings; click an Incoming or Outgoing tile to open a pop-out listing just those overdue documents, each with a **Review** button. Borrowed items are not counted as overdue. Small ⓘ guides explain the processing-time and SMS charts. |
-| **Incoming documents** | Record the submitter's name and submitter type separately; optionally note the submitting department or office; issue office-verified QR tracking codes; search, filter by status, and sort records; and prepare documents for release. Staff can mark any submitter's document as Priority. By default, Priority documents appear first, then oldest first. |
+| **Incoming documents** | Record the submitter's name and submitter type separately; optionally note the submitting department or office; issue office-verified QR tracking codes; search, filter by status, and sort records; and prepare documents for release. Preparing or setting an individual document to For Release automatically attempts an SMS to its saved contact number. Staff can mark any submitter's document as Priority. By default, Priority documents appear first, then oldest first. |
 | **Outgoing documents** | Track outgoing records and release status, manage each document directly, and send client notifications. For Release documents are listed first, oldest first, so the longest-waiting document is handled first; select a column heading to change the order. |
-| **Bulk Documents** | Register bulk submissions, associate document-level records, separate Priority from Standard submissions, scan office QR codes, record received counts, and follow release status. |
-| **Borrowed Items** | Manage item categories, borrowers, and return status; sort the list by item, category, borrower, date, or status. New entries record the date and time automatically. Earlier mobile entries saved only a date, so their stored midnight time may not be the actual borrowing time. |
+| **Bulk Documents** | Register bulk submissions, name each document and optionally record its page count in the mobile form, save one shared contact number for the batch, associate document-level records, separate Priority from Standard submissions, scan office QR codes, record received counts, and follow release status. Moving the batch to For Release sends one SMS to the shared contact. |
+| **Borrowed Items** | Add categories and choose whether registered items need manually entered identifier IDs. Inventory is grouped by category; staff can return a borrowed item or mark an item Available from its Action column. The protected Other category supports no-ID registered items and unlisted items entered at borrow time. Borrowing History is read-only and alphabetically sorted; categories can be deleted after their items are returned, while past records are retained. |
 | **Records and reports** | Search logbook records; generate Incoming, Outgoing, Borrowed Items, SMS Logs, or All Reports; filter and sort results; print a formal portrait document or export a formatted Excel workbook. |
-| **SMS and notifications** | Send client updates, review delivery logs, and choose browser alerts and sounds. SMS provider configuration is server-only; email delivery is not implemented. New-submission alerts appear in a neat top-of-screen notification. |
+| **SMS and notifications** | Send client updates, review delivery logs, and choose browser alerts and sounds. Moving an individual document to For Release automatically attempts an SMS to its saved number; moving a bulk batch sends one SMS to its shared contact number. The notification bell shows open incoming documents, while new-submission alerts continue to appear at the top of the screen. |
 | **Admin Assistant** | Get privacy-friendly workflow guidance from a clickable side-peeking launcher and links to admin tools. Optional form assistance previews changes and requires approval before filling fields; it never submits forms. Toggle it in Settings. |
-| **Mobile app** | Submit documents with a required submitter name and a clearly labeled Student/Faculty submitter type, receive a reference and status-tracking QR, scan office-issued codes, and access office logbook features. Admin settings control optional form fields and public kiosk access. |
-| **Statuses and history** | Change status from the clickable badge on Incoming, Outgoing, and Bulk pages. Staff add a brief description of the action or destination, which appears in the tracking timeline. Anyone with the tracking link can read it, so do not include confidential information. Marking a document **Incomplete** uses its requirements checklist as the tracking details and offers an optional SMS preview; the mobile app simplifies document statuses to Pending, For Release, and Released. |
+| **Mobile app** | Submit documents with a required submitter name and a clearly labeled Student/Faculty submitter type, receive a reference and status-tracking QR, scan office-issued codes, and access office logbook features. Borrowing uses a borrower name followed by category and available-item selection; Other allows users to enter unlisted item names without an ID. Unavailable or already-borrowed registered items cannot be selected. Borrowing records are read-only in the mobile client; staff manage returns from inventory. Bulk submissions support up to 9,999 documents, with a name and required page count for each and one optional shared contact number for the batch. Admin settings control optional form fields and public kiosk access. |
+| **Statuses and history** | Change status from the clickable badge on Incoming, Outgoing, and Bulk pages. Each module's Status header info icon explains only the statuses used in that module. Staff add a brief description of the action or destination, which appears in the tracking timeline. Anyone with the tracking link can read it, so do not include confidential information. Marking a document **Incomplete** uses its requirements checklist as the tracking details and offers an optional SMS preview; the mobile app simplifies document statuses to Pending, For Release, and Released. Borrowing history uses Borrowed for items not yet returned and Returned for items back with the office. |
 | **Document tracker** | A separate, mobile-friendly public page shows only the status tied to an office-issued, unguessable QR token. Its API URL respects the project's folder path, including when installed under XAMPP `htdocs`. |
 
 ### Incoming submission fields
@@ -352,14 +352,17 @@ middle name. The username is generated from their initials plus surname
 (e.g. Louise Jayson Villanueva becomes `ljvillanueva`); if that username
 already exists, a number is appended starting at `01`. The system generates an
 initial password and displays it once for the Admin to share securely. An
-optional email receives a one-time password setup link when SMTP is configured.
+optional email receives a one-time link to set a password for the new account
+when SMTP is configured; this is account setup, not recovery for an existing
+account.
 An optional recovery phone enables SMS recovery.
 
 **Forgotten password:** enter your username on the login page. If your account
 has an email address and SMTP is configured, the system attempts to email a
-one-time password link. If email or SMTP is not configured, a recovery code can
-be sent to your saved recovery phone. If email delivery fails, ask an Admin to
-reset the password.
+one-time recovery link; otherwise, a recovery code may be sent to its saved
+phone. The confirmation does not reveal whether a username is registered. Open
+the emailed link or enter the SMS code if received. If no recovery message
+arrives, verify the username or ask an Admin to reset the password.
 Email links expire after 30 minutes for recovery and one hour for first-time
 setup; links can only be used once. SMS codes expire after 10 minutes and are
 locked after 5 wrong tries. Changing a password signs the account out of
@@ -501,8 +504,12 @@ server-side and apply to connected mobile clients. Glass adds frosted surfaces,
 ambient highlights, staggered status and action-card entrances, responsive
 button and form feedback, and animated dialogs. It honors the device's reduced-
 motion preference.
-The mobile **Submit Document**
-form requires an 11-digit contact number; **Quick Submit** remains contact-free.
+The mobile **Submit Document** form requires an 11-digit contact number.
+**Quick Submit** is the fast counter-intake path: it is marked separately in the
+staff Quick Submit Records queue, where staff can open it in Incoming Documents
+and continue the regular review/status workflow. Submitters track it by
+reference or QR code; SMS updates are unavailable because Quick Submit does
+not collect a contact number.
 Mobile document-status lookup also includes bulk-paper batches assigned to the
 entered contact number and displays each batch's current status and paper count.
 

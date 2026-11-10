@@ -1,6 +1,4 @@
 <?php
-// Turns the submitted per-document page counts into a JSON list sized to the document count.
-// Returns [json|null, valid]. Blank entries are kept as null so pages stay optional.
 function batch_pages_total($json)
 {
     $pages = json_decode((string)$json, true);
@@ -13,27 +11,75 @@ function batch_pages_label($json)
     return $total > 0 ? $total . ($total === 1 ? ' page' : ' pages') . ' in total' : '';
 }
 
+function send_batch_release_sms($conn, array $batch): array
+{
+    $contactPhone = (string)($batch['contact_phone'] ?? '');
+    if (!is_valid_contact_number($contactPhone)) {
+        return ['success' => false, 'message' => 'No SMS was sent because no valid shared contact number is saved for this batch.'];
+    }
+
+    try {
+        $result = send_logged_sms(
+            $conn,
+            $contactPhone,
+            compose_sms_message([
+                'status' => DOC_STATUS_FOR_RELEASE,
+                'reference' => (string)($batch['batch_code'] ?? ''),
+                'subject' => (string)($batch['batch_type'] ?? ''),
+                'name' => (string)($batch['submitter_name'] ?? ''),
+            ])
+        );
+        if (!empty($result['success'])) {
+            return ['success' => true, 'message' => 'One SMS was sent to the shared batch contact.'];
+        }
+    } catch (Throwable $error) {
+        error_log('Batch release SMS failed: ' . $error->getMessage());
+    }
+
+    return ['success' => false, 'message' => 'The batch status was updated, but the SMS could not be sent. Check the SMS logs.'];
+}
+
+// Validates and serializes one required page count per document.
 function normalize_document_pages($raw, $paperCount)
 {
-    if (!is_array($raw)) {
-        return [null, true];
+    if (!is_array($raw) || count($raw) !== $paperCount) {
+        return [null, false];
     }
     $pages = [];
-    $hasValue = false;
     for ($i = 0; $i < $paperCount; $i++) {
-        $value = trim((string)($raw[$i] ?? ''));
-        if ($value === '') {
-            $pages[] = null;
-            continue;
+        if (!isset($raw[$i]) || (!is_string($raw[$i]) && !is_int($raw[$i]))) {
+            return [null, false];
         }
+        $value = trim((string)$raw[$i]);
         $number = filter_var($value, FILTER_VALIDATE_INT);
         if ($number === false || $number < 1 || $number > 9999) {
             return [null, false];
         }
         $pages[] = $number;
-        $hasValue = true;
     }
-    return [$hasValue ? json_encode($pages) : null, true];
+    $json = json_encode($pages);
+    return [$json === false ? null : $json, $json !== false];
+}
+
+function normalize_document_names($raw, $paperCount)
+{
+    if ($raw === null) {
+        return [null, true];
+    }
+    if (!is_array($raw) || count($raw) !== $paperCount) {
+        return [null, false];
+    }
+    $names = [];
+    foreach ($raw as $value) {
+        $name = trim((string)$value);
+        $length = function_exists('mb_strlen') ? mb_strlen($name, 'UTF-8') : strlen($name);
+        if ($name === '' || $length > 255) {
+            return [null, false];
+        }
+        $names[] = $name;
+    }
+    $json = json_encode($names, JSON_UNESCAPED_UNICODE);
+    return [$json === false ? null : $json, $json !== false];
 }
 
 function batch_workflow_setting_defaults()
@@ -145,6 +191,12 @@ function ensure_batch_storage($conn)
     $conn->query("ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS recipient_contact_type VARCHAR(20) NOT NULL DEFAULT 'Unassigned'");
     $conn->query('ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS paper_count INT UNSIGNED NOT NULL DEFAULT 0');
     $conn->query('ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS document_pages TEXT DEFAULT NULL');
+    if ($conn->query('ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS document_names MEDIUMTEXT DEFAULT NULL') === false) {
+        throw new RuntimeException('Could not add per-document names to batch storage: ' . $conn->error);
+    }
+    if ($conn->query('ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS contact_phone VARCHAR(20) DEFAULT NULL') === false) {
+        throw new RuntimeException('Could not add the shared batch contact number: ' . $conn->error);
+    }
     $conn->query('ALTER TABLE document_batches DROP COLUMN IF EXISTS pages_per_document');
     $conn->query('ALTER TABLE document_batches ADD COLUMN IF NOT EXISTS is_priority TINYINT(1) NOT NULL DEFAULT 0');
     foreach ([

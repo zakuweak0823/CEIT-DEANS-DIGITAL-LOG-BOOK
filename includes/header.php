@@ -30,7 +30,9 @@ $pageTitles = [
     'reports.php' => 'Reports',
     'records.php' => 'Document Records',
 ];
-$currentPageTitle = $pageTitles[$currentPage] ?? 'Admin Portal';
+$isBorrowingHistoryActive = $currentPage === 'borrowed.php' && ($_GET['view'] ?? '') === 'history';
+$isBorrowedInventoryActive = $currentPage === 'borrowed.php' && !$isBorrowingHistoryActive;
+$currentPageTitle = $isBorrowingHistoryActive ? 'Borrowing History' : ($pageTitles[$currentPage] ?? 'Admin Portal');
 $adminInitial = strtoupper(substr((string)$adminName, 0, 1));
 $isQuickDocumentActive = $currentPage === 'quick_document.php';
 $currentReportType = $_GET['report_type'] ?? '';
@@ -176,8 +178,8 @@ try {
             <a href="outgoing" class="sidebar-link<?php echo $sidebarActiveClass('outgoing.php'); ?>"<?php echo $currentPage === 'outgoing.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-arrow-up me-2"></i>Outgoing Documents</a>
             <a href="batch_papers" class="sidebar-link<?php echo $sidebarActiveClass('batch_papers.php'); ?>"<?php echo $currentPage === 'batch_papers.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-files me-2"></i>Bulk Documents</a>
             <div class="sidebar-section text-uppercase fw-semibold text-muted mt-4 mb-2">Borrowed Items</div>
-            <a href="borrowed" class="sidebar-link<?php echo $sidebarActiveClass('borrowed.php'); ?>"<?php echo $currentPage === 'borrowed.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-seam me-2"></i>Borrowed Items</a>
-            <a href="item_categories" class="sidebar-link<?php echo $sidebarActiveClass('item_categories.php'); ?>"<?php echo $currentPage === 'item_categories.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-tags me-2"></i>Item Categories</a>
+            <a href="borrowed" class="sidebar-link<?php echo $isBorrowedInventoryActive ? ' active' : ''; ?>"<?php echo $isBorrowedInventoryActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-seam me-2"></i>Borrowed Items</a>
+            <a href="borrowed?view=history#borrowing-history" class="sidebar-link<?php echo $isBorrowingHistoryActive ? ' active' : ''; ?>"<?php echo $isBorrowingHistoryActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-clock-history me-2"></i>Borrowing History</a>
             <div class="sidebar-section text-uppercase fw-semibold text-muted mt-4 mb-2">Communication</div>
             <a href="sms" class="sidebar-link<?php echo $sidebarActiveClass('sms.php'); ?>"<?php echo $currentPage === 'sms.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots me-2"></i>SMS Logs</a>
             <div class="sidebar-section text-uppercase fw-semibold text-muted mt-4 mb-2">Reports</div>
@@ -206,6 +208,25 @@ try {
                     </div>
                 </form>
                 <div class="d-flex align-items-center">
+                    <div class="admin-notifications" id="adminNotifications">
+                        <button class="admin-notifications-toggle" id="adminNotificationsToggle" type="button" aria-label="Notifications" aria-expanded="false" aria-controls="adminNotificationsPanel">
+                            <i class="bi bi-bell" aria-hidden="true"></i>
+                            <span class="admin-notifications-badge" id="adminNotificationsBadge" role="status" aria-live="polite"<?php echo $pendingDocumentCount === 0 ? ' hidden' : ''; ?>><?php echo $pendingDocumentCount === null ? '!' : sanitize($pendingBadge); ?></span>
+                        </button>
+                        <section class="admin-notifications-panel" id="adminNotificationsPanel" aria-labelledby="adminNotificationsTitle" hidden>
+                            <div class="admin-notifications-heading">
+                                <div>
+                                    <h2 id="adminNotificationsTitle">Notifications</h2>
+                                    <p>Incoming documents that still need attention</p>
+                                </div>
+                                <span class="admin-notifications-count" id="adminNotificationsCount"><?php echo (int)($pendingDocumentCount ?? 0); ?></span>
+                            </div>
+                            <ul class="admin-notifications-list" id="adminNotificationsList" aria-live="polite">
+                                <li class="admin-notifications-empty">Loading incoming documents…</li>
+                            </ul>
+                            <a class="admin-notifications-footer" href="incoming?status=Open">Open inbox <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+                        </section>
+                    </div>
                     <div class="dropdown">
                         <button class="btn admin-profile-toggle dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Open administrator menu for <?php echo sanitize($adminName); ?>">
                             <span class="admin-avatar rounded-circle d-inline-flex align-items-center justify-content-center" aria-hidden="true"><?php echo sanitize($adminInitial); ?></span>
@@ -255,7 +276,7 @@ try {
                     <a href="incoming?status=Open"<?php echo $currentPage === 'incoming.php' && in_array(($_GET['status'] ?? ''), ['Open', 'Pending'], true) ? ' aria-current="page"' : ''; ?>><i class="bi bi-inbox" aria-hidden="true"></i>Open inbox<?php if ($pendingDocumentCount !== null && $pendingDocumentCount > 0): ?><span class="admin-quick-access-count"><?php echo sanitize($pendingBadge); ?></span><?php endif; ?></a>
                     <a href="quick_document"<?php echo $currentPage === 'quick_document.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-plus-circle" aria-hidden="true"></i>New record</a>
                     <a href="records"<?php echo $currentPage === 'records.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-search" aria-hidden="true"></i>Records</a>
-                    <button class="admin-quick-access-more<?php echo (in_array($currentPage, ['outgoing.php', 'batch_papers.php', 'batch_tracker.php', 'borrowed.php', 'item_categories.php', 'sms.php', 'notification_settings.php', 'reports.php', 'settings.php', 'users.php', 'audit_logs.php'], true) || ($currentPage === 'incoming.php' && ($_GET['status'] ?? '') !== 'Open')) ? ' is-current' : ''; ?>" type="button" data-bs-toggle="offcanvas" data-bs-target="#quickAccessMore" aria-controls="quickAccessMore" aria-label="Open more admin sections">
+                    <button class="admin-quick-access-more<?php echo (in_array($currentPage, ['outgoing.php', 'batch_papers.php', 'batch_tracker.php', 'borrowed.php', 'sms.php', 'notification_settings.php', 'reports.php', 'settings.php', 'users.php', 'audit_logs.php'], true) || ($currentPage === 'incoming.php' && ($_GET['status'] ?? '') !== 'Open')) ? ' is-current' : ''; ?>" type="button" data-bs-toggle="offcanvas" data-bs-target="#quickAccessMore" aria-controls="quickAccessMore" aria-label="Open more admin sections">
                         <i class="bi bi-grid" aria-hidden="true"></i><span>More</span>
                     </button>
                 </div>
@@ -276,7 +297,7 @@ try {
                     <a href="batch_papers"<?php echo $currentPage === 'batch_papers.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-files" aria-hidden="true"></i>                    <span>Bulk Documents</span></a>
                                         <a href="batch_tracker"<?php echo $currentPage === 'batch_tracker.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-diagram-3" aria-hidden="true"></i><span>Bulk Documents Tracker</span></a>
                                         <a href="borrowed"<?php echo $currentPage === 'borrowed.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-seam" aria-hidden="true"></i><span>Borrowed Items</span></a>
-                    <a href="item_categories"<?php echo $currentPage === 'item_categories.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-tags" aria-hidden="true"></i><span>Categories</span></a>
+                    <a href="borrowed?view=history#borrowing-history"<?php echo $isBorrowingHistoryActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-clock-history" aria-hidden="true"></i><span>Borrowing History</span></a>
                     <a href="sms"<?php echo $currentPage === 'sms.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots" aria-hidden="true"></i><span>SMS logs</span></a>
                     <a href="reports?report_type=All%20Reports&amp;generate=1"<?php echo $isDocumentReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-file-earmark-bar-graph" aria-hidden="true"></i><span>All Reports</span></a>
                     <a href="reports?report_type=Bulk%20Reports&amp;generate=1"<?php echo $isBulkReportActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-files" aria-hidden="true"></i><span>Bulk Reports</span></a>
@@ -306,8 +327,8 @@ try {
                     <a href="outgoing" class="sidebar-link<?php echo $sidebarActiveClass('outgoing.php'); ?>"<?php echo $currentPage === 'outgoing.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-arrow-up me-2"></i>Outgoing Documents</a>
                     <a href="batch_papers" class="sidebar-link<?php echo $sidebarActiveClass('batch_papers.php'); ?>"<?php echo $currentPage === 'batch_papers.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-files me-2"></i>Bulk Documents</a>
                     <div class="sidebar-section text-uppercase fw-semibold text-muted mt-4 mb-2">Borrowed Items</div>
-                    <a href="borrowed" class="sidebar-link<?php echo $sidebarActiveClass('borrowed.php'); ?>"<?php echo $currentPage === 'borrowed.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-seam me-2"></i>Borrowed Items</a>
-                    <a href="item_categories" class="sidebar-link<?php echo $currentPage === 'item_categories.php' ? ' active' : ''; ?>"<?php echo $currentPage === 'item_categories.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-tags me-2"></i>Item Categories</a>
+                    <a href="borrowed" class="sidebar-link<?php echo $isBorrowedInventoryActive ? ' active' : ''; ?>"<?php echo $isBorrowedInventoryActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-box-seam me-2"></i>Borrowed Items</a>
+                    <a href="borrowed?view=history#borrowing-history" class="sidebar-link<?php echo $isBorrowingHistoryActive ? ' active' : ''; ?>"<?php echo $isBorrowingHistoryActive ? ' aria-current="page"' : ''; ?>><i class="bi bi-clock-history me-2"></i>Borrowing History</a>
                     <div class="sidebar-section text-uppercase fw-semibold text-muted mt-4 mb-2">Communication</div>
                     <a href="sms" class="sidebar-link<?php echo $sidebarActiveClass('sms.php'); ?>"<?php echo $currentPage === 'sms.php' ? ' aria-current="page"' : ''; ?>><i class="bi bi-chat-dots me-2"></i>SMS Logs</a>
                     <div class="sidebar-section text-uppercase fw-semibold text-muted mt-4 mb-2">Reports</div>

@@ -281,7 +281,7 @@ $smsStatusInfo = static function (array $log): array {
                 </nav>
                 <!-- Use the shared row-separated table skin consistently across admin lists. -->
                 <div class="table-responsive">
-                    <table class="table align-middle mb-0 sms-log-table" aria-label="SMS logs">
+                    <table class="table align-middle mb-0 sms-log-table" aria-label="SMS logs" data-status-guide="sms">
                         <thead class="table-light">
                             <tr>
                                 <th scope="col">Date Sent</th>

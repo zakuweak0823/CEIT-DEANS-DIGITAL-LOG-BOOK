@@ -23,10 +23,12 @@ require_once __DIR__ . '/../includes/document_tracking.php';
 require_once __DIR__ . '/../includes/requirements_support.php';
 require_once __DIR__ . '/../includes/message_composer.php';
 require_once __DIR__ . '/../includes/login_support.php';
+require_once __DIR__ . '/../includes/borrowed_inventory.php';
 
 // Initialize incremental schema additions before serving any mobile action.
 try {
     ensure_document_tracking_schema($conn);
+    ensure_borrowed_inventory_schema($conn);
     $conn->query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS client_phone VARCHAR(20) DEFAULT NULL');
     $conn->query("ALTER TABLE documents ADD COLUMN IF NOT EXISTS submitter_type VARCHAR(20) NOT NULL DEFAULT 'Other'");
     $conn->query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_priority TINYINT(1) NOT NULL DEFAULT 0');
@@ -491,12 +493,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     DATE_FORMAT(batch_date, '%Y-%m-%d') AS date, 'Bulk papers' AS type, status,
                     paper_count AS paperCount, 'batch' AS recordType
              FROM document_batches
-             WHERE recipient_contact_type = 'Contact'
-                AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(recipient, '+', ''), ' ', ''), '-', ''), '(', ''), ')', ''), '.', '') = ?
+             WHERE contact_phone = ?
+                OR (recipient_contact_type = 'Contact'
+                    AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(recipient, '+', ''), ' ', ''), '-', ''), '(', ''), ')', ''), '.', '') = ?)
              ORDER BY date DESC, reference DESC
              LIMIT 20",
-            'ss',
-            [$clientPhone, $clientPhone]
+            'sss',
+            [$clientPhone, $clientPhone, $clientPhone]
         );
         if ($stmt === false) {
             http_response_code(500);
@@ -574,7 +577,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             // Serialize taps so concurrent requests cannot skip or repeat a workflow transition.
             $conn->begin_transaction();
-            $stmt = safe_query($conn, 'SELECT status, paper_count, received_at FROM document_batches WHERE batch_id = ? FOR UPDATE', 'i', [$batchId]);
+            $stmt = safe_query($conn, 'SELECT status, paper_count, received_at, batch_code, batch_type, submitter_name, contact_phone FROM document_batches WHERE batch_id = ? FOR UPDATE', 'i', [$batchId]);
             if ($stmt === false) {
                 throw new RuntimeException('Could not verify the bulk submission status');
             }
@@ -603,11 +606,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             mysqli_stmt_close($stmt);
             $conn->commit();
+            $smsSent = null;
+            $smsNotice = '';
+            if ($nextStatus === DOC_STATUS_FOR_RELEASE) {
+                $smsResult = send_batch_release_sms($conn, $batch);
+                $smsSent = $smsResult['success'];
+                $smsNotice = $smsResult['message'];
+            }
             echo json_encode([
                 'success' => true,
                 'previous_status' => $batch['status'],
                 'status' => $nextStatus,
                 'paper_count' => (int)$batch['paper_count'],
+                'sms_sent' => $smsSent,
+                'sms_notice' => $smsNotice,
             ]);
         } catch (Throwable $error) {
             $conn->rollback();
@@ -630,8 +642,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $recipientContactType = 'Unassigned';
         $recipient = '';
         $batchRemarks = trim($input['remarks'] ?? '');
+        $contactPhoneInput = $input['contact_phone'] ?? null;
+        $contactPhone = is_string($contactPhoneInput) ? trim($contactPhoneInput) : '';
+        $validContactPhone = $contactPhoneInput === null || (is_string($contactPhoneInput)
+            && ($contactPhone === '' || is_valid_contact_number($contactPhone)));
+        $contactPhoneValue = $contactPhone === '' ? null : $contactPhone;
         $paperCount = filter_var($input['paper_count'] ?? null, FILTER_VALIDATE_INT);
         [$documentPagesJson, $validPages] = normalize_document_pages($input['document_pages'] ?? null, is_int($paperCount) ? max(0, min($paperCount, 9999)) : 0);
+        [$documentNamesJson, $validNames] = normalize_document_names($input['document_names'] ?? null, is_int($paperCount) ? max(0, min($paperCount, 9999)) : 0);
         $batchId = (int)($input['batch_id'] ?? 0);
         if ($action === 'add_batch') {
             $batchDate = date('Y-m-d');
@@ -642,11 +660,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $submitterName === '' || strlen($submitterName) > 255 ||
             ($action === 'add_batch' && (!$dateObject || $dateObject->format('Y-m-d') !== $batchDate || $batchDate < date('Y-m-d'))) ||
             ($mobileFormLabels['senderEnabled'] && !in_array($senderType, ['Student', 'Faculty'], true)) ||
-            $paperCount === false || $paperCount < 1 || $paperCount > 3 ||
-            !$validPages ||
+            $paperCount === false || $paperCount < 1 || $paperCount > 9999 ||
+            !$validPages || !$validNames || !$validContactPhone ||
             ($action === 'update_batch' && $batchId <= 0)) {
             http_response_code(400);
-            echo json_encode(['success' => false, 'message' => 'Enter the submitter name and check the bulk submission type, date, submitter type, and number of documents (1–3).']);
+            $validationMessage = !$validPages
+                ? 'Enter a page count from 1 to 9,999 for every document.'
+                : (!$validNames
+                    ? 'Enter a name of 255 characters or fewer for every document.'
+                    : (!$validContactPhone
+                        ? 'Enter one valid 11-digit shared contact number, or leave it blank.'
+                        : 'Check the bulk submission type, date, submitter type, and number of documents (1–9,999).'));
+            echo json_encode(['success' => false, 'message' => $validationMessage]);
             exit;
         }
 
@@ -662,9 +687,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $recipientValue = '';
                 $stmt = safe_query(
                     $conn,
-                    'INSERT INTO document_batches (batch_code, document_type, batch_type, status, batch_date, sender, sender_type, submitter_name, recipient, recipient_contact_type, remarks,                                         tracking_token, paper_count, document_pages, is_priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                                        'ssssssssssssisi',
-                                        [$batchCode, $documentType, $batchType, 'Received', $batchDate, $senderType, $senderType, $submitterName, $recipientValue, $recipientContactType, $batchRemarks, $trackingToken, $paperCount, $documentPagesJson, $isPriority]
+                    'INSERT INTO document_batches (batch_code, document_type, batch_type, status, batch_date, sender, sender_type, submitter_name, recipient, recipient_contact_type, remarks, contact_phone, tracking_token, paper_count, document_pages, document_names, is_priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    'sssssssssssssissi',
+                    [$batchCode, $documentType, $batchType, 'Received', $batchDate, $senderType, $senderType, $submitterName, $recipientValue, $recipientContactType, $batchRemarks, $contactPhoneValue, $trackingToken, $paperCount, $documentPagesJson, $documentNamesJson, $isPriority]
                 );
                 if ($stmt === false) throw new RuntimeException('Could not create the batch');
                 mysqli_stmt_close($stmt);
@@ -680,12 +705,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 $batchStatus = $existingBatch['status'];
                 $isPriority = (int)$existingBatch['is_priority'];
-                $stmt = safe_query(
-                    $conn,
-                    'UPDATE document_batches SET document_type = ?, batch_type = ?, sender = ?, sender_type = ?, submitter_name = ?,                     remarks = ?,                     paper_count = ?, document_pages = ? WHERE batch_id = ?',
-                                        'ssssssisi',
-                                        [$documentType, $batchType, $senderType, $senderType, $submitterName, $batchRemarks, $paperCount, $documentPagesJson, $batchId]
-                );
+                $updateSql = 'UPDATE document_batches SET document_type = ?, batch_type = ?, sender = ?, sender_type = ?, submitter_name = ?, remarks = ?, paper_count = ?, document_pages = ?';
+                $updateTypes = 'ssssssisi';
+                $updateValues = [$documentType, $batchType, $senderType, $senderType, $submitterName, $batchRemarks, $paperCount, $documentPagesJson];
+                if ($documentNamesJson !== null) {
+                    $updateSql .= ', document_names = ?';
+                    $updateTypes .= 's';
+                    $updateValues[] = $documentNamesJson;
+                }
+                if ($contactPhoneInput !== null && $validContactPhone) {
+                    $updateSql .= ', contact_phone = ?';
+                    $updateTypes .= 's';
+                    $updateValues[] = $contactPhoneValue;
+                }
+                $updateSql .= ' WHERE batch_id = ?';
+                $updateTypes .= 'i';
+                $updateValues[] = $batchId;
+                $stmt = safe_query($conn, $updateSql, $updateTypes, $updateValues);
                 if ($stmt === false) throw new RuntimeException('Could not update batch details');
                 mysqli_stmt_close($stmt);
 
@@ -716,10 +752,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'sender' => $senderType,
                 'senderType' => $senderType,
                 'submitterName' => $submitterName,
+                'contactPhone' => $contactPhoneValue,
                 'recipient' => $recipientValue,
                 'recipientContactType' => $recipientContactType,
                 'paperCount' => $paperCount,
                 'documentPages' => $documentPagesJson === null ? [] : json_decode($documentPagesJson, true),
+                'documentNames' => $documentNamesJson === null ? [] : json_decode($documentNamesJson, true),
                 'remarks' => $batchRemarks,
             ]]);
         } catch (Throwable $error) {
@@ -851,64 +889,114 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             echo json_encode(['success' => false, 'message' => 'Missing required fields']);
         }
-    } elseif ($action === 'mark_borrowed_returned') {
-        $itemId = (int)($input['item_id'] ?? 0);
-        if ($itemId <= 0) {
-            http_response_code(400);
-            echo json_encode(['success' => false, 'message' => 'Invalid borrowed item ID']);
-            exit;
-        }
-
-        $stmt = safe_query($conn, "UPDATE borrowed_items SET status = 'Returned', returned_date = COALESCE(returned_date, CURDATE()) WHERE item_id = ? AND status != 'Returned'", 'i', [$itemId]);
-        if ($stmt === false) {
-            http_response_code(500);
-            echo json_encode(['success' => false, 'message' => 'Could not update the borrowed item']);
-            exit;
-        }
-        $updated = mysqli_stmt_affected_rows($stmt) > 0;
-        mysqli_stmt_close($stmt);
-        if (!$updated) {
-            http_response_code(409);
-            echo json_encode(['success' => false, 'message' => 'The borrowed item was not found or has already been returned']);
-            exit;
-        }
-        echo json_encode(['success' => true, 'status' => 'Returned', 'returned' => date('Y-m-d')]);
-        exit;
     } elseif ($action === 'add_borrowed') {
-        $item = trim($input['item'] ?? '');
-        $borrower = trim($input['borrower'] ?? '');
-        $borrowed_date = trim($input['borrowed_date'] ?? '');
-        $borrower_phone = contact_number_input($input['borrower_phone'] ?? '');
-        $category_id = $input['category_id'] ?? null; // Allow null for category_id
-        $borrowedDateObject = $borrowed_date === '' ? null : DateTime::createFromFormat('!Y-m-d', $borrowed_date);
+        $inventoryId = filter_var($input['inventory_id'] ?? null, FILTER_VALIDATE_INT);
+        $categoryId = filter_var($input['category_id'] ?? null, FILTER_VALIDATE_INT);
+        $itemName = is_string($input['item_name'] ?? null) ? trim($input['item_name']) : '';
+        $borrower = is_string($input['borrower'] ?? null) ? trim($input['borrower']) : '';
+        $borrowedDate = is_string($input['borrowed_date'] ?? null) ? trim($input['borrowed_date']) : '';
+        $borrowerPhone = contact_number_input($input['borrower_phone'] ?? '');
+        $borrowedDateObject = $borrowedDate === '' ? null : DateTime::createFromFormat('!Y-m-d', $borrowedDate);
+        if ($categoryId === false || $categoryId < 1 || $borrower === '' || strlen($borrower) > 255
+            || $borrowerPhone === null || ($borrowerPhone !== '' && !is_valid_contact_number($borrowerPhone))
+            || ($borrowedDate !== '' && (!$borrowedDateObject || $borrowedDateObject->format('Y-m-d') !== $borrowedDate))) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Enter your name, choose a category and item, and check the optional contact number.']);
+            exit;
+        }
+        $borrowerPhoneValue = $borrowerPhone === '' ? null : $borrowerPhone;
+        try {
+            $conn->begin_transaction();
+            $stmt = safe_query(
+                $conn,
+                'SELECT category_id, category_name, is_default FROM item_categories WHERE category_id = ? FOR UPDATE',
+                'i',
+                [$categoryId]
+            );
+            if ($stmt === false) {
+                throw new RuntimeException('Could not check the selected category');
+            }
+            $category = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+            mysqli_stmt_close($stmt);
+            if (!$category) {
+                throw new DomainException('That category is no longer available.');
+            }
 
-        if ($item && $borrower && $borrower_phone !== null && ($borrower_phone === '' || is_valid_contact_number($borrower_phone)) && ($borrowed_date === '' || ($borrowedDateObject && $borrowedDateObject->format('Y-m-d') === $borrowed_date))) {
-            $loanStatus = 'Borrowed';
-            $borrowerPhoneValue = $borrower_phone === '' ? null : $borrower_phone;
-            if ($borrowed_date === '') {
-                $borrowed_date = safe_scalar($conn, 'SELECT NOW()');
-                if (!is_string($borrowed_date)) {
-                    http_response_code(500);
-                    echo json_encode(['success' => false, 'message' => 'Could not record the borrowed time. Please try again.']);
-                    exit;
+            $inventoryItem = null;
+            $isUnlistedOther = (int)$category['is_default'] === 1 && ($inventoryId === false || $inventoryId < 1);
+            if ($isUnlistedOther) {
+                if ($itemName === '' || strlen($itemName) > 255) {
+                    throw new DomainException('Enter the name of the unlisted item (up to 255 characters).');
+                }
+            } else {
+                if ($inventoryId === false || $inventoryId < 1) {
+                    throw new DomainException('Choose an item from the selected category.');
+                }
+                $stmt = safe_query(
+                    $conn,
+                    'SELECT inventory_id, category_id, item_name, identifier, availability_status FROM borrowable_inventory WHERE inventory_id = ? AND category_id = ? FOR UPDATE',
+                    'ii',
+                    [$inventoryId, $categoryId]
+                );
+                if ($stmt === false) {
+                    throw new RuntimeException('Could not check item availability');
+                }
+                $inventoryItem = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+                mysqli_stmt_close($stmt);
+                if (!$inventoryItem || $inventoryItem['availability_status'] !== 'Available') {
+                    throw new DomainException('That item is not available. Choose an available item.');
+                }
+                $activeLoanCount = safe_scalar(
+                    $conn,
+                    "SELECT COUNT(*) FROM borrowed_items WHERE inventory_id = ? AND status <> 'Returned'",
+                    'i',
+                    [$inventoryId]
+                );
+                if ((int)$activeLoanCount > 0) {
+                    throw new DomainException('That item is already borrowed. Choose an available item.');
+                }
+                $itemName = $inventoryItem['item_name'];
+            }
+            if ($borrowedDate === '') {
+                $borrowedDate = safe_scalar($conn, 'SELECT NOW()');
+                if (!is_string($borrowedDate)) {
+                    throw new RuntimeException('Could not record the borrowed time');
                 }
             }
-            $stmt = safe_query($conn, 'INSERT INTO borrowed_items(item_name, category_id, borrower, borrower_phone, returned_date, date_borrowed, status) VALUES(?, ?, ?, ?, NULL, ?, ?)', 'sissss', [$item, $category_id, $borrower, $borrowerPhoneValue, $borrowed_date, $loanStatus]);
-            if ($stmt !== false) {
-                $itemId = mysqli_insert_id($conn);
-                mysqli_stmt_close($stmt);
-                echo json_encode(['success' => true, 'message' => 'Borrowed item recorded', 'id' => $itemId, 'status' => $loanStatus, 'borrowedAt' => $borrowed_date]);
-            } else {
-                echo json_encode(['success' => false, 'message' => 'The borrowed item could not be recorded. Please try again.']);
+            $stmt = safe_query(
+                $conn,
+                'INSERT INTO borrowed_items(item_name, category_id, inventory_id, inventory_identifier, borrower, borrower_phone, returned_date, date_borrowed, status) VALUES(?, ?, ?, ?, ?, ?, NULL, ?, ?)',
+                'siisssss',
+                [$itemName, $categoryId, $inventoryItem['inventory_id'] ?? null, $inventoryItem['identifier'] ?? null, $borrower, $borrowerPhoneValue, $borrowedDate, 'Borrowed']
+            );
+            if ($stmt === false) {
+                throw new RuntimeException('Could not record the borrowed item');
             }
-        } else {
-            if ($borrower_phone === null || ($borrower_phone !== '' && !is_valid_contact_number($borrower_phone))) {
-                http_response_code(400);
-                echo json_encode(['success' => false, 'message' => 'Enter an 11-digit contact number using numbers only, or leave it blank.']);
-                exit;
-            }
-            echo json_encode(['success' => false, 'message' => 'Missing required fields']);
+            $itemId = mysqli_insert_id($conn);
+            mysqli_stmt_close($stmt);
+            $conn->commit();
+            echo json_encode([
+                'success' => true,
+                'message' => 'Borrowed item recorded',
+                'id' => $itemId,
+                'inventoryId' => $inventoryItem ? (int)$inventoryItem['inventory_id'] : null,
+                'item' => $itemName,
+                'identifier' => $inventoryItem['identifier'] ?? '',
+                'category' => $category['category_name'],
+                'borrower' => $borrower,
+                'borrowerPhone' => $borrowerPhoneValue,
+                'status' => 'Borrowed',
+                'borrowedAt' => $borrowedDate,
+            ]);
+        } catch (Throwable $error) {
+            $conn->rollback();
+            error_log('Mobile borrowable inventory checkout failed: ' . $error->getMessage());
+            http_response_code($error instanceof DomainException ? 409 : 500);
+            echo json_encode(['success' => false, 'message' => $error instanceof DomainException
+                ? $error->getMessage()
+                : 'The item could not be borrowed. Please try again.']);
         }
+        exit;
     } else {
         echo json_encode(['success' => false, 'message' => 'Invalid action']);
     }
@@ -965,8 +1053,10 @@ $response = [
     'systemOverview' => $systemOverview,
     'documentStatuses' => fetch_rows($conn, "SELECT status, COUNT(*) AS count FROM documents WHERE date_created >= ? AND date_created < DATE_ADD(?, INTERVAL 1 DAY) GROUP BY status ORDER BY status", 'ss', [$today, $today]),
     'recentDocuments' => fetch_rows($conn, "SELECT doc_id AS id, " . document_tracking_reference_sql() . " AS reference, date_created AS date, type, sender, submitter_name AS submitterName, recipient, client_phone AS clientPhone, subject AS details, remarks, CONCAT(sender, ' / ', recipient) AS fromTo, status, submitter_type AS submitterType, is_priority AS isPriority FROM documents ORDER BY date_created DESC LIMIT 50"),
-    'recentBatches' => fetch_rows($conn, "SELECT b.batch_id AS id, b.batch_code AS batchCode, b.document_type AS documentType, b.batch_type AS batchType, b.status, b.batch_date AS batchDate, b.sender_type AS senderType, b.submitter_name AS submitterName, b.recipient, b.recipient_contact_type AS recipientContactType, b.remarks, b.paper_count AS paperCount, b.document_pages AS documentPages, b.received_paper_count AS receivedPaperCount, b.intake_expected_count AS intakeExpectedCount, b.received_at AS receivedAt, b.is_priority AS isPriority FROM document_batches b ORDER BY b.is_priority DESC, b.batch_date DESC, b.batch_id DESC LIMIT 20"),
-    'borrowedItems' => fetch_rows($conn, "SELECT item_id AS id, item_name AS item, borrower, DATE(date_borrowed) AS borrowed, date_borrowed AS borrowedAt, DATE(returned_date) AS returned, CASE WHEN status = 'Returned' THEN 'Returned' ELSE 'Borrowed' END AS status FROM borrowed_items ORDER BY date_borrowed DESC LIMIT 5"),
+    'recentBatches' => fetch_rows($conn, "SELECT b.batch_id AS id, b.batch_code AS batchCode, b.document_type AS documentType, b.batch_type AS batchType, b.status, b.batch_date AS batchDate, b.sender_type AS senderType, b.submitter_name AS submitterName, b.contact_phone AS contactPhone, b.recipient, b.recipient_contact_type AS recipientContactType, b.remarks, b.paper_count AS paperCount, b.document_pages AS documentPages, b.document_names AS documentNames, b.received_paper_count AS receivedPaperCount, b.intake_expected_count AS intakeExpectedCount, b.received_at AS receivedAt, b.is_priority AS isPriority FROM document_batches b ORDER BY b.is_priority DESC, b.batch_date DESC, b.batch_id DESC LIMIT 20"),
+    'borrowInventoryCategories' => fetch_rows($conn, 'SELECT category_id AS id, category_name AS name, requires_identifier AS requiresIdentifier, is_default AS isDefault FROM item_categories ORDER BY is_default DESC, category_name'),
+    'borrowInventoryItems' => fetch_rows($conn, "SELECT bi.inventory_id AS id, bi.category_id AS categoryId, ic.category_name AS category, bi.item_name AS name, bi.identifier, CASE WHEN EXISTS (SELECT 1 FROM borrowed_items loan WHERE loan.inventory_id = bi.inventory_id AND loan.status <> 'Returned') THEN 'Borrowed' ELSE bi.availability_status END AS status FROM borrowable_inventory bi INNER JOIN item_categories ic ON ic.category_id = bi.category_id ORDER BY ic.category_name, bi.item_name, bi.identifier"),
+    'borrowedItems' => fetch_rows($conn, "SELECT loan.item_id AS id, loan.inventory_id AS inventoryId, loan.item_name AS item, COALESCE(loan.inventory_identifier, asset.identifier) AS identifier, COALESCE(category.category_name, CASE WHEN loan.inventory_identifier IS NOT NULL THEN 'Deleted category' ELSE 'Legacy record' END) AS category, loan.borrower, loan.borrower_phone AS borrowerPhone, DATE(loan.date_borrowed) AS borrowed, loan.date_borrowed AS borrowedAt, DATE(loan.returned_date) AS returned, CASE WHEN loan.status = 'Returned' THEN 'Returned' ELSE 'Borrowed' END AS status FROM borrowed_items loan LEFT JOIN borrowable_inventory asset ON asset.inventory_id = loan.inventory_id LEFT JOIN item_categories category ON category.category_id = loan.category_id ORDER BY loan.item_name ASC, loan.borrower ASC, loan.date_borrowed DESC LIMIT 20"),
     'smsLogs' => fetch_rows($conn, "SELECT recipient AS user, message, status, DATE_FORMAT(date_sent, '%h:%i %p') AS time FROM sms_logs ORDER BY date_sent DESC LIMIT 5"),
 ];
 
